@@ -57,9 +57,82 @@
     ]
   },
   "prediction": {
-    "total": 0,
-    "hits": 0,
-    "baseline_hits": 0,
-    "cases": []
+    "total": 6,
+    "hits": 2,
+    "baseline_hits": 1,
+    "cases": [
+      {
+        "session": "vector-databases",
+        "true_next": "how do I choose a vector database for a small project",
+        "predictions": [
+          "How can I optimize query latency and throughput in a vector database?",
+          "What are the trade\u2011offs between HNSW and IVF (inverted file) indexing for large\u2011scale similarity search?",
+          "How do I integrate a vector database (e.g., Chroma or Pinecone) with an LLM retrieval pipeline such as LangChain or LlamaIndex?"
+        ],
+        "hit": true,
+        "similarity": 0.493,
+        "top_rival": "how do I shard a vector index across multiple nodes"
+      },
+      {
+        "session": "retrieval-augmented-generation",
+        "true_next": "does adding a reranker improve RAG accuracy",
+        "predictions": [
+          "How can I reduce hallucinations in retrieval\u2011augmented generation?",
+          "What are the best practices for prompt engineering in a RAG pipeline?",
+          "How do I scale a RAG system for large corpora while keeping latency low?"
+        ],
+        "hit": false,
+        "similarity": 0.4611,
+        "top_rival": "which embedding model works best for RAG retrieval"
+      },
+      {
+        "session": "fine-tuning",
+        "true_next": "how much training data do I need to fine-tune effectively",
+        "predictions": [
+          "What are the best practices for evaluating a fine-tuned language model versus a RAG system?",
+          "How can I combine LoRA with Retrieval\u2011Augmented Generation to get the benefits of both approaches?",
+          "When should I use full fine\u2011tuning versus parameter\u2011efficient methods like LoRA, QLoRA, or adapters?"
+        ],
+        "hit": false,
+        "similarity": 0.4147,
+        "top_rival": "which embedding model works best for RAG retrieval"
+      },
+      {
+        "session": "browser-automation",
+        "true_next": "how do I keep a scraper working when a site changes its HTML",
+        "predictions": [
+          "How can I make Playwright less detectable or avoid anti\u2011bot detection mechanisms?",
+          "How can I bypass or solve CAPTCHAs automatically with Playwright?",
+          "How do I run Playwright in headless mode without being flagged as a bot?"
+        ],
+        "hit": false,
+        "similarity": 0.1532,
+        "top_rival": "how do I run Playwright in headless mode"
+      },
+      {
+        "session": "transformer-internals",
+        "true_next": "how does a KV cache speed up inference",
+        "predictions": [
+          "How does the feed-forward network component work in transformers and why is it important?",
+          "What role do residual connections and layer normalization play in transformer architectures?",
+          "Why is the scaling factor \u221a(d_k) used in the scaled dot\u2011product attention formula?"
+        ],
+        "hit": false,
+        "similarity": 0.1611,
+        "top_rival": "what does the feed forward network do in a transformer layer"
+      },
+      {
+        "session": "agent-systems",
+        "true_next": "how do I benchmark an agent's task completion rate",
+        "predictions": [
+          "How can tool use be coordinated among multiple language model agents in a multi-agent system?",
+          "What evaluation metrics are most appropriate for assessing the performance of multi-agent language model systems?",
+          "What are effective coordination and communication protocols for multi-agent language model agents?"
+        ],
+        "hit": true,
+        "similarity": 0.5156,
+        "top_rival": "what context should an agent carry between steps"
+      }
+    ]
   }
 }
