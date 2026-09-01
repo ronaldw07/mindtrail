@@ -240,11 +240,18 @@ Llama line from its catalog, so older tutorials naming
 .venv/bin/python -m mindtrail.cli search "vector"     # memory only, no lookups
 .venv/bin/python -m mindtrail.cli predict             # likely next questions
 .venv/bin/python -m mindtrail.cli stats               # what is remembered
+.venv/bin/python -m mindtrail.cli web                 # static page, grouped by topic
 ```
+
+`web` writes a single HTML file and opens it in your default browser. Each
+`ask` assigns a topic label (reusing an existing one when it fits) and 3-5
+key facts; the page groups entries under those topics with a keyword filter
+and links back to sources. Nothing to keep running — regenerate with `web`
+whenever you want it current.
 
 ## Tests
 
-92 tests, no network and no API key required — search, fetch, and the model
+121 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.
