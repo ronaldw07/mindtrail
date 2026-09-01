@@ -17,12 +17,17 @@ from mindtrail.memory.store import Entry, MemoryStore
 PREDICTIONS_RETURNED = 3
 
 SYSTEM_PROMPT = (
-    "You predict a researcher's next question. Given their recent research "
-    "trajectory, ordered oldest to newest, infer where their curiosity is "
-    "heading. Return exactly three distinct candidate questions, ordered "
-    "most to least likely. Respond with JSON only, in the form "
-    '{"predictions": [{"question": "...", "reasoning": "..."}]} '
-    "with no surrounding prose or code fences."
+    "You predict a researcher's next question. You are given their recent "
+    "trajectory: what they asked, and what each answer told them.\n\n"
+    "Predict the specific question they ask NEXT, not a general summary of "
+    "where the topic could go. Favour the concrete unresolved thing an "
+    "answer raised over a broad survey question. A researcher who has just "
+    "learned how something works usually asks about applying, sizing, "
+    "choosing, or troubleshooting it next.\n\n"
+    "Return exactly three distinct candidate questions, ordered most to "
+    "least likely, phrased the way the researcher would type them. Respond "
+    'with JSON only, in the form {"predictions": [{"question": "...", '
+    '"reasoning": "..."}]} with no surrounding prose or code fences.'
 )
 
 
@@ -61,10 +66,26 @@ def parse_predictions(text: str) -> list[Prediction]:
     return predictions[:PREDICTIONS_RETURNED]
 
 
+SUMMARY_CHARS_IN_TRAJECTORY = 400
+
+
 def format_trajectory(entries: list[Entry]) -> str:
-    """Render entries oldest-first, which is how the prompt expects them."""
+    """Render entries oldest-first, which is how the prompt expects them.
+
+    What was learned is included alongside each question. Predicting from
+    question text alone leaves the model guessing about content it has
+    already retrieved, and a follow-up is usually prompted by something
+    an answer said rather than by the question that produced it.
+    """
     ordered = sorted(entries, key=lambda e: e.created_at)
-    return "\n".join(f"{i}. {e.query}" for i, e in enumerate(ordered, start=1))
+
+    lines: list[str] = []
+    for i, entry in enumerate(ordered, start=1):
+        lines.append(f"{i}. asked: {entry.query}")
+        if entry.summary:
+            learned = entry.summary[:SUMMARY_CHARS_IN_TRAJECTORY]
+            lines.append(f"   learned: {learned}")
+    return "\n".join(lines)
 
 
 class NextQueryPredictor:
