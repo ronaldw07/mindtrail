@@ -82,36 +82,54 @@ could be tuned after seeing the results.
 
 | metric | score |
 |---|---|
-| exact question identified | 1.1/6 mean over 7 runs (range 1–2) |
-| naive baseline, echo the trajectory | 1/6 (17%) |
-| mean similarity to true next question | 0.37 |
+| exact question identified (dev, tuning set) | 2.5/7 mean, vs. 0/7 baseline |
+| exact question identified (test, held out) | 0.5/7, single measurement |
+| mean similarity to true next question | 0.33 |
 
-**The prediction feature does not beat its baseline. That is the result.**
+**The prediction feature does not work, and the path to that conclusion is
+the more interesting part.**
 
-Getting there took two corrections, both worth stating because the
-intermediate numbers looked good and were not.
+Three corrections got here, each because a number looked good and wasn't.
 
-*First*, this eval reported **83%**. With only the six held-out questions
-competing, each from a different domain, any on-topic guess won — it was
-measuring topic classification, not next-question prediction. Adding three
-same-topic decoys per session widened the pool from 6 to 24 and dropped the
-score to 2/6. The failures became legible too: the transformer session lost
-to a decoy that paraphrases its own prediction, exactly the discrimination
-the easy pool could never test.
+*First*, the eval reported 83%. With only six held-out questions competing,
+each from a different domain, any on-topic guess won — it measured topic
+classification. Adding three same-topic decoys per session (pool 6 → 24)
+dropped it to 2/6, and the failures became legible: predictions lost to
+decoys that paraphrase them.
 
-*Second*, that 2/6 was a single run, and single runs are not stable here.
-Repeating the identical eval gave 1, 2, 1, 1, 1, 1, 1 across seven runs —
-**at temperature 0**. Pinning temperature fixed the wild swings seen at the
-default, but Groq's hosted models are still not bit-reproducible, so any
-single-run figure on n=6 is noise dressed as a measurement. `--trials N`
-exists for this reason and the reported number is a mean.
+*Second*, at temperature 0 that 2/6 still ranged 1–2 across seven repeats —
+Groq's hosted models are not bit-reproducible even pinned. `--trials`
+reports a mean rather than a single run.
 
-A mean of ~1.1/6 against a baseline of 1/6 is no improvement. Reading the
-predictions, they are consistently *sensible* and consistently *not the
-specific question asked next* — plausible-next-question and
-actual-next-question are different targets, and a research trajectory of
-three questions is thin evidence for the second. Making this work would
-likely need real usage signal, not better prompting.
+*Third*, and the one that mattered most: **the metric itself was wrong.** A
+baseline that just echoes the researcher's own prior questions was scoring
+0.57 by cosine similarity — higher than the model — because a person's past
+question is maximally on-topic with their next one, and cosine rewards
+topical closeness, not correctness. The scorer could not tell "predicted
+right" from "in the right neighbourhood." Replaced it with an LLM judge
+(`eval/judge.py`) asked directly: does any candidate ask *substantially the
+same thing* as what was actually asked next? Under that judge the echo
+baseline correctly drops to 0/7 — echoing is never literally the next
+question — and the metric finally measures the right thing.
+
+Once the predictor could also see what each answer taught it (not just the
+question text — `format_trajectory` used to discard summaries entirely),
+dev split scored **2.5/7 against a 0/7 baseline**, a real if modest lift.
+That result did not replicate on the held-out test split, which scored
+**0.5/7 with the identical frozen config** — one hit across seven sessions
+in the trials that completed before the day's Groq token quota was
+exhausted mid-sweep. The judge's own reasoning for each miss is consistent
+and specific: predictions stay on-topic but land on the wrong facet of it
+(architecture instead of benchmarking, tuning instead of application, and
+so on).
+
+Reading dev and test side by side, dev's lift over baseline is thin enough
+(2.5 out of 7, only 3 dev sessions) that it may not have been real signal
+to begin with — seven sessions is not enough to distinguish "the technique
+works" from "the small sample happened to land that way." Test is the
+number to trust, and it says three prior questions plus their answers is
+not enough evidence to name what someone asks next. That is a legitimate
+negative result about trajectory-only prediction, not a bug to chase.
 
 ### What these numbers do not say
 
@@ -123,9 +141,13 @@ likely need real usage signal, not better prompting.
   more coherent than genuine browsing would be. Decoys were written by the
   same hand as the answers, which is its own bias.
 - **Temperature 0 is necessary but not sufficient.** At the default it swung
-  4/6 then 3/6; pinned at 0 it still ranges 1–2/6. Hosted inference is not
-  bit-reproducible, so prediction numbers are only meaningful as a mean over
-  trials.
+  4/6 then 3/6; pinned at 0 it still ranges 1–2/6 on repeats. Hosted
+  inference is not bit-reproducible, so prediction numbers are only
+  meaningful as a mean over trials.
+- **The test number is a single measurement, not a mean.** Groq's daily
+  token quota was exhausted mid-sweep, which the harness handled cleanly
+  (partial results are kept, per the eval-resilience fix below) but which
+  also means test wasn't averaged over multiple trials the way dev was.
 - **The prompt was frozen before the decoy pool existed**, but temperature
   was changed after seeing results on this same set. With n=6 that is enough
   to matter; a separate dev set for tuning would be the honest fix.
@@ -180,6 +202,18 @@ sweep *will* hit 429. Exponential backoff is why the harness finishes.
 similarity threshold at eval time. A ranked list supports recall-style
 scoring, which needs no arbitrary number.
 
+**Prediction is judged, not scored by cosine similarity.** Similarity gave
+a baseline that echoes prior questions a higher score than the model,
+because a person's own past questions are the most topically-similar thing
+to their next one. Correctness and topical proximity are different axes;
+only a judge that reads the actual content can tell them apart.
+
+**The predictor sees what it learned, not just what it asked.**
+`format_trajectory` used to render question text only. Follow-up questions
+are usually prompted by something an *answer* said, not by the question
+that produced it, so withholding the summaries was withholding the signal
+most likely to matter.
+
 **Untrusted URLs are scheme-checked before fetching.** Search results are
 external input, and `urllib.request.urlopen` will happily serve `file://`.
 It also raises `ValueError` rather than `URLError` for a scheme-less URL,
@@ -210,7 +244,7 @@ Llama line from its catalog, so older tutorials naming
 
 ## Tests
 
-68 tests, no network and no API key required — search, fetch, and the model
+92 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.
@@ -225,10 +259,16 @@ CLI glue.
 
 - Retrieval fails outright rather than narrowly on 3 of 10 probes, and
   changing what gets embedded does not fix it (see above).
-- Prediction does not beat a naive baseline once same-topic decoys are in
-  play. Trajectory alone is thin signal for a *specific* next question, even
-  when the topic is obvious. `predict` is still useful to a human as
-  suggestions; it is just not validated as prediction.
+- Prediction does not replicate on held-out data: a real lift over baseline
+  on the tuning split (2.5/7) fell to 0.5/7 on test. Three prior questions
+  and their summaries are thin evidence for the *specific* next question,
+  even when the general direction is obvious to a human reader. `predict`
+  is still useful to a person as suggestions; it is not validated as
+  prediction.
+- Groq's free tier has a 200K token/day cap in addition to the per-minute
+  limit. A long eval sweep can exhaust it mid-run; the harness records
+  whatever completed rather than losing the sweep, but the run should be
+  read as partial when that happens.
 - The eval set is synthetic; recording real sessions would be a truer test.
 - Search depends on scraping DuckDuckGo, which will break periodically. The
   provider protocol exists so a replacement is a small change, but only one
