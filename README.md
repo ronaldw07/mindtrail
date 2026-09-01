@@ -38,21 +38,38 @@ curiosity is heading.
 Run with `python -m eval.runner`. Numbers below are from
 `eval/results.json`, reproducible at temperature 0.
 
-**Retrieval** — eight follow-up questions probe a memory holding all eight
-prior entries, so every unrelated entry acts as a distractor.
+Both evals are deliberately harder than the versions they replaced. Each
+started out reporting a flattering number that turned out to be measuring
+something easier than the task, and the corrections are documented inline
+rather than quietly folded in — the reasoning is the part worth reading.
+
+**Retrieval** — ten follow-up questions probe a memory holding all ten prior
+entries, so every unrelated entry acts as a distractor. Scored on the test
+split; a separate dev split exists for tuning.
 
 | metric | score |
 |---|---|
-| recall@1 | 4/8 (50%) |
-| recall@3 | 6/8 (75%) |
+| recall@1 | 7/10 (70%) |
+| recall@3 | 7/10 (70%) |
 
-recall@3 is the number that matters operationally, since the researcher
-injects the top three memories into the prompt. recall@1 is weak, and
-honestly so: the failures are all cases where two stored entries are
-topically adjacent (`how does HNSW indexing work` losing to other vector
-search entries). Concatenating query and summary into one embedding is the
-likely cause; embedding them separately and scoring jointly is the obvious
-next thing to try.
+recall@3 equalling recall@1 is the interesting part: when retrieval misses,
+it misses badly rather than narrowly. The three failures rank the correct
+entry 4th, 6th, and 10th. So the fix is not reranking a near-miss — the
+right entry is nowhere near the top, and something about those probes
+(`how does Chroma differ from Pinecone` finding its parent entry at rank 10)
+is genuinely not captured by the embedding.
+
+An earlier version of this eval reported 50% recall@1 on eight pairs with
+one-line summaries. That number was mostly an artifact of the fixture: real
+syntheses run to a couple of paragraphs, and embedding a realistic summary
+retrieves substantially better. The eval was measuring its own stub data.
+
+I also tested whether embedding query and summary separately beats
+concatenating them. It does not — see `eval/strategy_comparison.py`. On
+eight pairs summary-only appeared to win by one case; on twenty split into
+dev and test, every strategy except query-only is indistinguishable. The
+concatenated default stands, now for a measured reason rather than an
+assumed one.
 
 **Prediction** — each session's final question is held out. The three
 predicted questions are scored against a pool of 24 candidates: all six
@@ -185,11 +202,13 @@ CLI glue.
 ```bash
 .venv/bin/python -m pytest tests/ -q
 .venv/bin/python -m eval.runner --skip-prediction   # offline half of the eval
+.venv/bin/python -m eval.strategy_comparison        # retrieval strategy experiment
 ```
 
 ## Known limitations
 
-- Retrieval degrades when stored entries are topically adjacent (see above).
+- Retrieval fails outright rather than narrowly on 3 of 10 probes, and
+  changing what gets embedded does not fix it (see above).
 - Prediction is weak (33%) once same-topic decoys are in play. The honest
   reading is that trajectory alone is thin signal for a *specific* next
   question, even when the topic is obvious.
