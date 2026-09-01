@@ -43,6 +43,8 @@ started out reporting a flattering number that turned out to be measuring
 something easier than the task, and the corrections are documented inline
 rather than quietly folded in — the reasoning is the part worth reading.
 
+The short version: retrieval works, prediction does not.
+
 **Retrieval** — ten follow-up questions probe a memory holding all ten prior
 entries, so every unrelated entry acts as a distractor. Scored on the test
 split; a separate dev split exists for tuning.
@@ -80,22 +82,36 @@ could be tuned after seeing the results.
 
 | metric | score |
 |---|---|
-| exact question identified | 2/6 (33%) |
+| exact question identified | 1.1/6 mean over 7 runs (range 1–2) |
 | naive baseline, echo the trajectory | 1/6 (17%) |
-| mean similarity to true next question | 0.38 |
+| mean similarity to true next question | 0.37 |
 
-**This number was 83% before the decoys existed, and that version was
-wrong.** With only the six held-out questions competing, each from a
-different domain, any on-topic guess won — the eval was measuring topic
-classification, not next-question prediction. Adding same-topic decoys
-dropped it to 33%. The failure modes are now legible: the
-transformer-internals session lost to a decoy that paraphrases its own
-prediction, which is precisely the discrimination the easy pool never
-tested.
+**The prediction feature does not beat its baseline. That is the result.**
 
-33% against a 17% baseline is a real but modest signal, and with n=6 that is
-two hits against one. It should be read as "better than echoing history,"
-not as a demonstrated capability.
+Getting there took two corrections, both worth stating because the
+intermediate numbers looked good and were not.
+
+*First*, this eval reported **83%**. With only the six held-out questions
+competing, each from a different domain, any on-topic guess won — it was
+measuring topic classification, not next-question prediction. Adding three
+same-topic decoys per session widened the pool from 6 to 24 and dropped the
+score to 2/6. The failures became legible too: the transformer session lost
+to a decoy that paraphrases its own prediction, exactly the discrimination
+the easy pool could never test.
+
+*Second*, that 2/6 was a single run, and single runs are not stable here.
+Repeating the identical eval gave 1, 2, 1, 1, 1, 1, 1 across seven runs —
+**at temperature 0**. Pinning temperature fixed the wild swings seen at the
+default, but Groq's hosted models are still not bit-reproducible, so any
+single-run figure on n=6 is noise dressed as a measurement. `--trials N`
+exists for this reason and the reported number is a mean.
+
+A mean of ~1.1/6 against a baseline of 1/6 is no improvement. Reading the
+predictions, they are consistently *sensible* and consistently *not the
+specific question asked next* — plausible-next-question and
+actual-next-question are different targets, and a research trajectory of
+three questions is thin evidence for the second. Making this work would
+likely need real usage signal, not better prompting.
 
 ### What these numbers do not say
 
@@ -106,10 +122,10 @@ not as a demonstrated capability.
   plausible research paths, not logs of real usage, so they are cleaner and
   more coherent than genuine browsing would be. Decoys were written by the
   same hand as the answers, which is its own bias.
-- **Sampling made this unreportable at first.** At the default temperature,
-  two runs over identical input scored 4/6 and then 3/6. Pinning temperature
-  to 0 made runs reproducible. Any prediction number reported without a
-  fixed temperature is noise.
+- **Temperature 0 is necessary but not sufficient.** At the default it swung
+  4/6 then 3/6; pinned at 0 it still ranges 1–2/6. Hosted inference is not
+  bit-reproducible, so prediction numbers are only meaningful as a mean over
+  trials.
 - **The prompt was frozen before the decoy pool existed**, but temperature
   was changed after seeing results on this same set. With n=6 that is enough
   to matter; a separate dev set for tuning would be the honest fix.
@@ -209,9 +225,10 @@ CLI glue.
 
 - Retrieval fails outright rather than narrowly on 3 of 10 probes, and
   changing what gets embedded does not fix it (see above).
-- Prediction is weak (33%) once same-topic decoys are in play. The honest
-  reading is that trajectory alone is thin signal for a *specific* next
-  question, even when the topic is obvious.
+- Prediction does not beat a naive baseline once same-topic decoys are in
+  play. Trajectory alone is thin signal for a *specific* next question, even
+  when the topic is obvious. `predict` is still useful to a human as
+  suggestions; it is just not validated as prediction.
 - The eval set is synthetic; recording real sessions would be a truer test.
 - Search depends on scraping DuckDuckGo, which will break periodically. The
   provider protocol exists so a replacement is a small change, but only one

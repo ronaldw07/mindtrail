@@ -60,6 +60,12 @@
     "total": 6,
     "hits": 1,
     "baseline_hits": 1,
+    "trial_hits": [
+      1,
+      1,
+      1,
+      1
+    ],
     "cases": [
       {
         "session": "vector-databases",
@@ -101,24 +107,24 @@
         "session": "browser-automation",
         "true_next": "how do I keep a scraper working when a site changes its HTML",
         "predictions": [
-          "How can I make Playwright less detectable or evade anti-bot detection mechanisms?",
-          "How do I bypass or solve CAPTCHAs automatically using Playwright?",
-          "What are the best practices for using Playwright with proxy rotation and custom user\u2011agents to avoid detection?"
+          "How can I make Playwright less detectable or hide it from anti-bot mechanisms?",
+          "How can I bypass or solve CAPTCHAs that appear when using Playwright?",
+          "How do I configure and rotate proxies in Playwright to avoid IP-based detection?"
         ],
         "hit": false,
-        "similarity": 0.1485,
+        "similarity": 0.1376,
         "top_rival": "how do I run Playwright in headless mode"
       },
       {
         "session": "transformer-internals",
         "true_next": "how does a KV cache speed up inference",
         "predictions": [
-          "What is the purpose and functioning of the feed-forward network in transformers?",
-          "Why are residual connections and layer normalization used in transformer layers?",
-          "How does the transformer encoder differ from the decoder architecture?"
+          "how does the feed\u2011forward network component work in transformers",
+          "what is the purpose of layer normalization and residual connections in transformer layers",
+          "how are transformers trained using masked language modeling or next\u2011token prediction objectives"
         ],
         "hit": false,
-        "similarity": 0.2073,
+        "similarity": 0.1667,
         "top_rival": "what does the feed forward network do in a transformer layer"
       },
       {

@@ -33,7 +33,7 @@ def _retrieval_section(outcomes) -> list[str]:
     return lines
 
 
-def _prediction_section(outcomes, baseline) -> list[str]:
+def _prediction_section(outcomes, baseline, trial_hits=()) -> list[str]:
     if not outcomes:
         return ["PREDICTION: not run"]
 
@@ -41,10 +41,17 @@ def _prediction_section(outcomes, baseline) -> list[str]:
     hits = sum(o.is_hit for o in outcomes)
     mean_similarity = sum(o.best_similarity for o in outcomes) / total
 
-    lines = [
-        "PREDICTION",
-        f"  exact question identified  {hits}/{total}  ({_percent(hits, total)})",
-    ]
+    lines = ["PREDICTION"]
+    if len(trial_hits) > 1:
+        mean_hits = sum(trial_hits) / len(trial_hits)
+        lines.append(
+            f"  exact question identified  {mean_hits:.1f}/{total} mean over "
+            f"{len(trial_hits)} trials  (range {min(trial_hits)}-{max(trial_hits)})"
+        )
+    else:
+        lines.append(
+            f"  exact question identified  {hits}/{total}  ({_percent(hits, total)})"
+        )
     if baseline:
         base_hits = sum(o.is_hit for o in baseline)
         lines.append(
@@ -67,15 +74,15 @@ def _prediction_section(outcomes, baseline) -> list[str]:
     return lines
 
 
-def render(retrieval, prediction, baseline=()) -> str:
+def render(retrieval, prediction, baseline=(), trial_hits=()) -> str:
     divider = "=" * 68
     lines = [divider, "mindtrail evaluation", divider, ""]
     lines += _retrieval_section(retrieval)
-    lines += _prediction_section(prediction, baseline)
+    lines += _prediction_section(prediction, baseline, trial_hits)
     return "\n".join(lines)
 
 
-def to_dict(retrieval, prediction, baseline=()) -> dict:
+def to_dict(retrieval, prediction, baseline=(), trial_hits=()) -> dict:
     return {
         "retrieval": {
             "total": len(retrieval),
@@ -90,6 +97,7 @@ def to_dict(retrieval, prediction, baseline=()) -> dict:
             "total": len(prediction),
             "hits": sum(o.is_hit for o in prediction),
             "baseline_hits": sum(o.is_hit for o in baseline),
+            "trial_hits": list(trial_hits),
             "cases": [
                 {
                     "session": o.session_id,
