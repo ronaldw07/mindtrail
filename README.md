@@ -1,9 +1,10 @@
 # mindtrail
 
 A research assistant that remembers. Ask it a question, and it searches the
-web, synthesizes a sourced answer, and stores that answer in a searchable
-memory. Every later question is answered *with* what it already learned, and
-it can predict what you will want to know next.
+web, synthesizes a sourced answer, tags it with a topic, and stores it in a
+searchable memory. Every later question is answered *with* what it already
+learned, and you can browse everything it's learned as a topic-organized
+page in your browser.
 
 ```
 $ mindtrail ask "what is a vector database"
@@ -24,14 +25,29 @@ Sources:
 
 The second question was never told about the first. Memory surfaced it.
 
+```
+$ mindtrail web
+```
+
+Opens a single local page: every question grouped under its topic (assigned
+automatically, existing topics reused rather than fragmented), key facts as
+bullets, full answer behind a click, sources linked, and a keyword filter
+across everything you've asked. No server, no login, nothing to keep
+running — the command regenerates the file and opens it.
+
+Prediction (guessing your next question) also exists but is **not** a
+working feature — see [Results](#results) for why it's reported as a
+negative finding rather than something to rely on.
+
 ## Why this exists
 
 Most "research agent" demos are stateless: every question starts from
 nothing. The interesting problem is what happens on question five, when the
-system should already know what you have been reading about. That means
-three things have to work together — retrieval that finds the relevant past
-entry, a prompt that composes it into context, and some model of where your
-curiosity is heading.
+system should already know what you have been reading about, and when you
+want to look back at everything without re-asking it. That needs retrieval
+that finds the relevant past entry, a prompt that composes it into context,
+and a way to browse what's accumulated that isn't just a flat log of
+questions in the order you happened to ask them — hence grouping by topic.
 
 ## Results
 
@@ -160,27 +176,38 @@ negative result about trajectory-only prediction, not a bug to chase.
 mindtrail ask "question"
         |
         v
-  MemoryStore.search()  -> related past entries         (local embeddings)
+  MemoryStore.search()   -> related past entries         (local embeddings)
         |
         v
-  search + fetch        -> top pages, stripped to text  (DuckDuckGo)
+  search + fetch         -> top pages, stripped to text  (DuckDuckGo)
         |
         v
-  LLMClient.complete()  -> synthesis with citations     (Groq)
+  LLMClient.complete()   -> synthesis with citations     (Groq)
         |
         v
-  MemoryStore.add()     -> persisted for next time
+  TopicExtractor.extract() -> topic label + key facts    (Groq, reuses
+        |                                                 existing labels)
+        v
+  MemoryStore.add()      -> persisted for next time
+
+mindtrail web
+        |
+        v
+  MemoryStore.all()  ->  build_html()  ->  static file, opened in browser
+                          (grouped by topic, keyword filter, no server)
 ```
 
 | module | responsibility |
 |---|---|
-| `mindtrail/memory/store.py` | Chroma-backed store; add, semantic search, recency |
+| `mindtrail/memory/store.py` | Chroma-backed store; add, semantic search, recency, topics |
 | `mindtrail/ingest/search.py` | Search behind a provider protocol with fallback |
 | `mindtrail/ingest/fetch.py` | URL to readable text, stdlib only |
 | `mindtrail/ingest/researcher.py` | Retrieve, compose context, synthesize |
-| `mindtrail/predict/next_query.py` | Three ranked next-question candidates |
+| `mindtrail/ingest/topic.py` | Topic label + key-fact extraction, reusing existing labels |
+| `mindtrail/web/generate.py` | Static HTML page grouped by topic |
+| `mindtrail/predict/next_query.py` | Three ranked next-question candidates (not validated — see Results) |
 | `mindtrail/llm.py` | Groq client with rate-limit backoff |
-| `eval/` | Retrieval and prediction harness |
+| `eval/` | Retrieval and prediction harness, plus the LLM judge |
 
 ## Design decisions worth explaining
 
@@ -213,6 +240,14 @@ only a judge that reads the actual content can tell them apart.
 are usually prompted by something an *answer* said, not by the question
 that produced it, so withholding the summaries was withholding the signal
 most likely to matter.
+
+**Topics are reused, not reinvented per question.** `TopicExtractor` is
+shown every topic label already in the store and told to reuse one if it
+genuinely fits. Without that, near-identical topics ("Vector Databases",
+"Vector Search", "Vector DBs") would accumulate and the topic-grouped view
+would fragment into noise instead of staying navigable. Labeling runs after
+the answer is written and never blocks storing it — a failed extraction
+still keeps the research, just uncategorized.
 
 **Untrusted URLs are scheme-checked before fetching.** Search results are
 external input, and `urllib.request.urlopen` will happily serve `file://`.
@@ -280,4 +315,9 @@ CLI glue.
 - Search depends on scraping DuckDuckGo, which will break periodically. The
   provider protocol exists so a replacement is a small change, but only one
   provider is implemented today.
-- No deduplication: asking the same question twice stores two entries.
+- No deduplication: asking the same question twice stores two entries,
+  which can also land in two different (if similarly-named) topic sections
+  on the generated page, since topic reuse depends on the model recognizing
+  the overlap rather than exact matching.
+- Entries stored before topic labeling existed have no topic and appear
+  under Uncategorized on `mindtrail web` until re-asked.
