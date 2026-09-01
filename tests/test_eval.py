@@ -56,13 +56,27 @@ def test_absent_entry_counts_for_neither():
     assert not outcome.hit_at_3
 
 
-def test_retrieval_eval_scores_every_pair(tmp_path):
-    outcomes = run_retrieval_eval(tmp_path)
+def _pairs(split: str) -> list[dict]:
+    return json.loads((Path("eval") / "retrieval_pairs.json").read_text())[split]
 
-    pairs = json.loads(
-        (Path("eval") / "retrieval_pairs.json").read_text()
-    )["pairs"]
-    assert len(outcomes) == len(pairs)
+
+@pytest.mark.parametrize("split", ["dev", "test"])
+def test_retrieval_eval_scores_every_pair(tmp_path, split):
+    outcomes = run_retrieval_eval(tmp_path / split, split=split)
+
+    assert len(outcomes) == len(_pairs(split))
+
+
+def test_retrieval_eval_defaults_to_the_test_split(tmp_path):
+    # Defaulting to dev would report a number tuned on its own data.
+    assert len(run_retrieval_eval(tmp_path)) == len(_pairs("test"))
+
+
+def test_dev_and_test_probes_do_not_overlap():
+    dev = {p["followup"] for p in _pairs("dev")}
+    test = {p["followup"] for p in _pairs("test")}
+
+    assert not dev & test
 
 
 def an_outcome(is_hit=True):
