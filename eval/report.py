@@ -33,7 +33,7 @@ def _retrieval_section(outcomes) -> list[str]:
     return lines
 
 
-def _prediction_section(outcomes) -> list[str]:
+def _prediction_section(outcomes, baseline) -> list[str]:
     if not outcomes:
         return ["PREDICTION: not run"]
 
@@ -43,7 +43,15 @@ def _prediction_section(outcomes) -> list[str]:
 
     lines = [
         "PREDICTION",
-        f"  correct session identified  {hits}/{total}  ({_percent(hits, total)})",
+        f"  exact question identified  {hits}/{total}  ({_percent(hits, total)})",
+    ]
+    if baseline:
+        base_hits = sum(o.is_hit for o in baseline)
+        lines.append(
+            f"  naive baseline (echo history)  {base_hits}/{len(baseline)}  "
+            f"({_percent(base_hits, len(baseline))})"
+        )
+    lines += [
         f"  mean similarity to true next question  {mean_similarity:.2f}",
         f"  sample size  {total} sessions (small; see README)",
         "",
@@ -53,19 +61,21 @@ def _prediction_section(outcomes) -> list[str]:
         lines.append(f"  [{mark}] {outcome.session_id}")
         lines.append(f"         actual:    {outcome.true_next}")
         lines.append(f"         predicted: {outcome.predictions[0]}")
+        if not outcome.is_hit and outcome.top_rival:
+            lines.append(f"         lost to:   {outcome.top_rival}")
     lines.append("")
     return lines
 
 
-def render(retrieval, prediction) -> str:
+def render(retrieval, prediction, baseline=()) -> str:
     divider = "=" * 68
     lines = [divider, "mindtrail evaluation", divider, ""]
     lines += _retrieval_section(retrieval)
-    lines += _prediction_section(prediction)
+    lines += _prediction_section(prediction, baseline)
     return "\n".join(lines)
 
 
-def to_dict(retrieval, prediction) -> dict:
+def to_dict(retrieval, prediction, baseline=()) -> dict:
     return {
         "retrieval": {
             "total": len(retrieval),
@@ -79,6 +89,7 @@ def to_dict(retrieval, prediction) -> dict:
         "prediction": {
             "total": len(prediction),
             "hits": sum(o.is_hit for o in prediction),
+            "baseline_hits": sum(o.is_hit for o in baseline),
             "cases": [
                 {
                     "session": o.session_id,
@@ -86,6 +97,7 @@ def to_dict(retrieval, prediction) -> dict:
                     "predictions": list(o.predictions),
                     "hit": bool(o.is_hit),
                     "similarity": round(o.best_similarity, 4),
+                    "top_rival": o.top_rival,
                 }
                 for o in prediction
             ],

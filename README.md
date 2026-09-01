@@ -55,27 +55,49 @@ likely cause; embedding them separately and scoring jointly is the obvious
 next thing to try.
 
 **Prediction** — each session's final question is held out. The three
-predicted questions compete against *every* session's held-out question, and
-a hit requires the true one to rank first. Framing it as discrimination
-avoids inventing a "close enough" similarity cutoff that could be tuned
-after seeing the results.
+predicted questions are scored against a pool of 24 candidates: all six
+held-out questions plus three plausible same-topic decoys per session. A hit
+requires the true question to outrank all 23 others. Framing it as
+discrimination avoids inventing a "close enough" similarity cutoff that
+could be tuned after seeing the results.
 
 | metric | score |
 |---|---|
-| correct session identified | 5/6 (83%) |
-| mean similarity to true next question | 0.34 |
+| exact question identified | 2/6 (33%) |
+| naive baseline, echo the trajectory | 1/6 (17%) |
+| mean similarity to true next question | 0.38 |
+
+**This number was 83% before the decoys existed, and that version was
+wrong.** With only the six held-out questions competing, each from a
+different domain, any on-topic guess won — the eval was measuring topic
+classification, not next-question prediction. Adding same-topic decoys
+dropped it to 33%. The failure modes are now legible: the
+transformer-internals session lost to a decoy that paraphrases its own
+prediction, which is precisely the discrimination the easy pool never
+tested.
+
+33% against a 17% baseline is a real but modest signal, and with n=6 that is
+two hits against one. It should be read as "better than echoing history,"
+not as a demonstrated capability.
 
 ### What these numbers do not say
 
-- **n is small.** Six sessions and eight retrieval pairs. 83% here means
-  "five of six", and one different session would move it 17 points.
+- **n is small.** Six sessions and eight retrieval pairs. Each session is
+  worth 17 points, so a single flip is visually dramatic and statistically
+  meaningless.
 - **The eval set is hand-authored, not recorded.** The trajectories are
   plausible research paths, not logs of real usage, so they are cleaner and
-  more coherent than genuine browsing would be.
+  more coherent than genuine browsing would be. Decoys were written by the
+  same hand as the answers, which is its own bias.
 - **Sampling made this unreportable at first.** At the default temperature,
   two runs over identical input scored 4/6 and then 3/6. Pinning temperature
-  to 0 made runs reproducible and, incidentally, raised the score to 5/6.
-  Any prediction number reported without a fixed temperature is noise.
+  to 0 made runs reproducible. Any prediction number reported without a
+  fixed temperature is noise.
+- **The prompt was frozen before the decoy pool existed**, but temperature
+  was changed after seeing results on this same set. With n=6 that is enough
+  to matter; a separate dev set for tuning would be the honest fix.
+- **One embedding model gates both numbers.** Retrieval and prediction
+  scoring share Chroma's MiniLM, so its quirks shape both results.
 
 ## How it works
 
@@ -125,6 +147,11 @@ sweep *will* hit 429. Exponential backoff is why the harness finishes.
 similarity threshold at eval time. A ranked list supports recall-style
 scoring, which needs no arbitrary number.
 
+**Untrusted URLs are scheme-checked before fetching.** Search results are
+external input, and `urllib.request.urlopen` will happily serve `file://`.
+It also raises `ValueError` rather than `URLError` for a scheme-less URL,
+which used to abort an entire question instead of skipping one dead link.
+
 ## Setup
 
 Requires Python 3.11+. Verified on 3.14.
@@ -150,8 +177,10 @@ Llama line from its catalog, so older tutorials naming
 
 ## Tests
 
-49 tests, no network and no API key required — search, fetch, and the model
-are all stubbed.
+68 tests, no network and no API key required — search, fetch, and the model
+are all stubbed. Coverage concentrates on logic that can be silently wrong
+(retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
+CLI glue.
 
 ```bash
 .venv/bin/python -m pytest tests/ -q
@@ -161,6 +190,9 @@ are all stubbed.
 ## Known limitations
 
 - Retrieval degrades when stored entries are topically adjacent (see above).
+- Prediction is weak (33%) once same-topic decoys are in play. The honest
+  reading is that trajectory alone is thin signal for a *specific* next
+  question, even when the topic is obvious.
 - The eval set is synthetic; recording real sessions would be a truer test.
 - Search depends on scraping DuckDuckGo, which will break periodically. The
   provider protocol exists so a replacement is a small change, but only one

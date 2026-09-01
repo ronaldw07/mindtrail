@@ -1,5 +1,6 @@
 {
-  "_note": "Hand-authored research trajectories, not recorded from live usage. Each session's final question is held out and must be recovered by the predictor. See README for why this limits how far the numbers generalize.",
+  "_note": "Hand-authored research trajectories, not recorded from live usage. The final question of each session is held out and must be recovered by the predictor.",
+  "_decoys": "Each session lists plausible same-topic alternatives that did NOT come next. They join the candidate pool so that discrimination tests whether the predictor identified the specific question, not merely the topic. Without them the task collapses into six-way topic classification, which any on-topic guess wins.",
   "sessions": [
     {
       "id": "vector-databases",
@@ -8,6 +9,11 @@
         "how does Chroma differ from Pinecone",
         "how does HNSW indexing work",
         "how do I choose a vector database for a small project"
+      ],
+      "decoys": [
+        "what distance metric should I use for embeddings",
+        "how do I shard a vector index across multiple nodes",
+        "how much memory does storing a million embeddings take"
       ]
     },
     {
@@ -17,6 +23,11 @@
         "what chunking strategies work best for RAG",
         "how do I evaluate a RAG pipeline",
         "does adding a reranker improve RAG accuracy"
+      ],
+      "decoys": [
+        "how large should each retrieved chunk be",
+        "how do I show citations in RAG output",
+        "which embedding model works best for RAG retrieval"
       ]
     },
     {
@@ -26,6 +37,11 @@
         "how does LoRA reduce fine-tuning cost",
         "when should I fine-tune instead of using RAG",
         "how much training data do I need to fine-tune effectively"
+      ],
+      "decoys": [
+        "what learning rate should I use for LoRA",
+        "how do I prevent catastrophic forgetting when fine-tuning",
+        "can I merge several LoRA adapters into one model"
       ]
     },
     {
@@ -35,6 +51,11 @@
         "how do I reuse a logged-in browser session in Playwright",
         "how do websites detect automated browsers",
         "how do I keep a scraper working when a site changes its HTML"
+      ],
+      "decoys": [
+        "how do I run Playwright in headless mode",
+        "how do I handle infinite scroll in Playwright",
+        "how do I speed up a slow Playwright test suite"
       ]
     },
     {
@@ -44,6 +65,11 @@
         "why do transformers need positional encoding",
         "what does multi-head attention add over single-head",
         "how does a KV cache speed up inference"
+      ],
+      "decoys": [
+        "what does the feed forward network do in a transformer layer",
+        "how does layer normalization stabilize training",
+        "what is the difference between encoder and decoder blocks"
       ]
     },
     {
@@ -53,6 +79,11 @@
         "what is the ReAct pattern for agents",
         "when is a multi-agent system better than a single agent",
         "how do I benchmark an agent's task completion rate"
+      ],
+      "decoys": [
+        "how do I stop an agent from looping forever",
+        "how should an agent recover from a failed tool call",
+        "what context should an agent carry between steps"
       ]
     }
   ]
