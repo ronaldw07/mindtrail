@@ -27,6 +27,20 @@ def test_predict_accepts_a_history_length():
     assert args.history == 8
 
 
+def test_web_defaults_to_opening_the_page():
+    args = build_parser().parse_args(["web"])
+
+    assert args.out == "mindtrail_site.html"
+    assert args.no_open is False
+
+
+def test_web_no_open_flag_is_respected():
+    args = build_parser().parse_args(["web", "--no-open", "--out", "x.html"])
+
+    assert args.no_open is True
+    assert args.out == "x.html"
+
+
 def test_a_command_is_required():
     with pytest.raises(SystemExit):
         build_parser().parse_args([])

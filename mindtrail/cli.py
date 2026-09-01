@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+import webbrowser
+from pathlib import Path
 
 from mindtrail.ingest.researcher import Researcher
 from mindtrail.ingest.search import SearchError, default_search
+from mindtrail.ingest.topic import TopicExtractor
 from mindtrail.llm import LLMClient, LLMError
 from mindtrail.memory.store import MemoryStore
 from mindtrail.predict.next_query import predict_from_store
+from mindtrail.web.generate import build_html
 
 DIVIDER = "-" * 68
 
@@ -20,7 +24,10 @@ def _print_wrapped(label: str, body: str) -> None:
 
 def cmd_ask(args) -> int:
     store = MemoryStore()
-    researcher = Researcher(store, default_search(), LLMClient())
+    llm = LLMClient()
+    researcher = Researcher(
+        store, default_search(), llm, topic_extractor=TopicExtractor(llm)
+    )
     result = researcher.research_and_store(args.question)
 
     _print_wrapped(f"Q: {result.query}", result.summary)
@@ -72,6 +79,19 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def cmd_web(args) -> int:
+    store = MemoryStore()
+    html = build_html(store.all())
+
+    path = Path(args.out).resolve()
+    path.write_text(html)
+    print(f"wrote {path}")
+
+    if not args.no_open:
+        webbrowser.open(f"file://{path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mindtrail",
@@ -95,6 +115,11 @@ def build_parser() -> argparse.ArgumentParser:
     stats = sub.add_parser("stats", help="show what is in memory")
     stats.add_argument("--limit", type=int, default=10)
     stats.set_defaults(func=cmd_stats)
+
+    web = sub.add_parser("web", help="generate a static page grouped by topic")
+    web.add_argument("--out", default="mindtrail_site.html")
+    web.add_argument("--no-open", action="store_true")
+    web.set_defaults(func=cmd_web)
 
     return parser
 
