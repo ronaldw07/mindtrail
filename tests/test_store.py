@@ -78,3 +78,45 @@ def test_entries_are_immutable(store):
 
     assert entry.summary == "original"
     assert updated.summary == "changed"
+
+
+def test_topic_and_key_facts_round_trip(store):
+    entry = store.add(
+        "what is a vector database",
+        "It stores embeddings.",
+        [],
+        topic="Vector Databases",
+        key_facts=["fact one", "fact two"],
+    )
+
+    assert entry.topic == "Vector Databases"
+    assert entry.key_facts == ("fact one", "fact two")
+    assert store.all()[0].key_facts == ("fact one", "fact two")
+
+
+def test_entries_without_a_topic_default_to_empty(store):
+    entry = store.add("q", "a", [])
+    assert entry.topic == ""
+    assert entry.key_facts == ()
+
+
+def test_topics_lists_distinct_labels_in_use(store):
+    store.add("q1", "a1", [], topic="Docker")
+    store.add("q2", "a2", [], topic="Docker")
+    store.add("q3", "a3", [], topic="Kubernetes")
+    store.add("q4", "a4", [])  # no topic
+
+    assert store.topics() == ["Docker", "Kubernetes"]
+
+
+def test_all_returns_every_entry_newest_first(store):
+    store.add("first", "a", [])
+    store.add("second", "a", [])
+
+    entries = store.all()
+
+    assert [e.query for e in entries] == ["second", "first"]
+
+
+def test_all_on_empty_store_returns_nothing(store):
+    assert store.all() == []

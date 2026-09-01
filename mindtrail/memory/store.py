@@ -15,6 +15,9 @@ import chromadb
 from mindtrail import config
 
 
+UNCATEGORIZED = "Uncategorized"
+
+
 @dataclass(frozen=True)
 class Entry:
     """One researched question and its synthesized answer."""
@@ -24,6 +27,8 @@ class Entry:
     summary: str
     sources: tuple[str, ...]
     created_at: str
+    topic: str = ""
+    key_facts: tuple[str, ...] = ()
 
     def with_summary(self, summary: str) -> "Entry":
         """Return a copy carrying a new summary, leaving this one untouched."""
@@ -36,12 +41,15 @@ def _now_iso() -> str:
 
 def _to_entry(doc: str, meta: dict, entry_id: str) -> Entry:
     raw_sources = meta.get("sources", "")
+    raw_facts = meta.get("key_facts", "")
     return Entry(
         id=entry_id,
         query=meta.get("query", ""),
         summary=doc,
         sources=tuple(s for s in raw_sources.split("\n") if s),
         created_at=meta.get("created_at", ""),
+        topic=meta.get("topic", ""),
+        key_facts=tuple(f for f in raw_facts.split("\n") if f),
     )
 
 
@@ -55,7 +63,14 @@ class MemoryStore:
             metadata={"hnsw:space": "cosine"},
         )
 
-    def add(self, query: str, summary: str, sources: list[str]) -> Entry:
+    def add(
+        self,
+        query: str,
+        summary: str,
+        sources: list[str],
+        topic: str = "",
+        key_facts: list[str] | None = None,
+    ) -> Entry:
         """Store one researched question. Returns the created entry."""
         if not query.strip():
             raise ValueError("query must not be empty")
@@ -68,9 +83,11 @@ class MemoryStore:
             summary=summary,
             sources=tuple(sources),
             created_at=_now_iso(),
+            topic=topic,
+            key_facts=tuple(key_facts or []),
         )
-        # Chroma metadata values must be scalars, so sources are joined here
-        # and split back out in _to_entry.
+        # Chroma metadata values must be scalars, so list fields are joined
+        # here and split back out in _to_entry.
         self._collection.add(
             ids=[entry.id],
             documents=[f"{entry.query}\n\n{entry.summary}"],
@@ -79,6 +96,8 @@ class MemoryStore:
                     "query": entry.query,
                     "sources": "\n".join(entry.sources),
                     "created_at": entry.created_at,
+                    "topic": entry.topic,
+                    "key_facts": "\n".join(entry.key_facts),
                 }
             ],
         )
@@ -117,6 +136,27 @@ class MemoryStore:
             )
         ]
         return sorted(entries, key=lambda e: e.created_at, reverse=True)[: max(1, n)]
+
+    def all(self) -> list[Entry]:
+        """Every stored entry, newest first."""
+        if self._collection.count() == 0:
+            return []
+        data = self._collection.get()
+        entries = [
+            _to_entry(doc, meta, entry_id)
+            for doc, meta, entry_id in zip(
+                data["documents"], data["metadatas"], data["ids"]
+            )
+        ]
+        return sorted(entries, key=lambda e: e.created_at, reverse=True)
+
+    def topics(self) -> list[str]:
+        """Distinct topic labels already in use, for reuse by new entries.
+
+        Reusing existing labels rather than minting a fresh one each time
+        is what keeps the topic list from fragmenting into near-duplicates.
+        """
+        return sorted({e.topic for e in self.all() if e.topic})
 
     def count(self) -> int:
         return self._collection.count()
