@@ -41,6 +41,20 @@ def test_web_no_open_flag_is_respected():
     assert args.out == "x.html"
 
 
+def test_chat_defaults_to_port_8765_and_opening():
+    args = build_parser().parse_args(["chat"])
+
+    assert args.port == 8765
+    assert args.no_open is False
+
+
+def test_chat_accepts_a_custom_port():
+    args = build_parser().parse_args(["chat", "--port", "9000", "--no-open"])
+
+    assert args.port == 9000
+    assert args.no_open is True
+
+
 def test_a_command_is_required():
     with pytest.raises(SystemExit):
         build_parser().parse_args([])
