@@ -6,6 +6,8 @@ searchable memory. Every later question is answered *with* what it already
 learned, and you can browse everything it's learned as a topic-organized
 page in your browser.
 
+- going to add a knowledge base i can view that shows the most relevant information.
+
 ```
 $ mindtrail ask "what is a vector database"
 $ mindtrail ask "how does Chroma differ from Pinecone"
