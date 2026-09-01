@@ -29,6 +29,12 @@ _STYLE = """
   .entry details { margin-top: 0.6rem; }
   .entry .sources { margin-top: 0.6rem; font-size: 0.9rem; }
   .entry .sources a { display: block; }
+  .kind { display: inline-block; font-size: 0.72rem; text-transform: uppercase;
+          letter-spacing: 0.03em; padding: 0.1rem 0.45rem; border-radius: 4px;
+          background: #444; color: #fff; margin-left: 0.5rem; vertical-align: middle; }
+  .advice { border: 2px solid #2563eb; border-radius: 8px; padding: 1rem 1.2rem;
+            margin-bottom: 2rem; white-space: pre-wrap; line-height: 1.5; }
+  .advice h2 { margin-top: 0; }
   .hidden { display: none; }
 """
 
@@ -66,12 +72,16 @@ def _render_entry(entry: Entry) -> str:
 
     search_blob = escape(f"{entry.query} {entry.summary}".lower(), quote=True)
 
+    kind_html = (
+        f'<span class="kind">{escape(entry.kind)}</span>' if entry.kind != "research" else ""
+    )
+
     return f"""
     <div class="entry" data-search="{search_blob}">
-      <div class="question">{escape(entry.query)}</div>
+      <div class="question">{escape(entry.query)}{kind_html}</div>
       <div class="date">{escape(entry.created_at[:10])}</div>
       {facts_html}
-      <details><summary>full answer</summary><p>{escape(entry.summary)}</p></details>
+      <details><summary>full content</summary><p>{escape(entry.summary)}</p></details>
       {sources_html}
     </div>"""
 
@@ -86,12 +96,37 @@ def _render_topic(topic: str, entries: list[Entry]) -> str:
   </section>"""
 
 
+def _render_advice(entries: list[Entry]) -> str:
+    """The single most recent advice entry, if one exists.
+
+    Advice is generated on demand by `mindtrail advice`, not regenerated
+    every time the page is built, so this only ever reads what's stored -
+    no LLM call happens here.
+    """
+    advice_entries = sorted(
+        (e for e in entries if e.kind == "advice"),
+        key=lambda e: e.created_at,
+        reverse=True,
+    )
+    if not advice_entries:
+        return ""
+    latest = advice_entries[0]
+    return f"""
+  <section class="advice">
+    <h2>Advice <small>({escape(latest.created_at[:10])})</small></h2>
+    {escape(latest.summary)}
+  </section>"""
+
+
 def build_html(entries: list[Entry]) -> str:
     """Render the full page. Empty input still produces a valid page."""
-    if not entries:
+    advice_html = _render_advice(entries)
+    groupable = [e for e in entries if e.kind != "advice"]
+
+    if not groupable:
         body = "<p>Nothing researched yet. Run <code>mindtrail ask</code> first.</p>"
     else:
-        groups = _group_by_topic(entries)
+        groups = _group_by_topic(groupable)
         ordered_topics = sorted(
             groups, key=lambda t: (t == UNCATEGORIZED, t.lower())
         )
@@ -106,7 +141,8 @@ def build_html(entries: list[Entry]) -> str:
 </head>
 <body>
   <h1>mindtrail</h1>
-  <p class="subtitle">{len(entries)} researched question(s)</p>
+  <p class="subtitle">{len(groupable)} entries</p>
+  {advice_html}
   <input id="search" type="search" placeholder="filter by keyword...">
   {body}
   <script>{_SCRIPT}</script>

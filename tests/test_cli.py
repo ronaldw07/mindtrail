@@ -2,7 +2,16 @@
 
 import pytest
 
-from mindtrail.cli import build_parser, cmd_ask, cmd_predict, cmd_search, main
+from mindtrail.cli import (
+    build_parser,
+    cmd_advice,
+    cmd_ask,
+    cmd_docs,
+    cmd_note,
+    cmd_predict,
+    cmd_search,
+    main,
+)
 from mindtrail.llm import LLMError
 
 
@@ -53,6 +62,38 @@ def test_chat_accepts_a_custom_port():
 
     assert args.port == 9000
     assert args.no_open is True
+
+
+def test_chat_defaults_to_loopback_only():
+    # Binding wider than loopback by default would make a locally-run
+    # chat server reachable from the LAN with no login.
+    assert build_parser().parse_args(["chat"]).host == "127.0.0.1"
+
+
+def test_chat_host_is_configurable_for_containers():
+    args = build_parser().parse_args(["chat", "--host", "0.0.0.0"])
+
+    assert args.host == "0.0.0.0"
+
+
+def test_note_routes_with_its_text():
+    args = build_parser().parse_args(["note", "remember to follow up"])
+
+    assert args.func is cmd_note
+    assert args.text == "remember to follow up"
+
+
+def test_docs_routes_with_a_path():
+    args = build_parser().parse_args(["docs", "resume.pdf"])
+
+    assert args.func is cmd_docs
+    assert args.path == "resume.pdf"
+
+
+def test_advice_takes_no_arguments():
+    args = build_parser().parse_args(["advice"])
+
+    assert args.func is cmd_advice
 
 
 def test_a_command_is_required():
