@@ -44,6 +44,23 @@ answer with sources and any recalled prior research shown inline — same
 researcher as `ask`, just a chat interface instead of one-shot terminal
 commands. Runs until you `Ctrl+C` it.
 
+```
+$ mindtrail docs resume.pdf
+$ mindtrail note "targeting agent/eval-focused AI internships for 2026"
+$ mindtrail advice
+```
+
+Upload a PDF or jot a note and it's stored, topic-labeled, and searchable
+exactly like research — a follow-up question in `ask` or `chat` can recall
+your resume or a note the same way it recalls a prior answer. `advice`
+reads everything stored (documents, notes, research) and writes a
+prioritized plan, citing which document/note/topic each recommendation
+comes from. `web` pins the latest advice above the topic sections.
+
+Photos and scanned documents aren't supported — there's no vision-capable
+model on this Groq account (verified directly against the API, not
+assumed), so only typed-text PDFs extract.
+
 Prediction (guessing your next question) also exists but is **not** a
 working feature — see [Results](#results) for why it's reported as a
 negative finding rather than something to rely on.
@@ -215,6 +232,8 @@ mindtrail web
 | `mindtrail/ingest/topic.py` | Topic label + key-fact extraction, reusing existing labels |
 | `mindtrail/web/generate.py` | Static HTML page grouped by topic |
 | `mindtrail/web/chat_server.py` | Browser chatbot, stdlib http.server, no framework |
+| `mindtrail/ingest/documents.py` | PDF text extraction, local, no vision model available |
+| `mindtrail/advice/planner.py` | Grounded next-steps plan from stored documents/notes/research |
 | `mindtrail/predict/next_query.py` | Three ranked next-question candidates (not validated — see Results) |
 | `mindtrail/llm.py` | Groq client with rate-limit backoff |
 | `eval/` | Retrieval and prediction harness, plus the LLM judge |
@@ -259,6 +278,19 @@ would fragment into noise instead of staying navigable. Labeling runs after
 the answer is written and never blocks storing it — a failed extraction
 still keeps the research, just uncategorized.
 
+**Documents are parsed locally, not sent to a vision model.** A vision
+model was the first plan; a direct test against this Groq account's
+`gpt-oss-120b` with an `image_url` message returned a plain 400
+("content must be a string"), and the account has no vision-capable model
+at all. `pypdf` extracts typed text for free instead — it won't read
+scans or photos, but it needed no new API surface and no cost.
+
+**Advice reads memory once, it doesn't call out to a fresh researcher
+run.** `mindtrail advice` is one completion over whatever's already
+stored, which keeps it cheap and means every recommendation is
+traceable to a specific document, note, or research entry rather than
+new information invented on the spot.
+
 **Untrusted URLs are scheme-checked before fetching.** Search results are
 external input, and `urllib.request.urlopen` will happily serve `file://`.
 It also raises `ValueError` rather than `URLError` for a scheme-less URL,
@@ -287,6 +319,9 @@ Llama line from its catalog, so older tutorials naming
 .venv/bin/python -m mindtrail.cli stats               # what is remembered
 .venv/bin/python -m mindtrail.cli web                 # static page, grouped by topic
 .venv/bin/python -m mindtrail.cli chat                 # browser chatbot interface
+.venv/bin/python -m mindtrail.cli docs resume.pdf       # parse and store a PDF
+.venv/bin/python -m mindtrail.cli note "some note"      # save a manual note
+.venv/bin/python -m mindtrail.cli advice                # generate a next-steps plan
 ```
 
 `web` writes a single HTML file and opens it in your default browser. Each
@@ -297,7 +332,7 @@ whenever you want it current.
 
 ## Tests
 
-128 tests, no network and no API key required — search, fetch, and the model
+151 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.
