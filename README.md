@@ -5,6 +5,8 @@ web, synthesizes a sourced answer, and stores that answer in a searchable
 memory. Every later question is answered *with* what it already learned, and
 it can predict what you will want to know next.
 
+- going to add a knowledge base i can view that shows the most relevant information.
+
 ```
 $ mindtrail ask "what is a vector database"
 $ mindtrail ask "how does Chroma differ from Pinecone"
