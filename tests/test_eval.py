@@ -6,7 +6,13 @@ from pathlib import Path
 import pytest
 
 from eval.report import to_dict
-from eval.runner import PredictionOutcome, RetrievalOutcome, _cosine, run_retrieval_eval
+from eval.runner import (
+    PredictionOutcome,
+    RetrievalOutcome,
+    _cosine,
+    build_candidate_pool,
+    run_retrieval_eval,
+)
 
 
 def test_cosine_of_identical_vectors_is_one():
@@ -59,18 +65,52 @@ def test_retrieval_eval_scores_every_pair(tmp_path):
     assert len(outcomes) == len(pairs)
 
 
+def an_outcome(is_hit=True):
+    return PredictionOutcome(
+        session_id="s",
+        true_next="q",
+        predictions=("a",),
+        is_hit=is_hit,
+        best_similarity=0.5,
+        top_rival="rival",
+        tokens=0,
+    )
+
+
 def test_report_is_json_serializable():
     retrieval = [RetrievalOutcome(followup="f", expected="e", rank=1)]
-    prediction = [
-        PredictionOutcome(
-            session_id="s",
-            true_next="q",
-            predictions=("a",),
-            is_hit=True,
-            best_similarity=0.5,
-            tokens=0,
-        )
-    ]
 
     # Raises TypeError if any numpy scalar leaked through.
-    json.dumps(to_dict(retrieval, prediction))
+    json.dumps(to_dict(retrieval, [an_outcome()], [an_outcome(is_hit=False)]))
+
+
+def test_candidate_pool_includes_decoys_alongside_held_out_questions():
+    sessions = json.loads((Path("eval") / "sessions.json").read_text())["sessions"]
+
+    pool = build_candidate_pool(sessions)
+
+    expected = sum(1 + len(s.get("decoys", [])) for s in sessions)
+    assert len(pool) == expected
+
+
+def test_every_held_out_question_is_in_the_pool():
+    sessions = json.loads((Path("eval") / "sessions.json").read_text())["sessions"]
+
+    pool = build_candidate_pool(sessions)
+
+    assert all(s["questions"][-1] in pool for s in sessions)
+
+
+def test_pool_is_harder_than_one_candidate_per_session():
+    # Without decoys the task degrades into topic classification, which
+    # any on-topic guess wins.
+    sessions = json.loads((Path("eval") / "sessions.json").read_text())["sessions"]
+
+    assert len(build_candidate_pool(sessions)) > len(sessions)
+
+
+def test_baseline_hits_are_reported_separately():
+    report = to_dict([], [an_outcome()], [an_outcome(is_hit=False)])
+
+    assert report["prediction"]["hits"] == 1
+    assert report["prediction"]["baseline_hits"] == 0

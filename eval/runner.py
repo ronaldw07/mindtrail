@@ -54,6 +54,7 @@ class PredictionOutcome:
     predictions: tuple[str, ...]
     is_hit: bool
     best_similarity: float
+    top_rival: str
     tokens: int
 
 
@@ -106,44 +107,71 @@ def _as_entries(questions: list[str]) -> list[Entry]:
     ]
 
 
-def run_prediction_eval(llm: LLMClient, pause: float) -> list[PredictionOutcome]:
+def build_candidate_pool(sessions: list[dict]) -> list[str]:
+    """Every held-out question plus every same-topic decoy.
+
+    Decoys are what make this a test of specificity. With only the six
+    held-out questions competing, each from a different domain, any
+    on-topic guess wins and the task is really topic classification.
+    """
+    pool: list[str] = []
+    for session in sessions:
+        pool.append(session["questions"][-1])
+        pool.extend(session.get("decoys", []))
+    return pool
+
+
+def _score_against_pool(
+    prediction_vectors, pool: list[str], pool_vectors
+) -> list[float]:
+    """Each candidate scored by its closest match to any prediction."""
+    return [
+        max(_cosine(pv, cv) for pv in prediction_vectors) for cv in pool_vectors
+    ]
+
+
+def run_prediction_eval(
+    llm: LLMClient, pause: float
+) -> tuple[list[PredictionOutcome], list[PredictionOutcome]]:
+    """Returns (model outcomes, naive-baseline outcomes).
+
+    The baseline predicts by echoing the trajectory so far. It shares the
+    scoring path, so the headline number can be read against a floor
+    rather than against nothing.
+    """
     sessions = load_json("sessions.json")["sessions"]
     embed = embedding_functions.DefaultEmbeddingFunction()
     predictor = NextQueryPredictor(llm)
 
-    # Every session's held-out question is a candidate for every session,
-    # so a lucky generic guess cannot score.
-    candidates = [session["questions"][-1] for session in sessions]
-    candidate_vectors = embed(candidates)
+    pool = build_candidate_pool(sessions)
+    pool_vectors = embed(pool)
 
-    outcomes = []
+    def score(session, texts, tokens) -> PredictionOutcome:
+        true_next = session["questions"][-1]
+        scores = _score_against_pool(embed(texts), pool, pool_vectors)
+        ranked = sorted(zip(scores, pool), reverse=True)
+        winner = ranked[0][1]
+        rival = next((c for _, c in ranked if c != true_next), "")
+        return PredictionOutcome(
+            session_id=session["id"],
+            true_next=true_next,
+            predictions=tuple(texts),
+            is_hit=winner == true_next,
+            best_similarity=scores[pool.index(true_next)],
+            top_rival=rival,
+            tokens=tokens,
+        )
+
+    outcomes, baseline = [], []
     for session in sessions:
-        history, true_next = session["questions"][:-1], session["questions"][-1]
+        history = session["questions"][:-1]
 
         predictions = predictor.predict(_as_entries(history))
-        texts = [p.question for p in predictions]
-        prediction_vectors = embed(texts)
+        outcomes.append(score(session, [p.question for p in predictions], 0))
+        baseline.append(score(session, history, 0))
 
-        # Score each candidate by its best match against any prediction.
-        scores = [
-            max(_cosine(pv, cv) for pv in prediction_vectors)
-            for cv in candidate_vectors
-        ]
-        winner = candidates[scores.index(max(scores))]
-        true_score = scores[candidates.index(true_next)]
-
-        outcomes.append(
-            PredictionOutcome(
-                session_id=session["id"],
-                true_next=true_next,
-                predictions=tuple(texts),
-                is_hit=winner == true_next,
-                best_similarity=true_score,
-                tokens=0,
-            )
-        )
         time.sleep(pause)  # free tier is ~30 requests per minute
-    return outcomes
+    return outcomes, baseline
 
 
 def main() -> int:
@@ -163,9 +191,10 @@ def main() -> int:
         retrieval = run_retrieval_eval(Path(tmp))
 
     prediction: list[PredictionOutcome] = []
+    baseline: list[PredictionOutcome] = []
     if not args.skip_prediction:
         try:
-            prediction = run_prediction_eval(
+            prediction, baseline = run_prediction_eval(
                 LLMClient(temperature=config.EVAL_TEMPERATURE), args.pause
             )
         except LLMError as exc:
@@ -173,8 +202,10 @@ def main() -> int:
 
     from eval.report import render, to_dict
 
-    print(render(retrieval, prediction))
-    Path(args.out).write_text(json.dumps(to_dict(retrieval, prediction), indent=2))
+    print(render(retrieval, prediction, baseline))
+    Path(args.out).write_text(
+        json.dumps(to_dict(retrieval, prediction, baseline), indent=2)
+    )
     print(f"\nwrote {args.out}")
     return 0
 
