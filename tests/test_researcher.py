@@ -4,6 +4,7 @@ import pytest
 
 from mindtrail.ingest.researcher import Researcher, _format_prior
 from mindtrail.ingest.search import SearchError, SearchResult
+from mindtrail.ingest.topic import TopicAssignment
 from mindtrail.llm import Completion
 from mindtrail.memory.store import MemoryStore
 
@@ -89,3 +90,47 @@ def test_no_usable_sources_raises(store):
 
 def test_format_prior_is_empty_without_entries():
     assert _format_prior([]) == ""
+
+
+class StubTopicExtractor:
+    def __init__(self, assignment=None, error=None):
+        self._assignment = assignment or TopicAssignment("Topic", ("fact",))
+        self._error = error
+
+    def extract(self, query, summary, existing_topics):
+        if self._error:
+            raise self._error
+        return self._assignment
+
+
+def test_topic_and_key_facts_are_stored_when_extractor_is_given(store, provider):
+    researcher = Researcher(
+        store, provider, StubLLM(), topic_extractor=StubTopicExtractor()
+    )
+
+    researcher.research_and_store("what is X")
+
+    assert store.all()[0].topic == "Topic"
+    assert store.all()[0].key_facts == ("fact",)
+
+
+def test_without_an_extractor_entries_have_no_topic(store, provider):
+    researcher = Researcher(store, provider, StubLLM())
+
+    researcher.research_and_store("what is X")
+
+    assert store.all()[0].topic == ""
+
+
+def test_a_failed_topic_extraction_does_not_lose_the_research(store, provider):
+    researcher = Researcher(
+        store,
+        provider,
+        StubLLM(),
+        topic_extractor=StubTopicExtractor(error=ValueError("bad json")),
+    )
+
+    researcher.research_and_store("what is X")
+
+    assert store.count() == 1
+    assert store.all()[0].topic == ""

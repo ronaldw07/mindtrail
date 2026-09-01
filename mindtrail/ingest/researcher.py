@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from mindtrail import config
 from mindtrail.ingest.fetch import FetchError, fetch_url
 from mindtrail.ingest.search import SearchError, SearchProvider
-from mindtrail.llm import LLMClient
+from mindtrail.ingest.topic import TopicExtractor
+from mindtrail.llm import LLMClient, LLMError
 from mindtrail.memory.store import Entry, MemoryStore
 
 SYSTEM_PROMPT = (
@@ -68,11 +69,16 @@ def _gather_pages(
 
 class Researcher:
     def __init__(
-        self, store: MemoryStore, provider: SearchProvider, llm: LLMClient
+        self,
+        store: MemoryStore,
+        provider: SearchProvider,
+        llm: LLMClient,
+        topic_extractor: TopicExtractor | None = None,
     ):
         self._store = store
         self._provider = provider
         self._llm = llm
+        self._topic_extractor = topic_extractor
 
     def research(self, query: str) -> Research:
         recalled = self._store.search(query, k=config.RELATED_MEMORIES_TO_INJECT)
@@ -94,5 +100,25 @@ class Researcher:
 
     def research_and_store(self, query: str) -> Research:
         result = self.research(query)
-        self._store.add(result.query, result.summary, list(result.sources))
+        topic, key_facts = self._assign_topic(result)
+        self._store.add(
+            result.query,
+            result.summary,
+            list(result.sources),
+            topic=topic,
+            key_facts=list(key_facts),
+        )
         return result
+
+    def _assign_topic(self, result: Research) -> tuple[str, tuple[str, ...]]:
+        if self._topic_extractor is None:
+            return "", ()
+        try:
+            assignment = self._topic_extractor.extract(
+                result.query, result.summary, self._store.topics()
+            )
+        except (LLMError, ValueError):
+            # Topic labeling is a display nicety; losing it should not
+            # lose the research that was just done.
+            return "", ()
+        return assignment.topic, assignment.key_facts
