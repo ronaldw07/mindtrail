@@ -73,9 +73,16 @@ def load_json(name: str) -> dict:
     return json.loads((EVAL_DIR / name).read_text())
 
 
-def run_retrieval_eval(tmp_path: Path) -> list[RetrievalOutcome]:
-    """Load every stored entry into one store, then probe with follow-ups."""
-    pairs = load_json("retrieval_pairs.json")["pairs"]
+def run_retrieval_eval(
+    tmp_path: Path, split: str = "test"
+) -> list[RetrievalOutcome]:
+    """Load every stored entry into one store, then probe with follow-ups.
+
+    Defaults to the test split. The dev split is for comparing retrieval
+    strategies, so that a choice made by looking at scores is never made
+    on the data those scores are reported from.
+    """
+    pairs = load_json("retrieval_pairs.json")[split]
     store = MemoryStore(path=str(tmp_path / "retrieval"), collection="eval")
 
     for pair in pairs:
@@ -183,12 +190,18 @@ def main() -> int:
     )
     parser.add_argument("--pause", type=float, default=2.5)
     parser.add_argument("--out", default="eval/results.json")
+    parser.add_argument(
+        "--split",
+        default="test",
+        choices=("dev", "test"),
+        help="retrieval split; dev is for tuning, test is for reporting",
+    )
     args = parser.parse_args()
 
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
-        retrieval = run_retrieval_eval(Path(tmp))
+        retrieval = run_retrieval_eval(Path(tmp), split=args.split)
 
     prediction: list[PredictionOutcome] = []
     baseline: list[PredictionOutcome] = []

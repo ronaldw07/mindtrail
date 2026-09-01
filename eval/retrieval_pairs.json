@@ -1,45 +1,109 @@
 {
-  "_note": "Each pair stores 'stored' in memory, then asks 'followup'. Retrieval must surface the matching entry ahead of every other stored entry, all of which act as distractors.",
-  "pairs": [
+  "_note": "Each pair stores 'stored' with its 'summary' in memory, then probes with 'followup'. Retrieval must surface the matching entry ahead of every other stored entry, all of which act as distractors.",
+  "_split": "The dev split exists so retrieval strategy can be tuned without touching the reported number. Anything selected by comparing scores must be selected on dev. The test split is scored once, after the choice is frozen.",
+  "_summaries": "Summaries are written at roughly the length and register the system actually produces, since retrieval quality depends on what is embedded and one-line stubs would not be representative.",
+  "dev": [
+    {
+      "stored": "what is a transformer model",
+      "summary": "A transformer is a neural architecture built on self-attention rather than recurrence. Each layer lets every token attend to every other token, so context is gathered in one parallel step instead of sequentially. This parallelism is what made training on very large corpora practical.",
+      "followup": "why did transformers replace recurrent networks"
+    },
+    {
+      "stored": "what is gradient descent",
+      "summary": "Gradient descent minimizes a loss function by repeatedly stepping parameters in the direction opposite the gradient. The step size, called the learning rate, controls how far each update moves. Too large and training diverges, too small and it crawls.",
+      "followup": "how do I pick a learning rate that does not diverge"
+    },
+    {
+      "stored": "what is a REST API",
+      "summary": "REST is an architectural style where resources are addressed by URL and manipulated with standard HTTP verbs. Responses are typically JSON, and the server holds no client session state between requests. Statelessness is what allows horizontal scaling.",
+      "followup": "how should I version a public HTTP API"
+    },
+    {
+      "stored": "what is Docker",
+      "summary": "Docker packages an application together with its dependencies into an image that runs identically anywhere the runtime exists. Containers share the host kernel, making them far lighter than virtual machines. Images are built in layers that cache between rebuilds.",
+      "followup": "how do I make a container image smaller"
+    },
+    {
+      "stored": "what is SQL indexing",
+      "summary": "An index is an auxiliary structure, usually a B-tree, that lets the database find rows without scanning the whole table. Indexes speed reads but slow writes, since every insert must update them. Choosing which columns to index is a read/write tradeoff.",
+      "followup": "why is my query still slow after adding an index"
+    },
+    {
+      "stored": "what is garbage collection",
+      "summary": "Garbage collection automatically reclaims memory that a program can no longer reach. Tracing collectors walk references from a set of roots and free everything unvisited. The main cost is pause time, when the collector interrupts the program.",
+      "followup": "how do I reduce garbage collection pause times"
+    },
+    {
+      "stored": "what is OAuth",
+      "summary": "OAuth lets a user grant an application limited access to their account on another service without sharing a password. The application receives a scoped, expiring access token instead of credentials. Refresh tokens allow long-lived access without re-prompting.",
+      "followup": "where should a web app store access tokens safely"
+    },
+    {
+      "stored": "what is continuous integration",
+      "summary": "Continuous integration runs an automated build and test suite on every push, so breakage is caught within minutes rather than at release. It depends on a fast, reliable suite, since a slow or flaky pipeline gets ignored. Failing builds are expected to block merges.",
+      "followup": "how do I stop flaky tests from blocking my pipeline"
+    },
+    {
+      "stored": "what is a websocket",
+      "summary": "A websocket upgrades an HTTP connection into a persistent, bidirectional channel. Either side can send frames at any time, which suits live updates far better than repeated polling. The connection stays open, so servers must track many concurrent sockets.",
+      "followup": "how do I scale persistent connections across servers"
+    },
+    {
+      "stored": "what is type inference",
+      "summary": "Type inference lets a compiler determine expression types without explicit annotations, usually by unifying constraints gathered from usage. It preserves static guarantees while reducing annotation noise. Inference typically weakens at module boundaries, where annotations are still expected.",
+      "followup": "why does my type checker fail at function boundaries"
+    }
+  ],
+  "test": [
     {
       "stored": "what is a vector database",
-      "summary": "A vector database stores high-dimensional embeddings and indexes them for similarity search.",
+      "summary": "A vector database stores high-dimensional embeddings and indexes them so that nearest-neighbour lookups stay fast as the collection grows. Queries are themselves embedded, and results are ranked by distance rather than exact match. This is what makes semantic search over unstructured data practical.",
       "followup": "how does Chroma differ from Pinecone"
     },
     {
       "stored": "what is retrieval augmented generation",
-      "summary": "RAG retrieves relevant documents and appends them to a prompt so the model answers from current evidence.",
+      "summary": "Retrieval augmented generation retrieves relevant documents and appends them to the prompt, so the model answers from supplied evidence rather than memorized weights. This grounds responses in current, domain-specific text and allows citation. It removes the need to retrain whenever source material changes.",
       "followup": "what chunking strategies work best for RAG"
     },
     {
       "stored": "how does LoRA reduce fine-tuning cost",
-      "summary": "LoRA freezes base weights and trains small low-rank adapter matrices, cutting memory and compute.",
+      "summary": "LoRA freezes the base model weights and trains small low-rank adapter matrices injected into each layer. Because only the adapters receive gradients, optimizer state and memory use drop sharply. Adapters are a few megabytes and can be swapped without touching the base model.",
       "followup": "how much VRAM do I need to train an adapter"
     },
     {
       "stored": "what is the difference between Playwright and Selenium",
-      "summary": "Playwright bundles browsers and auto-waits; Selenium is older, needs separate drivers, and waits manually.",
+      "summary": "Playwright bundles its own browser builds and waits automatically for elements to become actionable, which removes most explicit sleeps. Selenium is older, drives browsers through separate WebDriver binaries, and leaves waiting to the caller. Playwright also handles multiple browser engines through one API.",
       "followup": "how do I reuse a logged-in browser session in Playwright"
     },
     {
       "stored": "how does the attention mechanism work in transformers",
-      "summary": "Attention scores every token against every other token and takes a weighted sum of value vectors.",
+      "summary": "Attention scores each token against every other token using query and key projections, then takes a softmax-weighted sum of value vectors. The result lets a token draw information from anywhere in the sequence in a single step. Scaling by the square root of the key dimension keeps the softmax from saturating.",
       "followup": "what does multi-head attention add over single-head"
     },
     {
       "stored": "what is tool calling in a language model",
-      "summary": "Tool calling lets a model emit a structured function call that the host executes and returns as an observation.",
+      "summary": "Tool calling lets a model emit a structured function call instead of prose, which the host executes before returning the result as an observation. The model then continues with that result in context. This is the mechanism underneath most agent loops.",
       "followup": "what is the ReAct pattern for agents"
     },
     {
       "stored": "how do I evaluate a RAG pipeline",
-      "summary": "Measure retrieval hit rate and answer faithfulness separately, since a good answer can come from bad retrieval.",
+      "summary": "Retrieval and generation should be measured separately, because a fluent answer can be produced from irrelevant context and a correct retrieval can still be summarized badly. Retrieval is scored with recall at k over known-relevant documents. Generation is scored for faithfulness to the retrieved text.",
       "followup": "how do I measure whether an answer is faithful to its sources"
     },
     {
       "stored": "how does HNSW indexing work",
-      "summary": "HNSW builds a navigable small-world graph in layers, giving approximate nearest neighbour search in log time.",
+      "summary": "HNSW builds a layered navigable small-world graph, where upper layers are sparse and used for coarse routing toward a region. Search descends layer by layer, refining until it reaches the base graph. This gives approximate nearest-neighbour lookup in roughly logarithmic time.",
       "followup": "what is the tradeoff between recall and speed in approximate search"
+    },
+    {
+      "stored": "what is prompt caching",
+      "summary": "Prompt caching stores the processed prefix of a prompt so repeated requests sharing that prefix skip recomputation. It cuts both latency and cost when a long system prompt is reused across many calls. Cached tokens are typically billed at a steep discount.",
+      "followup": "how do I structure prompts so the cache actually hits"
+    },
+    {
+      "stored": "what is an embedding model",
+      "summary": "An embedding model maps text into a fixed-length vector where geometric closeness reflects semantic similarity. The same model must embed both stored documents and queries, since vectors from different models are not comparable. Dimensionality trades retrieval quality against storage and search cost.",
+      "followup": "can I mix embeddings from two different models"
     }
   ]
 }
