@@ -16,6 +16,7 @@ from mindtrail import config
 
 
 UNCATEGORIZED = "Uncategorized"
+DEFAULT_KIND = "research"
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,9 @@ class Entry:
     created_at: str
     topic: str = ""
     key_facts: tuple[str, ...] = ()
+    kind: str = DEFAULT_KIND
+    """One of: research (from ask), note (manual), document (uploaded
+    file), advice (generated plan)."""
 
     def with_summary(self, summary: str) -> "Entry":
         """Return a copy carrying a new summary, leaving this one untouched."""
@@ -50,6 +54,7 @@ def _to_entry(doc: str, meta: dict, entry_id: str) -> Entry:
         created_at=meta.get("created_at", ""),
         topic=meta.get("topic", ""),
         key_facts=tuple(f for f in raw_facts.split("\n") if f),
+        kind=meta.get("kind", DEFAULT_KIND),
     )
 
 
@@ -70,6 +75,7 @@ class MemoryStore:
         sources: list[str],
         topic: str = "",
         key_facts: list[str] | None = None,
+        kind: str = DEFAULT_KIND,
     ) -> Entry:
         """Store one researched question. Returns the created entry."""
         if not query.strip():
@@ -85,6 +91,7 @@ class MemoryStore:
             created_at=_now_iso(),
             topic=topic,
             key_facts=tuple(key_facts or []),
+            kind=kind,
         )
         # Chroma metadata values must be scalars, so list fields are joined
         # here and split back out in _to_entry.
@@ -98,6 +105,7 @@ class MemoryStore:
                     "created_at": entry.created_at,
                     "topic": entry.topic,
                     "key_facts": "\n".join(entry.key_facts),
+                    "kind": entry.kind,
                 }
             ],
         )

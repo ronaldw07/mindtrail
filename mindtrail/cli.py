@@ -7,6 +7,8 @@ import sys
 import webbrowser
 from pathlib import Path
 
+from mindtrail.advice.planner import generate_advice
+from mindtrail.ingest.documents import DocumentError, extract_pdf_text
 from mindtrail.ingest.researcher import Researcher
 from mindtrail.ingest.search import SearchError, default_search
 from mindtrail.ingest.topic import TopicExtractor
@@ -80,13 +82,70 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def _assign_topic(llm: LLMClient, store: MemoryStore, headline: str, body: str):
+    """Best-effort topic + key facts for content that isn't researched
+    (a note or a document), so labeling is one shared path rather than
+    duplicated in each command."""
+    try:
+        assignment = TopicExtractor(llm).extract(headline, body, store.topics())
+        return assignment.topic, list(assignment.key_facts)
+    except (LLMError, ValueError):
+        return "", []
+
+
+def cmd_note(args) -> int:
+    store = MemoryStore()
+    text = args.text.strip()
+    headline = text.splitlines()[0][:80] if text else ""
+    topic, facts = _assign_topic(LLMClient(), store, headline, text)
+
+    store.add(headline, text, [], topic=topic, key_facts=facts, kind="note")
+    print(f"saved note under topic: {topic or 'Uncategorized'}")
+    return 0
+
+
+def cmd_docs(args) -> int:
+    store = MemoryStore()
+    try:
+        text = extract_pdf_text(args.path)
+    except DocumentError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    filename = Path(args.path).name
+    headline = f"Document: {filename}"
+    topic, facts = _assign_topic(LLMClient(), store, headline, text)
+
+    store.add(
+        headline,
+        text,
+        [str(Path(args.path).resolve())],
+        topic=topic,
+        key_facts=facts,
+        kind="document",
+    )
+    print(f"stored {filename} under topic: {topic or 'Uncategorized'}")
+    return 0
+
+
+def cmd_advice(args) -> int:
+    store = MemoryStore()
+    result = generate_advice(LLMClient(), store.all())
+
+    store.add("Advice", result.text, [], topic="Advice", kind="advice")
+    print(result.text)
+    return 0
+
+
 def cmd_chat(args) -> int:
     store = MemoryStore()
     llm = LLMClient()
     researcher = Researcher(
         store, default_search(), llm, topic_extractor=TopicExtractor(llm)
     )
-    run_chat_server(researcher, port=args.port, open_browser=not args.no_open)
+    run_chat_server(
+        researcher, port=args.port, open_browser=not args.no_open, host=args.host
+    )
     return 0
 
 
@@ -127,6 +186,19 @@ def build_parser() -> argparse.ArgumentParser:
     stats.add_argument("--limit", type=int, default=10)
     stats.set_defaults(func=cmd_stats)
 
+    note = sub.add_parser("note", help="save a manual note, topic-labeled like research")
+    note.add_argument("text")
+    note.set_defaults(func=cmd_note)
+
+    docs = sub.add_parser("docs", help="parse a PDF and store its content")
+    docs.add_argument("path")
+    docs.set_defaults(func=cmd_docs)
+
+    advice = sub.add_parser(
+        "advice", help="generate a next-steps plan from everything stored"
+    )
+    advice.set_defaults(func=cmd_advice)
+
     web = sub.add_parser("web", help="generate a static page grouped by topic")
     web.add_argument("--out", default="mindtrail_site.html")
     web.add_argument("--no-open", action="store_true")
@@ -135,6 +207,11 @@ def build_parser() -> argparse.ArgumentParser:
     chat = sub.add_parser("chat", help="chatbot interface in the browser")
     chat.add_argument("--port", type=int, default=8765)
     chat.add_argument("--no-open", action="store_true")
+    chat.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="bind address; use 0.0.0.0 inside a container so port mapping reaches it",
+    )
     chat.set_defaults(func=cmd_chat)
 
     return parser

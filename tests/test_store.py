@@ -120,3 +120,15 @@ def test_all_returns_every_entry_newest_first(store):
 
 def test_all_on_empty_store_returns_nothing(store):
     assert store.all() == []
+
+
+def test_kind_defaults_to_research(store):
+    entry = store.add("q", "a", [])
+
+    assert entry.kind == "research"
+
+
+def test_kind_round_trips_through_storage(store):
+    store.add("q", "a", [], kind="note")
+
+    assert store.all()[0].kind == "note"

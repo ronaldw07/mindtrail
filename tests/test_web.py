@@ -4,7 +4,15 @@ from mindtrail.memory.store import UNCATEGORIZED, Entry
 from mindtrail.web.generate import build_html
 
 
-def an_entry(query, topic="", key_facts=(), summary="s", sources=(), created_at="2026-01-01"):
+def an_entry(
+    query,
+    topic="",
+    key_facts=(),
+    summary="s",
+    sources=(),
+    created_at="2026-01-01",
+    kind="research",
+):
     return Entry(
         id=query,
         query=query,
@@ -13,6 +21,7 @@ def an_entry(query, topic="", key_facts=(), summary="s", sources=(), created_at=
         created_at=created_at,
         topic=topic,
         key_facts=key_facts,
+        kind=kind,
     )
 
 
@@ -52,7 +61,7 @@ def test_sources_are_rendered_as_links():
 def test_entry_count_is_shown():
     html = build_html([an_entry("q1"), an_entry("q2")])
 
-    assert "2 researched question(s)" in html
+    assert "2 entries" in html
 
 
 def test_html_in_fetched_content_is_escaped_not_executed():
@@ -79,3 +88,46 @@ def test_each_entry_carries_a_lowercase_search_blob():
     html = build_html([an_entry("What Is X", summary="Some Answer")])
 
     assert 'data-search="what is x some answer"' in html
+
+
+def test_research_entries_show_no_kind_badge():
+    html = build_html([an_entry("q1", kind="research")])
+
+    assert '<span class="kind">' not in html
+
+
+def test_notes_and_documents_show_a_kind_badge():
+    html = build_html([an_entry("q1", kind="note"), an_entry("q2", kind="document")])
+
+    assert '<span class="kind">note</span>' in html
+    assert '<span class="kind">document</span>' in html
+
+
+def test_the_most_recent_advice_entry_is_pinned_above_the_topics():
+    html = build_html(
+        [
+            an_entry("Advice", topic="Advice", kind="advice", summary="stale plan text",
+                      created_at="2026-01-01"),
+            an_entry("Advice", topic="Advice", kind="advice", summary="fresh plan text",
+                      created_at="2026-06-01"),
+        ]
+    )
+
+    assert '<section class="advice">' in html
+    assert "fresh plan text" in html
+    assert "stale plan text" not in html
+
+
+def test_advice_entries_do_not_appear_as_topic_cards():
+    html = build_html([an_entry("Advice", topic="Advice", kind="advice", summary="plan")])
+
+    # It should render once, inside the pinned advice box, not again as a
+    # regular entry under an "Advice" topic section.
+    assert html.count("plan") == 1
+    assert 'id="Advice"' not in html
+
+
+def test_no_advice_section_when_none_exists():
+    html = build_html([an_entry("q1")])
+
+    assert '<section class="advice">' not in html
