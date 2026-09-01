@@ -21,9 +21,9 @@ class StubLLM:
         return Completion(text=self._text, tokens=10, model="stub")
 
 
-def an_entry(query, created_at):
+def an_entry(query, created_at, summary=""):
     return Entry(
-        id=query, query=query, summary="s", sources=(), created_at=created_at
+        id=query, query=query, summary=summary, sources=(), created_at=created_at
     )
 
 
@@ -82,7 +82,40 @@ def test_trajectory_is_ordered_oldest_first():
         an_entry("oldest", "2026-01-01"),
     ]
 
-    assert format_trajectory(entries) == "1. oldest\n2. newest"
+    assert format_trajectory(entries) == "1. asked: oldest\n2. asked: newest"
+
+
+def test_trajectory_includes_what_each_answer_taught():
+    entry = Entry(
+        id="1",
+        query="what is a vector database",
+        summary="It stores embeddings for similarity search.",
+        sources=(),
+        created_at="2026-01-01",
+    )
+
+    rendered = format_trajectory([entry])
+
+    assert "learned: It stores embeddings for similarity search." in rendered
+
+
+def test_long_summaries_are_truncated_in_the_trajectory():
+    entry = Entry(
+        id="1",
+        query="q",
+        summary="x" * 5000,
+        sources=(),
+        created_at="2026-01-01",
+    )
+
+    # Several full summaries would crowd out the free tier's token budget.
+    assert len(format_trajectory([entry])) < 1000
+
+
+def test_entries_without_a_summary_render_only_the_question():
+    rendered = format_trajectory([an_entry("just a question", "2026-01-01")])
+
+    assert "learned:" not in rendered
 
 
 def test_predictor_sends_the_trajectory_to_the_model():
