@@ -1,7 +1,143 @@
 {
-  "_note": "Hand-authored research trajectories, not recorded from live usage. The final question of each session is held out and must be recovered by the predictor.",
-  "_decoys": "Each session lists plausible same-topic alternatives that did NOT come next. They join the candidate pool so that discrimination tests whether the predictor identified the specific question, not merely the topic. Without them the task collapses into six-way topic classification, which any on-topic guess wins.",
-  "sessions": [
+  "_note": "Hand-authored research trajectories. Each session's final question is held out and must be recovered by the predictor. 'summaries' are what the first three answers taught, mirroring what the real store would hold.",
+  "_split": "Prompt and format changes are tuned on dev. Test is scored after those changes are frozen, so a prompt improved by watching scores is never reported on the data it was fitted to.",
+  "_decoys": "Plausible same-topic alternatives that did NOT come next. They join the candidate pool so discrimination tests specificity rather than topic recognition.",
+  "dev": [
+    {
+      "id": "docker",
+      "questions": [
+        "what is Docker",
+        "how do Docker image layers work",
+        "how do I reduce the size of a Docker image",
+        "how do I stop secrets from ending up in an image layer"
+      ],
+      "summaries": [
+        "Docker packages an application with its dependencies into an image that runs identically wherever the runtime exists. Containers share the host kernel, making them much lighter than virtual machines.",
+        "An image is a stack of read-only layers, one per build instruction. Layers are cached and shared between images, so an unchanged instruction is not rebuilt. Changing an early layer invalidates everything after it.",
+        "Size comes down by using a smaller base image, combining RUN instructions so intermediate files do not persist, and using multi-stage builds so build tooling never reaches the final image."
+      ],
+      "decoys": [
+        "how do I speed up Docker builds with better layer caching",
+        "should I use Alpine or Debian as a base image",
+        "how do I share a volume between two containers"
+      ]
+    },
+    {
+      "id": "postgres-indexing",
+      "questions": [
+        "how does indexing work in Postgres",
+        "what is the difference between a B-tree and a GIN index",
+        "how do I tell whether Postgres is using my index",
+        "why does Postgres ignore my index on a small table"
+      ],
+      "summaries": [
+        "An index is a separate structure letting the planner find rows without scanning the table. Reads get faster, writes get slower, since every insert must maintain the index.",
+        "B-tree indexes suit ordered scalar comparisons and ranges. GIN indexes suit values containing many elements, such as arrays, JSONB documents, and full-text vectors, where a single row has many searchable keys.",
+        "EXPLAIN ANALYZE shows the chosen plan and actual timings. An Index Scan or Bitmap Index Scan means the index is used; a Seq Scan means it was not."
+      ],
+      "decoys": [
+        "how do I build an index without locking writes",
+        "what is a partial index good for",
+        "how much disk space will an index add"
+      ]
+    },
+    {
+      "id": "react-state",
+      "questions": [
+        "when should I use useState versus useReducer in React",
+        "why does my useEffect run twice",
+        "how do I stop a component re-rendering unnecessarily",
+        "how do I tell which prop is causing the re-render"
+      ],
+      "summaries": [
+        "useState suits independent values. useReducer suits several values that change together under named transitions, keeping update logic in one place instead of scattered setters.",
+        "React 18 Strict Mode mounts, unmounts, and remounts components in development to surface missing cleanup. The double invocation is intentional and does not happen in production builds.",
+        "Re-renders are reduced by memoizing components with React.memo, stabilizing callback and object identities, and lifting state no higher than it needs to live."
+      ],
+      "decoys": [
+        "when should I reach for a state management library",
+        "how does the virtual DOM diffing algorithm work",
+        "what is the difference between useMemo and useCallback"
+      ]
+    },
+    {
+      "id": "kubernetes",
+      "questions": [
+        "what problem does Kubernetes solve",
+        "what is the difference between a pod and a deployment",
+        "how do liveness and readiness probes differ",
+        "why does my pod keep restarting after a failed probe"
+      ],
+      "summaries": [
+        "Kubernetes schedules containers across a cluster and keeps declared state true, restarting failures and rescheduling work when nodes die, rather than requiring manual placement.",
+        "A pod is one or more containers scheduled together as the smallest deployable unit. A deployment manages a replica set of identical pods and handles rolling updates and rollbacks.",
+        "A readiness probe controls whether a pod receives traffic. A liveness probe controls whether it is killed and restarted. Confusing them causes healthy-but-slow pods to be repeatedly killed."
+      ],
+      "decoys": [
+        "how do I expose a deployment to outside traffic",
+        "what is the difference between a ConfigMap and a Secret",
+        "how do I set sensible CPU and memory limits"
+      ]
+    },
+    {
+      "id": "git-history",
+      "questions": [
+        "what is the difference between git merge and git rebase",
+        "how do I squash several commits into one",
+        "how do I recover a commit I deleted",
+        "how do I undo a rebase that went wrong"
+      ],
+      "summaries": [
+        "Merge preserves history and adds a merge commit. Rebase replays commits onto a new base, giving linear history but rewriting commit hashes, which is unsafe on shared branches.",
+        "Interactive rebase lets commits be marked squash or fixup so they collapse into one. The rewrite changes hashes, so the branch must be force-pushed afterwards.",
+        "The reflog records where HEAD has pointed, including commits no longer reachable from any branch, so a deleted commit can be found and restored for as long as it remains unpruned."
+      ],
+      "decoys": [
+        "how do I rewrite an old commit message",
+        "when is force-pushing actually safe",
+        "how do I split one commit into two"
+      ]
+    },
+    {
+      "id": "testing-practice",
+      "questions": [
+        "what makes a test suite reliable",
+        "what is the difference between a mock and a stub",
+        "why are my tests flaky",
+        "how do I find which test is polluting shared state"
+      ],
+      "summaries": [
+        "Reliability comes from tests that are deterministic, isolated from each other, and fast enough to run constantly. A slow or intermittent suite stops being trusted and then stops being run.",
+        "A stub returns canned values so code under test can proceed. A mock additionally asserts how it was called, which couples the test to implementation and breaks under refactoring.",
+        "Flakiness usually traces to shared mutable state between tests, real clocks and timers, unordered collections assumed ordered, or genuine concurrency races."
+      ],
+      "decoys": [
+        "how much test coverage should I actually aim for",
+        "should I test private methods",
+        "how do I speed up a slow test suite"
+      ]
+    },
+    {
+      "id": "api-auth",
+      "questions": [
+        "what is the difference between authentication and authorization",
+        "how do JSON web tokens work",
+        "why should refresh tokens be rotated",
+        "where should I store a refresh token in a browser"
+      ],
+      "summaries": [
+        "Authentication establishes who a caller is. Authorization decides what that caller may do. Conflating them tends to produce systems where any logged-in user can reach anything.",
+        "A JWT carries signed claims, so a server validates it without a session lookup. That statelessness is also the drawback: a token stays valid until it expires unless a revocation list is maintained.",
+        "Rotation issues a new refresh token on each use and invalidates the old one, so a stolen token is detectable when both the attacker and the user present the same one."
+      ],
+      "decoys": [
+        "how long should an access token live",
+        "what is the difference between OAuth and OpenID Connect",
+        "how do I revoke a JWT before it expires"
+      ]
+    }
+  ],
+  "test": [
     {
       "id": "vector-databases",
       "questions": [
@@ -9,6 +145,11 @@
         "how does Chroma differ from Pinecone",
         "how does HNSW indexing work",
         "how do I choose a vector database for a small project"
+      ],
+      "summaries": [
+        "A vector database stores high-dimensional embeddings and indexes them so nearest-neighbour lookups stay fast as the collection grows. Queries are embedded too, and results ranked by distance rather than exact match.",
+        "Chroma is open-source and self-hosted, running in-process or as a small server, which suits local and small-scale work. Pinecone is a managed service that handles scaling and replication for you at the cost of hosting it yourself.",
+        "HNSW builds a layered navigable small-world graph, with sparse upper layers used for coarse routing and a dense base layer for refinement, giving approximate nearest-neighbour search in roughly logarithmic time."
       ],
       "decoys": [
         "what distance metric should I use for embeddings",
@@ -24,6 +165,11 @@
         "how do I evaluate a RAG pipeline",
         "does adding a reranker improve RAG accuracy"
       ],
+      "summaries": [
+        "RAG retrieves relevant documents and appends them to the prompt, so the model answers from supplied evidence rather than memorised weights. This grounds responses and allows citation without retraining.",
+        "Chunks must be small enough to retrieve precisely but large enough to stay coherent. Overlapping windows avoid cutting an idea in half, and splitting on document structure beats splitting on a fixed token count.",
+        "Retrieval and generation are measured separately, because a fluent answer can come from irrelevant context. Retrieval is scored with recall at k; generation is scored for faithfulness to the retrieved text."
+      ],
       "decoys": [
         "how large should each retrieved chunk be",
         "how do I show citations in RAG output",
@@ -37,6 +183,11 @@
         "how does LoRA reduce fine-tuning cost",
         "when should I fine-tune instead of using RAG",
         "how much training data do I need to fine-tune effectively"
+      ],
+      "summaries": [
+        "Fine-tuning continues training a pretrained model on a narrower dataset so it adapts to a domain, format, or style without learning language from scratch.",
+        "LoRA freezes the base weights and trains small low-rank adapter matrices injected into each layer. Only the adapters receive gradients, so optimiser state and memory drop sharply and adapters are a few megabytes.",
+        "Fine-tuning teaches form: tone, structure, and consistent output shape. RAG supplies facts. Knowledge that changes should live in retrieval, since retraining on every update is impractical."
       ],
       "decoys": [
         "what learning rate should I use for LoRA",
@@ -52,6 +203,11 @@
         "how do websites detect automated browsers",
         "how do I keep a scraper working when a site changes its HTML"
       ],
+      "summaries": [
+        "Playwright bundles its own browser builds and waits automatically for elements to become actionable. Selenium is older, drives browsers through separate WebDriver binaries, and leaves waiting to the caller.",
+        "A persistent context stores cookies and local storage on disk, so a session survives between runs. Saving and reloading a storage state file avoids logging in on every execution.",
+        "Detection uses navigator.webdriver, headless-specific rendering differences, timing that is too regular to be human, and TLS or HTTP fingerprints that differ from a real browser."
+      ],
       "decoys": [
         "how do I run Playwright in headless mode",
         "how do I handle infinite scroll in Playwright",
@@ -65,6 +221,11 @@
         "why do transformers need positional encoding",
         "what does multi-head attention add over single-head",
         "how does a KV cache speed up inference"
+      ],
+      "summaries": [
+        "Attention scores each token against every other using query and key projections, then takes a softmax-weighted sum of value vectors, letting any token draw information from anywhere in the sequence in one step.",
+        "Attention is permutation-invariant, so without positional information a shuffled sentence looks identical. Positional encodings inject order into the token representations before attention sees them.",
+        "Multiple heads attend in parallel subspaces, so one head can track syntax while another tracks coreference. Concatenating them gives richer representations than a single averaged attention pattern."
       ],
       "decoys": [
         "what does the feed forward network do in a transformer layer",
@@ -80,10 +241,34 @@
         "when is a multi-agent system better than a single agent",
         "how do I benchmark an agent's task completion rate"
       ],
+      "summaries": [
+        "Tool calling lets a model emit a structured function call instead of prose. The host executes it and returns the result as an observation, which the model continues from. This is the mechanism under most agent loops.",
+        "ReAct interleaves reasoning and acting: the model states a thought, takes an action, observes the result, and repeats. Making reasoning explicit between steps improves recovery from bad actions.",
+        "Multiple agents help when subtasks need genuinely different tools, context, or system prompts. When they share context, splitting mostly adds coordination overhead and duplicated understanding."
+      ],
       "decoys": [
         "how do I stop an agent from looping forever",
         "how should an agent recover from a failed tool call",
         "what context should an agent carry between steps"
+      ]
+    },
+    {
+      "id": "caching",
+      "questions": [
+        "what is prompt caching",
+        "how does an LRU cache decide what to evict",
+        "what is cache invalidation and why is it hard",
+        "how do I stop a cache stampede when a hot key expires"
+      ],
+      "summaries": [
+        "Prompt caching stores the processed prefix of a prompt so repeated requests sharing that prefix skip recomputation, cutting latency and cost when a long system prompt is reused.",
+        "An LRU cache evicts the entry unused for longest, approximating the assumption that recently used items are likely to be used again. It is usually implemented with a hash map over a linked list.",
+        "Invalidation is hard because the cache must learn that source data changed, and the signal often arrives late, partially, or not at all, leaving stale reads that are difficult to detect."
+      ],
+      "decoys": [
+        "what is the difference between a write-through and write-back cache",
+        "how do I pick a sensible TTL",
+        "when is caching not worth the complexity"
       ]
     }
   ]

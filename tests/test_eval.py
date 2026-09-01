@@ -60,6 +60,10 @@ def _pairs(split: str) -> list[dict]:
     return json.loads((Path("eval") / "retrieval_pairs.json").read_text())[split]
 
 
+def _sessions(split: str) -> list[dict]:
+    return json.loads((Path("eval") / "sessions.json").read_text())[split]
+
+
 @pytest.mark.parametrize("split", ["dev", "test"])
 def test_retrieval_eval_scores_every_pair(tmp_path, split):
     outcomes = run_retrieval_eval(tmp_path / split, split=split)
@@ -93,7 +97,7 @@ def an_outcome(is_hit=True):
 def test_candidate_pool_has_no_duplicates():
     # Scoring resolves a candidate by value, so a duplicate would make one
     # session score against the wrong entry.
-    sessions = json.loads((Path("eval") / "sessions.json").read_text())["sessions"]
+    sessions = _sessions("test")
 
     pool = build_candidate_pool(sessions)
 
@@ -108,7 +112,7 @@ def test_report_is_json_serializable():
 
 
 def test_candidate_pool_includes_decoys_alongside_held_out_questions():
-    sessions = json.loads((Path("eval") / "sessions.json").read_text())["sessions"]
+    sessions = _sessions("test")
 
     pool = build_candidate_pool(sessions)
 
@@ -117,7 +121,7 @@ def test_candidate_pool_includes_decoys_alongside_held_out_questions():
 
 
 def test_every_held_out_question_is_in_the_pool():
-    sessions = json.loads((Path("eval") / "sessions.json").read_text())["sessions"]
+    sessions = _sessions("test")
 
     pool = build_candidate_pool(sessions)
 
@@ -127,7 +131,7 @@ def test_every_held_out_question_is_in_the_pool():
 def test_pool_is_harder_than_one_candidate_per_session():
     # Without decoys the task degrades into topic classification, which
     # any on-topic guess wins.
-    sessions = json.loads((Path("eval") / "sessions.json").read_text())["sessions"]
+    sessions = _sessions("test")
 
     assert len(build_candidate_pool(sessions)) > len(sessions)
 
