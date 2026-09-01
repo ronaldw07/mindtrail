@@ -2,7 +2,7 @@
 
 import pytest
 
-from mindtrail.ingest.fetch import html_to_text
+from mindtrail.ingest.fetch import FetchError, fetch_url, html_to_text
 from mindtrail.ingest.search import (
     FallbackSearch,
     SearchError,
@@ -81,3 +81,29 @@ def test_whitespace_between_tags_is_collapsed():
     html = "<p>  first  </p>\n\n<p>   second   </p>"
 
     assert html_to_text(html) == "first second"
+
+
+@pytest.mark.parametrize(
+    "url", ["/relative/path", "not a url", "javascript:alert(1)", ""]
+)
+def test_malformed_urls_raise_fetch_error_rather_than_escaping(url):
+    # urlopen raises ValueError for these. If it escapes, one bad search
+    # result aborts the entire question instead of being skipped.
+    with pytest.raises(FetchError):
+        fetch_url(url)
+
+
+@pytest.mark.parametrize("url", ["file:///etc/passwd", "ftp://host/f"])
+def test_non_http_schemes_are_refused(url):
+    with pytest.raises(FetchError, match="refusing non-http"):
+        fetch_url(url)
+
+
+def test_transport_errors_become_fetch_error(monkeypatch):
+    def explode(*args, **kwargs):
+        raise OSError("connection reset")
+
+    monkeypatch.setattr("mindtrail.ingest.fetch.urllib.request.urlopen", explode)
+
+    with pytest.raises(FetchError, match="could not fetch"):
+        fetch_url("http://example.com")
