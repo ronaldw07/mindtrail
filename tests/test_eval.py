@@ -87,8 +87,17 @@ def an_outcome(is_hit=True):
         is_hit=is_hit,
         best_similarity=0.5,
         top_rival="rival",
-        tokens=0,
     )
+
+
+def test_candidate_pool_has_no_duplicates():
+    # Scoring resolves a candidate by value, so a duplicate would make one
+    # session score against the wrong entry.
+    sessions = json.loads((Path("eval") / "sessions.json").read_text())["sessions"]
+
+    pool = build_candidate_pool(sessions)
+
+    assert len(pool) == len(set(pool))
 
 
 def test_report_is_json_serializable():
