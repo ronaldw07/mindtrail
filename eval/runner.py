@@ -55,7 +55,6 @@ class PredictionOutcome:
     is_hit: bool
     best_similarity: float
     top_rival: str
-    tokens: int
 
 
 def _cosine(a, b) -> float:
@@ -153,7 +152,7 @@ def run_prediction_eval(
     pool = build_candidate_pool(sessions)
     pool_vectors = embed(pool)
 
-    def score(session, texts, tokens) -> PredictionOutcome:
+    def score(session, texts) -> PredictionOutcome:
         true_next = session["questions"][-1]
         scores = _score_against_pool(embed(texts), pool, pool_vectors)
         ranked = sorted(zip(scores, pool), reverse=True)
@@ -166,16 +165,22 @@ def run_prediction_eval(
             is_hit=winner == true_next,
             best_similarity=scores[pool.index(true_next)],
             top_rival=rival,
-            tokens=tokens,
         )
 
     outcomes, baseline = [], []
     for session in sessions:
         history = session["questions"][:-1]
 
-        predictions = predictor.predict(_as_entries(history))
-        outcomes.append(score(session, [p.question for p in predictions], 0))
-        baseline.append(score(session, history, 0))
+        try:
+            predictions = predictor.predict(_as_entries(history))
+        except (LLMError, ValueError) as exc:
+            # A sweep that dies on session five should not discard the
+            # four already scored; the free tier makes that likely.
+            print(f"  skipped {session['id']}: {exc}")
+            continue
+
+        outcomes.append(score(session, [p.question for p in predictions]))
+        baseline.append(score(session, history))
 
         time.sleep(pause)  # free tier is ~30 requests per minute
     return outcomes, baseline
