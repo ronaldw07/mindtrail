@@ -24,6 +24,7 @@ from pathlib import Path
 
 from chromadb.utils import embedding_functions
 
+from eval.judge import PredictionJudge
 from mindtrail import config
 from mindtrail.llm import LLMClient, LLMError
 from mindtrail.memory.store import Entry, MemoryStore
@@ -52,9 +53,11 @@ class PredictionOutcome:
     session_id: str
     true_next: str
     predictions: tuple[str, ...]
-    is_hit: bool
+    is_hit: bool  # judged by the LLM judge
     best_similarity: float
     top_rival: str
+    judge_reason: str = ""
+    similarity_hit: bool = False  # the old cosine-discrimination verdict
 
 
 def _cosine(a, b) -> float:
@@ -100,14 +103,21 @@ def run_retrieval_eval(
     return outcomes
 
 
-def _as_entries(questions: list[str]) -> list[Entry]:
+def _as_entries(questions: list[str], summaries: list[str] | None = None) -> list[Entry]:
+    """Build history entries, carrying summaries when the fixture has them.
+
+    Summaries matter: predicting from question text alone hides what the
+    researcher actually learned, which is usually what prompts the next
+    question.
+    """
+    summaries = summaries or []
     return [
         Entry(
             id=str(i),
             query=question,
-            summary="",
+            summary=summaries[i] if i < len(summaries) else "",
             sources=(),
-            created_at=f"2026-01-0{i + 1}T00:00:00+00:00",
+            created_at=f"2026-01-{i + 1:02d}T00:00:00+00:00",
         )
         for i, question in enumerate(questions)
     ]
@@ -137,7 +147,10 @@ def _score_against_pool(
 
 
 def run_prediction_eval(
-    llm: LLMClient, pause: float
+    llm: LLMClient,
+    pause: float,
+    split: str = "test",
+    use_summaries: bool = True,
 ) -> tuple[list[PredictionOutcome], list[PredictionOutcome]]:
     """Returns (model outcomes, naive-baseline outcomes).
 
@@ -145,12 +158,13 @@ def run_prediction_eval(
     scoring path, so the headline number can be read against a floor
     rather than against nothing.
     """
-    sessions = load_json("sessions.json")["sessions"]
+    sessions = load_json("sessions.json")[split]
     embed = embedding_functions.DefaultEmbeddingFunction()
     predictor = NextQueryPredictor(llm)
 
     pool = build_candidate_pool(sessions)
     pool_vectors = embed(pool)
+    judge = PredictionJudge(llm)
 
     def score(session, texts) -> PredictionOutcome:
         true_next = session["questions"][-1]
@@ -158,21 +172,27 @@ def run_prediction_eval(
         ranked = sorted(zip(scores, pool), reverse=True)
         winner = ranked[0][1]
         rival = next((c for _, c in ranked if c != true_next), "")
+
+        verdict = judge.judge(true_next, list(texts))
+
         return PredictionOutcome(
             session_id=session["id"],
             true_next=true_next,
             predictions=tuple(texts),
-            is_hit=winner == true_next,
+            is_hit=verdict.is_hit,
             best_similarity=scores[pool.index(true_next)],
             top_rival=rival,
+            judge_reason=verdict.reason,
+            similarity_hit=winner == true_next,
         )
 
     outcomes, baseline = [], []
     for session in sessions:
         history = session["questions"][:-1]
+        summaries = session.get("summaries", []) if use_summaries else []
 
         try:
-            predictions = predictor.predict(_as_entries(history))
+            predictions = predictor.predict(_as_entries(history, summaries))
         except (LLMError, ValueError) as exc:
             # A sweep that dies on session five should not discard the
             # four already scored; the free tier makes that likely.
@@ -202,6 +222,11 @@ def main() -> int:
         help="retrieval split; dev is for tuning, test is for reporting",
     )
     parser.add_argument(
+        "--no-summaries",
+        action="store_true",
+        help="predict from question text only, as an ablation",
+    )
+    parser.add_argument(
         "--trials",
         type=int,
         default=1,
@@ -225,7 +250,12 @@ def main() -> int:
         llm = LLMClient(temperature=config.EVAL_TEMPERATURE)
         for trial in range(args.trials):
             try:
-                prediction, baseline = run_prediction_eval(llm, args.pause)
+                prediction, baseline = run_prediction_eval(
+                    llm,
+                    args.pause,
+                    split=args.split,
+                    use_summaries=not args.no_summaries,
+                )
             except LLMError as exc:
                 print(f"prediction trial {trial + 1} skipped: {exc}")
                 continue

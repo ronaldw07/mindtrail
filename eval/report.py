@@ -58,7 +58,9 @@ def _prediction_section(outcomes, baseline, trial_hits=()) -> list[str]:
             f"  naive baseline (echo history)  {base_hits}/{len(baseline)}  "
             f"({_percent(base_hits, len(baseline))})"
         )
+    similarity_hits = sum(o.similarity_hit for o in outcomes)
     lines += [
+        f"  cosine-discrimination (secondary)  {similarity_hits}/{total}",
         f"  mean similarity to true next question  {mean_similarity:.2f}",
         f"  sample size  {total} sessions (small; see README)",
         "",
@@ -68,8 +70,8 @@ def _prediction_section(outcomes, baseline, trial_hits=()) -> list[str]:
         lines.append(f"  [{mark}] {outcome.session_id}")
         lines.append(f"         actual:    {outcome.true_next}")
         lines.append(f"         predicted: {outcome.predictions[0]}")
-        if not outcome.is_hit and outcome.top_rival:
-            lines.append(f"         lost to:   {outcome.top_rival}")
+        if outcome.judge_reason:
+            lines.append(f"         judge:     {outcome.judge_reason}")
     lines.append("")
     return lines
 
@@ -104,6 +106,8 @@ def to_dict(retrieval, prediction, baseline=(), trial_hits=()) -> dict:
                     "true_next": o.true_next,
                     "predictions": list(o.predictions),
                     "hit": bool(o.is_hit),
+                    "judge_reason": o.judge_reason,
+                    "similarity_hit": bool(o.similarity_hit),
                     "similarity": round(o.best_similarity, 4),
                     "top_rival": o.top_rival,
                 }
