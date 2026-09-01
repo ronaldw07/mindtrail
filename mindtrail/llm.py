@@ -27,7 +27,12 @@ class Completion:
 
 
 class LLMClient:
-    def __init__(self, api_key: str | None = None, model: str | None = None):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        temperature: float = config.DEFAULT_TEMPERATURE,
+    ):
         key = api_key if api_key is not None else config.GROQ_API_KEY
         if not key:
             raise LLMError(
@@ -35,6 +40,7 @@ class LLMClient:
             )
         self._client = Groq(api_key=key)
         self._model = model or config.SYNTHESIS_MODEL
+        self._temperature = temperature
 
     def complete(self, system: str, user: str, max_tokens: int = 900) -> Completion:
         """Single-turn completion, retrying through rate limits."""
@@ -56,7 +62,10 @@ class LLMClient:
         for attempt in range(config.MAX_RETRIES):
             try:
                 return self._client.chat.completions.create(
-                    model=self._model, messages=messages, max_tokens=max_tokens
+                    model=self._model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=self._temperature,
                 )
             except RateLimitError as exc:
                 last_error = exc

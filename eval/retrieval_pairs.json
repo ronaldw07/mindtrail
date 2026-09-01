@@ -1,0 +1,45 @@
+{
+  "_note": "Each pair stores 'stored' in memory, then asks 'followup'. Retrieval must surface the matching entry ahead of every other stored entry, all of which act as distractors.",
+  "pairs": [
+    {
+      "stored": "what is a vector database",
+      "summary": "A vector database stores high-dimensional embeddings and indexes them for similarity search.",
+      "followup": "how does Chroma differ from Pinecone"
+    },
+    {
+      "stored": "what is retrieval augmented generation",
+      "summary": "RAG retrieves relevant documents and appends them to a prompt so the model answers from current evidence.",
+      "followup": "what chunking strategies work best for RAG"
+    },
+    {
+      "stored": "how does LoRA reduce fine-tuning cost",
+      "summary": "LoRA freezes base weights and trains small low-rank adapter matrices, cutting memory and compute.",
+      "followup": "how much VRAM do I need to train an adapter"
+    },
+    {
+      "stored": "what is the difference between Playwright and Selenium",
+      "summary": "Playwright bundles browsers and auto-waits; Selenium is older, needs separate drivers, and waits manually.",
+      "followup": "how do I reuse a logged-in browser session in Playwright"
+    },
+    {
+      "stored": "how does the attention mechanism work in transformers",
+      "summary": "Attention scores every token against every other token and takes a weighted sum of value vectors.",
+      "followup": "what does multi-head attention add over single-head"
+    },
+    {
+      "stored": "what is tool calling in a language model",
+      "summary": "Tool calling lets a model emit a structured function call that the host executes and returns as an observation.",
+      "followup": "what is the ReAct pattern for agents"
+    },
+    {
+      "stored": "how do I evaluate a RAG pipeline",
+      "summary": "Measure retrieval hit rate and answer faithfulness separately, since a good answer can come from bad retrieval.",
+      "followup": "how do I measure whether an answer is faithful to its sources"
+    },
+    {
+      "stored": "how does HNSW indexing work",
+      "summary": "HNSW builds a navigable small-world graph in layers, giving approximate nearest neighbour search in log time.",
+      "followup": "what is the tradeoff between recall and speed in approximate search"
+    }
+  ]
+}

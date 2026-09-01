@@ -1,0 +1,121 @@
+{
+  "retrieval": {
+    "total": 8,
+    "recall_at_1": 4,
+    "recall_at_3": 6,
+    "cases": [
+      {
+        "followup": "how does Chroma differ from Pinecone",
+        "expected": "what is a vector database",
+        "rank": 3
+      },
+      {
+        "followup": "what chunking strategies work best for RAG",
+        "expected": "what is retrieval augmented generation",
+        "rank": 2
+      },
+      {
+        "followup": "how much VRAM do I need to train an adapter",
+        "expected": "how does LoRA reduce fine-tuning cost",
+        "rank": 1
+      },
+      {
+        "followup": "how do I reuse a logged-in browser session in Playwright",
+        "expected": "what is the difference between Playwright and Selenium",
+        "rank": 1
+      },
+      {
+        "followup": "what does multi-head attention add over single-head",
+        "expected": "how does the attention mechanism work in transformers",
+        "rank": 1
+      },
+      {
+        "followup": "what is the ReAct pattern for agents",
+        "expected": "what is tool calling in a language model",
+        "rank": 4
+      },
+      {
+        "followup": "how do I measure whether an answer is faithful to its sources",
+        "expected": "how do I evaluate a RAG pipeline",
+        "rank": 1
+      },
+      {
+        "followup": "what is the tradeoff between recall and speed in approximate search",
+        "expected": "how does HNSW indexing work",
+        "rank": 5
+      }
+    ]
+  },
+  "prediction": {
+    "total": 6,
+    "hits": 5,
+    "cases": [
+      {
+        "session": "vector-databases",
+        "true_next": "how do I choose a vector database for a small project",
+        "predictions": [
+          "How can I optimize query latency and throughput in a vector database?",
+          "What are the trade\u2011offs between HNSW and IVF (inverted file) indexing for large\u2011scale similarity search?",
+          "How do I integrate a vector database (e.g., Chroma or Pinecone) with an LLM retrieval pipeline such as LangChain or LlamaIndex?"
+        ],
+        "hit": true,
+        "similarity": 0.493
+      },
+      {
+        "session": "retrieval-augmented-generation",
+        "true_next": "does adding a reranker improve RAG accuracy",
+        "predictions": [
+          "How can I improve retrieval accuracy and reduce hallucinations in my RAG pipeline?",
+          "What are the best practices for prompt engineering and answer synthesis in RAG systems?",
+          "How do I deploy and scale a RAG pipeline in production while managing latency and cost?"
+        ],
+        "hit": true,
+        "similarity": 0.3728
+      },
+      {
+        "session": "fine-tuning",
+        "true_next": "how much training data do I need to fine-tune effectively",
+        "predictions": [
+          "What are the best practices for evaluating a fine-tuned language model versus a RAG system?",
+          "How can I combine LoRA with Retrieval\u2011Augmented Generation to get the benefits of both?",
+          "When should I use full fine\u2011tuning versus parameter\u2011efficient methods like LoRA, adapters, or prefix\u2011tuning?"
+        ],
+        "hit": true,
+        "similarity": 0.4414
+      },
+      {
+        "session": "browser-automation",
+        "true_next": "how do I keep a scraper working when a site changes its HTML",
+        "predictions": [
+          "How can I make Playwright less detectable or evade anti\u2011bot detection mechanisms?",
+          "How do I bypass or solve CAPTCHAs programmatically using Playwright?",
+          "How can I run Playwright tests in CI/CD pipelines while preserving logged\u2011in sessions or authentication state?"
+        ],
+        "hit": false,
+        "similarity": 0.1262
+      },
+      {
+        "session": "transformer-internals",
+        "true_next": "how does a KV cache speed up inference",
+        "predictions": [
+          "How does the feed-forward network component work in transformers and why is it important?",
+          "What role do residual connections and layer normalization play in transformer architectures?",
+          "Why is the scaling factor \u221a(d_k) used in the scaled dot\u2011product attention formula?"
+        ],
+        "hit": true,
+        "similarity": 0.1611
+      },
+      {
+        "session": "agent-systems",
+        "true_next": "how do I benchmark an agent's task completion rate",
+        "predictions": [
+          "How can tool calling be coordinated among multiple agents in a multi-agent system?",
+          "What communication or coordination protocols are most effective for multi-agent systems using the ReAct pattern?",
+          "When should hierarchical (manager\u2011worker) agent architectures be used instead of flat multi\u2011agent setups?"
+        ],
+        "hit": true,
+        "similarity": 0.3652
+      }
+    ]
+  }
+}
