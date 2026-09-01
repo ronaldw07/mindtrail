@@ -11,6 +11,7 @@ import urllib.request
 from html.parser import HTMLParser
 
 USER_AGENT = "Mozilla/5.0 (compatible; mindtrail/0.1)"
+ALLOWED_SCHEMES = ("http://", "https://")
 TIMEOUT_SECONDS = 15
 IGNORED_TAGS = frozenset({"script", "style", "noscript", "svg", "head"})
 MAX_CHARS = 6000
@@ -58,13 +59,29 @@ def html_to_text(html: str, max_chars: int = MAX_CHARS) -> str:
 
 
 def fetch_url(url: str, max_chars: int = MAX_CHARS) -> str:
-    """Return readable text from a URL, or raise FetchError."""
+    """Return readable text from a URL, or raise FetchError.
+
+    Search results are untrusted input, so the scheme is checked before
+    the URL reaches urlopen, which would otherwise happily serve file://
+    and ftp:// requests.
+    """
+    if not url.lower().startswith(ALLOWED_SCHEMES):
+        raise FetchError(f"refusing non-http(s) url: {url}")
+
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             charset = response.headers.get_content_charset() or "utf-8"
             html = response.read().decode(charset, errors="replace")
-    except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        OSError,
+        # urlopen raises ValueError, not URLError, for a malformed or
+        # scheme-less URL. Letting it escape aborts the whole question
+        # instead of skipping one bad link.
+        ValueError,
+    ) as exc:
         raise FetchError(f"could not fetch {url}: {exc}") from exc
 
     return html_to_text(html, max_chars=max_chars)
