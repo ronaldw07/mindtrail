@@ -18,6 +18,12 @@ FALLBACK_MODEL = "openai/gpt-oss-20b"
 MAX_RETRIES = 5
 INITIAL_BACKOFF_SECONDS = 2.0
 
+DEFAULT_TEMPERATURE = 0.3
+# Evaluation pins temperature to 0. Sampling at the default made repeat
+# runs of the same eval differ by a full session (4/6 then 3/6), which
+# makes any single reported number meaningless.
+EVAL_TEMPERATURE = 0.0
+
 CHROMA_DIR = os.getenv("MINDTRAIL_CHROMA_DIR", "chroma_data")
 COLLECTION_NAME = "research"
 

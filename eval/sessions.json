@@ -1,0 +1,59 @@
+{
+  "_note": "Hand-authored research trajectories, not recorded from live usage. Each session's final question is held out and must be recovered by the predictor. See README for why this limits how far the numbers generalize.",
+  "sessions": [
+    {
+      "id": "vector-databases",
+      "questions": [
+        "what is a vector database",
+        "how does Chroma differ from Pinecone",
+        "how does HNSW indexing work",
+        "how do I choose a vector database for a small project"
+      ]
+    },
+    {
+      "id": "retrieval-augmented-generation",
+      "questions": [
+        "what is retrieval augmented generation",
+        "what chunking strategies work best for RAG",
+        "how do I evaluate a RAG pipeline",
+        "does adding a reranker improve RAG accuracy"
+      ]
+    },
+    {
+      "id": "fine-tuning",
+      "questions": [
+        "what is fine-tuning a language model",
+        "how does LoRA reduce fine-tuning cost",
+        "when should I fine-tune instead of using RAG",
+        "how much training data do I need to fine-tune effectively"
+      ]
+    },
+    {
+      "id": "browser-automation",
+      "questions": [
+        "what is the difference between Playwright and Selenium",
+        "how do I reuse a logged-in browser session in Playwright",
+        "how do websites detect automated browsers",
+        "how do I keep a scraper working when a site changes its HTML"
+      ]
+    },
+    {
+      "id": "transformer-internals",
+      "questions": [
+        "how does the attention mechanism work in transformers",
+        "why do transformers need positional encoding",
+        "what does multi-head attention add over single-head",
+        "how does a KV cache speed up inference"
+      ]
+    },
+    {
+      "id": "agent-systems",
+      "questions": [
+        "what is tool calling in a language model",
+        "what is the ReAct pattern for agents",
+        "when is a multi-agent system better than a single agent",
+        "how do I benchmark an agent's task completion rate"
+      ]
+    }
+  ]
+}
