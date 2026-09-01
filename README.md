@@ -35,6 +35,15 @@ bullets, full answer behind a click, sources linked, and a keyword filter
 across everything you've asked. No server, no login, nothing to keep
 running — the command regenerates the file and opens it.
 
+```
+$ mindtrail chat
+```
+
+Opens a browser chat window at `localhost:8765`. Type a question, get an
+answer with sources and any recalled prior research shown inline — same
+researcher as `ask`, just a chat interface instead of one-shot terminal
+commands. Runs until you `Ctrl+C` it.
+
 Prediction (guessing your next question) also exists but is **not** a
 working feature — see [Results](#results) for why it's reported as a
 negative finding rather than something to rely on.
@@ -205,6 +214,7 @@ mindtrail web
 | `mindtrail/ingest/researcher.py` | Retrieve, compose context, synthesize |
 | `mindtrail/ingest/topic.py` | Topic label + key-fact extraction, reusing existing labels |
 | `mindtrail/web/generate.py` | Static HTML page grouped by topic |
+| `mindtrail/web/chat_server.py` | Browser chatbot, stdlib http.server, no framework |
 | `mindtrail/predict/next_query.py` | Three ranked next-question candidates (not validated — see Results) |
 | `mindtrail/llm.py` | Groq client with rate-limit backoff |
 | `eval/` | Retrieval and prediction harness, plus the LLM judge |
@@ -276,6 +286,7 @@ Llama line from its catalog, so older tutorials naming
 .venv/bin/python -m mindtrail.cli predict             # likely next questions
 .venv/bin/python -m mindtrail.cli stats               # what is remembered
 .venv/bin/python -m mindtrail.cli web                 # static page, grouped by topic
+.venv/bin/python -m mindtrail.cli chat                 # browser chatbot interface
 ```
 
 `web` writes a single HTML file and opens it in your default browser. Each
@@ -286,7 +297,7 @@ whenever you want it current.
 
 ## Tests
 
-121 tests, no network and no API key required — search, fetch, and the model
+128 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.
