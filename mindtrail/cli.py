@@ -106,6 +106,14 @@ def main(argv: list[str] | None = None) -> int:
     except (LLMError, SearchError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        print("\ninterrupted", file=sys.stderr)
+        return 130
+    except Exception as exc:
+        # Chroma raises its own errors for a locked or unreadable store,
+        # and a raw traceback is not a useful answer to "what went wrong".
+        print(f"error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

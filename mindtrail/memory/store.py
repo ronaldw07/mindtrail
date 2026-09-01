@@ -92,8 +92,11 @@ class MemoryStore:
         if available == 0:
             return []
 
+        # A non-positive n_results reaches Chroma as a malformed query, so
+        # the floor is applied here rather than trusted from the caller.
+        wanted = max(1, k)
         result = self._collection.query(
-            query_texts=[query], n_results=min(k, available)
+            query_texts=[query], n_results=min(wanted, available)
         )
         return [
             _to_entry(doc, meta, entry_id)
@@ -113,7 +116,7 @@ class MemoryStore:
                 data["documents"], data["metadatas"], data["ids"]
             )
         ]
-        return sorted(entries, key=lambda e: e.created_at, reverse=True)[:n]
+        return sorted(entries, key=lambda e: e.created_at, reverse=True)[: max(1, n)]
 
     def count(self) -> int:
         return self._collection.count()

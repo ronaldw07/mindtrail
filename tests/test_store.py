@@ -56,6 +56,21 @@ def test_empty_summary_is_rejected(store):
         store.add("query", "", [])
 
 
+@pytest.mark.parametrize("k", [0, -5])
+def test_non_positive_k_still_returns_a_result(store, k):
+    # Chroma rejects n_results <= 0, so the floor is applied before it.
+    store.add("only entry", "text", [])
+
+    assert len(store.search("entry", k=k)) == 1
+
+
+@pytest.mark.parametrize("n", [0, -1])
+def test_non_positive_recent_count_still_returns_a_result(store, n):
+    store.add("only entry", "text", [])
+
+    assert len(store.recent(n)) == 1
+
+
 def test_entries_are_immutable(store):
     entry = store.add("a question", "original", [])
 
