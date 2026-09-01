@@ -201,6 +201,16 @@ def main() -> int:
         choices=("dev", "test"),
         help="retrieval split; dev is for tuning, test is for reporting",
     )
+    parser.add_argument(
+        "--trials",
+        type=int,
+        default=1,
+        help=(
+            "repeat the prediction eval N times. The model is not "
+            "deterministic even at temperature 0, so a single run "
+            "understates the spread"
+        ),
+    )
     args = parser.parse_args()
 
     import tempfile
@@ -210,19 +220,24 @@ def main() -> int:
 
     prediction: list[PredictionOutcome] = []
     baseline: list[PredictionOutcome] = []
+    trial_hits: list[int] = []
     if not args.skip_prediction:
-        try:
-            prediction, baseline = run_prediction_eval(
-                LLMClient(temperature=config.EVAL_TEMPERATURE), args.pause
-            )
-        except LLMError as exc:
-            print(f"prediction eval skipped: {exc}")
+        llm = LLMClient(temperature=config.EVAL_TEMPERATURE)
+        for trial in range(args.trials):
+            try:
+                prediction, baseline = run_prediction_eval(llm, args.pause)
+            except LLMError as exc:
+                print(f"prediction trial {trial + 1} skipped: {exc}")
+                continue
+            trial_hits.append(sum(o.is_hit for o in prediction))
+            if args.trials > 1:
+                print(f"  trial {trial + 1}: {trial_hits[-1]}/{len(prediction)}")
 
     from eval.report import render, to_dict
 
-    print(render(retrieval, prediction, baseline))
+    print(render(retrieval, prediction, baseline, trial_hits))
     Path(args.out).write_text(
-        json.dumps(to_dict(retrieval, prediction, baseline), indent=2)
+        json.dumps(to_dict(retrieval, prediction, baseline, trial_hits), indent=2)
     )
     print(f"\nwrote {args.out}")
     return 0
