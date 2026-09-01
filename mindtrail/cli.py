@@ -13,6 +13,7 @@ from mindtrail.ingest.topic import TopicExtractor
 from mindtrail.llm import LLMClient, LLMError
 from mindtrail.memory.store import MemoryStore
 from mindtrail.predict.next_query import predict_from_store
+from mindtrail.web.chat_server import run_chat_server
 from mindtrail.web.generate import build_html
 
 DIVIDER = "-" * 68
@@ -79,6 +80,16 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def cmd_chat(args) -> int:
+    store = MemoryStore()
+    llm = LLMClient()
+    researcher = Researcher(
+        store, default_search(), llm, topic_extractor=TopicExtractor(llm)
+    )
+    run_chat_server(researcher, port=args.port, open_browser=not args.no_open)
+    return 0
+
+
 def cmd_web(args) -> int:
     store = MemoryStore()
     html = build_html(store.all())
@@ -120,6 +131,11 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument("--out", default="mindtrail_site.html")
     web.add_argument("--no-open", action="store_true")
     web.set_defaults(func=cmd_web)
+
+    chat = sub.add_parser("chat", help="chatbot interface in the browser")
+    chat.add_argument("--port", type=int, default=8765)
+    chat.add_argument("--no-open", action="store_true")
+    chat.set_defaults(func=cmd_chat)
 
     return parser
 
