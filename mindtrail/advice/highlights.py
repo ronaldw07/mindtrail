@@ -18,17 +18,27 @@ from mindtrail.memory.store import Entry
 MAX_HIGHLIGHTS = 5
 SUMMARY_CHARS_PER_ENTRY = 400
 
+PRIORITIES = ("now", "next", "later")
+DEFAULT_PRIORITY = "next"
+
 SYSTEM_PROMPT = (
     "You surface what someone should do next in a piece of ongoing work.\n\n"
     "You are given their research, notes, and documents for one project, "
     "and optionally their own instructions for it.\n\n"
     "Return three to five highlights: short, concrete, and specific to "
-    "this material. Each needs a headline of at most eight words and one "
-    "sentence saying why it matters now. Ground every one in something "
-    "actually present - name the document or question it came from. Skip "
-    "generic advice that would apply to anyone.\n\n"
+    "this material. Each needs a headline of at most eight words, one or "
+    "two sentences on why it matters now, and a priority.\n\n"
+    "Priority is one of:\n"
+    '  "now"   - the single most pressing thing, given what they have '
+    "been asking about most recently. Use this sparingly, ideally once.\n"
+    '  "next"  - clearly worth doing soon.\n'
+    '  "later" - worth remembering but not urgent.\n\n'
+    "Ground every one in something actually present - name the document "
+    "or question it came from. Skip generic advice that would apply to "
+    "anyone.\n\n"
     'Respond with JSON only: {"highlights": [{"headline": "...", '
-    '"detail": "...", "source": "..."}]} with no code fences.'
+    '"detail": "...", "source": "...", "priority": "now"}]} '
+    "with no code fences."
 )
 
 
@@ -37,6 +47,7 @@ class Highlight:
     headline: str
     detail: str
     source: str
+    priority: str = DEFAULT_PRIORITY
 
 
 def parse_highlights(text: str) -> list[Highlight]:
@@ -56,13 +67,25 @@ def parse_highlights(text: str) -> list[Highlight]:
             headline=str(item["headline"]).strip(),
             detail=str(item.get("detail", "")).strip(),
             source=str(item.get("source", "")).strip(),
+            priority=_clean_priority(item.get("priority")),
         )
         for item in raw
         if isinstance(item, dict) and str(item.get("headline", "")).strip()
     ]
     if not parsed:
         raise ValueError("no usable highlights returned")
-    return parsed[:MAX_HIGHLIGHTS]
+    return sort_by_priority(parsed)[:MAX_HIGHLIGHTS]
+
+
+def _clean_priority(value) -> str:
+    """Unrecognised priorities fall back rather than breaking ordering."""
+    cleaned = str(value or "").strip().lower()
+    return cleaned if cleaned in PRIORITIES else DEFAULT_PRIORITY
+
+
+def sort_by_priority(highlights: list[Highlight]) -> list[Highlight]:
+    """Most pressing first, preserving the model's order within a tier."""
+    return sorted(highlights, key=lambda h: PRIORITIES.index(h.priority))
 
 
 def _format_entries(entries: list[Entry]) -> str:
@@ -93,7 +116,15 @@ def generate_highlights(
 
 def highlights_to_json(highlights: list[Highlight]) -> str:
     return json.dumps(
-        [{"headline": h.headline, "detail": h.detail, "source": h.source} for h in highlights]
+        [
+            {
+                "headline": h.headline,
+                "detail": h.detail,
+                "source": h.source,
+                "priority": h.priority,
+            }
+            for h in highlights
+        ]
     )
 
 
@@ -105,12 +136,15 @@ def highlights_from_json(raw: str) -> list[Highlight]:
         data = json.loads(raw)
     except json.JSONDecodeError:
         return []
-    return [
-        Highlight(
-            headline=str(d.get("headline", "")),
-            detail=str(d.get("detail", "")),
-            source=str(d.get("source", "")),
-        )
-        for d in data
-        if isinstance(d, dict) and d.get("headline")
-    ]
+    return sort_by_priority(
+        [
+            Highlight(
+                headline=str(d.get("headline", "")),
+                detail=str(d.get("detail", "")),
+                source=str(d.get("source", "")),
+                priority=_clean_priority(d.get("priority")),
+            )
+            for d in data
+            if isinstance(d, dict) and d.get("headline")
+        ]
+    )

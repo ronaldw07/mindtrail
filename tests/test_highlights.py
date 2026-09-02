@@ -135,3 +135,55 @@ def test_unparseable_stored_highlights_degrade_to_empty():
 
 def test_empty_stored_highlights_are_empty():
     assert highlights_from_json("") == []
+
+
+# --- priority ---------------------------------------------------------
+
+
+def test_priority_is_parsed():
+    data = '{"highlights": [{"headline": "H", "priority": "now"}]}'
+
+    assert parse_highlights(data)[0].priority == "now"
+
+
+def test_missing_priority_defaults_to_next():
+    assert parse_highlights('{"highlights": [{"headline": "H"}]}')[0].priority == "next"
+
+
+def test_unrecognised_priority_falls_back():
+    data = '{"highlights": [{"headline": "H", "priority": "urgent!!"}]}'
+
+    assert parse_highlights(data)[0].priority == "next"
+
+
+def test_priority_casing_is_normalised():
+    data = '{"highlights": [{"headline": "H", "priority": "NOW"}]}'
+
+    assert parse_highlights(data)[0].priority == "now"
+
+
+def test_highlights_are_ordered_most_pressing_first():
+    data = (
+        '{"highlights": ['
+        '{"headline": "c", "priority": "later"},'
+        '{"headline": "a", "priority": "now"},'
+        '{"headline": "b", "priority": "next"}]}'
+    )
+
+    assert [h.headline for h in parse_highlights(data)] == ["a", "b", "c"]
+
+
+def test_ordering_within_a_tier_is_preserved():
+    data = (
+        '{"highlights": ['
+        '{"headline": "first", "priority": "next"},'
+        '{"headline": "second", "priority": "next"}]}'
+    )
+
+    assert [h.headline for h in parse_highlights(data)] == ["first", "second"]
+
+
+def test_priority_survives_the_json_round_trip():
+    original = parse_highlights('{"highlights": [{"headline": "H", "priority": "now"}]}')
+
+    assert highlights_from_json(highlights_to_json(original))[0].priority == "now"
