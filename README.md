@@ -39,12 +39,24 @@ running — the command regenerates the file and opens it.
 $ mindtrail chat
 ```
 
-Opens a browser chat window at `localhost:8765`, with a sidebar listing
-every topic (the same auto-labeling `web` groups by) and a search box.
-Click a topic to load its history as a conversation thread and keep
-asking; "+ New" starts fresh. Type a question, get an answer with sources
-and recalled prior research shown inline — same researcher as `ask`, just
-a chat interface. Runs until you `Ctrl+C` it.
+Opens a browser chat window at `localhost:8765`. The sidebar holds
+**projects** you create by hand, with chats nested under them:
+
+- **Rename, delete, pin, and mark unread** any chat from its `⋯` menu.
+  Pinned sorts to the top; unread shows bold with a dot.
+- **Move chats between projects**, or out of one entirely. Deleting a
+  project keeps its chats and unfiles them; deleting a *chat* does
+  remove its content.
+- **🎤 dictate** — records from your mic and transcribes with Whisper.
+- **+ upload a PDF** into the open chat, parsed and stored as knowledge
+  you can then ask about.
+
+Follow-ups within a chat carry that conversation's earlier turns, so
+"what are its drawbacks?" resolves against what you were just discussing
+rather than being searched literally.
+
+Existing research from before projects existed is migrated automatically
+on first run: one conversation per topic, nothing orphaned.
 
 ```
 $ mindtrail docs resume.pdf
@@ -233,7 +245,10 @@ mindtrail web
 | `mindtrail/ingest/researcher.py` | Retrieve, compose context, synthesize |
 | `mindtrail/ingest/topic.py` | Topic label + key-fact extraction, reusing existing labels |
 | `mindtrail/web/generate.py` | Static HTML page grouped by topic |
-| `mindtrail/web/chat_server.py` | Browser chatbot, stdlib http.server, no framework |
+| `mindtrail/web/chat_server.py` | HTTP routing only, stdlib http.server, no framework |
+| `mindtrail/web/api.py` | Request handlers as pure functions over the stores |
+| `mindtrail/web/chat_ui.py` | Chat page markup, styles, and client script |
+| `mindtrail/organize/` | Projects and conversations in SQLite, plus the backfill |
 | `mindtrail/ingest/documents.py` | PDF text extraction, local, no vision model available |
 | `mindtrail/advice/planner.py` | Grounded next-steps plan from stored documents/notes/research |
 | `mindtrail/predict/next_query.py` | Three ranked next-question candidates (not validated — see Results) |
@@ -279,6 +294,15 @@ genuinely fits. Without that, near-identical topics ("Vector Databases",
 would fragment into noise instead of staying navigable. Labeling runs after
 the answer is written and never blocks storing it — a failed extraction
 still keeps the research, just uncategorized.
+
+**Organizational state lives in SQLite, not Chroma.** Chroma is a vector
+index; renaming a project should not touch embeddings, and an empty
+project has nowhere to live there at all. SQLite is stdlib, handles the
+threaded server's concurrent writes, and makes move/pin/delete one-line
+updates. Deleting a project unfiles its chats via `ON DELETE SET NULL`
+rather than destroying research — foreign keys are enabled per
+connection, since SQLite defaults them off and would silently orphan
+rows instead.
 
 **Documents are parsed locally, not sent to a vision model.** A vision
 model was the first plan; a direct test against this Groq account's
@@ -334,7 +358,7 @@ whenever you want it current.
 
 ## Tests
 
-159 tests, no network and no API key required — search, fetch, and the model
+216 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.
