@@ -61,11 +61,20 @@ its chats:
 - **Instructions** — free text applied to every answer in that project.
   Writing "cite only primary sources" there changes the research, rather
   than being a note to yourself.
+- **Roadmap** — a goal broken into a draggable node canvas. Generating
+  proposes steps with dependencies between them; accept, reject, note, or
+  drag any node, and regenerating only ever touches the still-proposed
+  ones, planning around whatever you already decided.
 - **Files** — documents uploaded into that project.
 
 Follow-ups within a chat carry that conversation's earlier turns, so
 "what are its drawbacks?" resolves against what you were just discussing
 rather than being searched literally.
+
+**👤 Profile**, in the sidebar, is a short freeform description of you —
+role, goals, background — used to personalize every answer, highlight, and
+roadmap. Write it by hand or generate a starting draft from whatever
+documents are already stored.
 
 Existing research from before projects existed is migrated automatically
 on first run: one conversation per topic, nothing orphaned.
@@ -261,9 +270,13 @@ mindtrail web
 | `mindtrail/web/api.py` | Request handlers as pure functions over the stores |
 | `mindtrail/web/chat_ui.py` | Chat page markup, styles, and client script |
 | `mindtrail/organize/` | Projects and conversations in SQLite, plus the backfill |
+| `mindtrail/organize/profile.py` | The user's own background: single-row store, edit-and-save |
+| `mindtrail/organize/roadmaps.py` | Roadmaps and nodes: CRUD, status, notes, canvas position |
 | `mindtrail/ingest/documents.py` | PDF text extraction, local, no vision model available |
 | `mindtrail/advice/planner.py` | Grounded next-steps plan across everything stored |
 | `mindtrail/advice/highlights.py` | Per-project "what's next", cached with staleness detection |
+| `mindtrail/advice/profile_draft.py` | Draft a starting profile from stored documents and notes |
+| `mindtrail/advice/roadmap_gen.py` | Propose roadmap steps toward a goal, preserving decided nodes |
 | `mindtrail/predict/next_query.py` | Three ranked next-question candidates (not validated — see Results) |
 | `mindtrail/llm.py` | Groq client with rate-limit backoff |
 | `eval/` | Retrieval and prediction harness, plus the LLM judge |
@@ -371,7 +384,7 @@ whenever you want it current.
 
 ## Tests
 
-247 tests, no network and no API key required — search, fetch, and the model
+335 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.
