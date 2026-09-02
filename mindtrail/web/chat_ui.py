@@ -540,11 +540,16 @@ CHAT_HTML = """<!doctype html>
   // it renders its own copy of names and chat rows, so it goes stale
   // otherwise.
   async function refreshViews() {
-    await loadSidebar();
-    // background: true means "do not spend an API call regenerating
-    // highlights" - this refresh is a side effect of a move or rename,
-    // not the user asking to see the project.
-    if (currentProject) await openProject(currentProject, {background: true});
+    // Independent of each other, so they run together rather than one
+    // after the other — this runs after most sidebar-menu actions
+    // (rename, pin, move, delete), so halving its wait speeds up all of
+    // them. background: true means "do not spend an API call
+    // regenerating highlights" - this refresh is a side effect of a
+    // move or rename, not the user asking to see the project.
+    await Promise.all([
+      loadSidebar(),
+      currentProject ? openProject(currentProject, {background: true}) : null
+    ]);
   }
 
   function sectionRow(label, opts) {
@@ -1028,8 +1033,13 @@ CHAT_HTML = """<!doctype html>
     const params = [];
     if (opts.refresh) params.push('refresh=1');
     if (opts.background) params.push('background=1');
-    const data = await api('/api/projects/' + id +
-                           (params.length ? '?' + params.join('&') : ''));
+    // Both requests are independent, so they're fired together instead of
+    // one after the other — the roadmap fetch below just reads a promise
+    // that has usually already resolved by the time it's needed.
+    const dataPromise = api('/api/projects/' + id +
+                            (params.length ? '?' + params.join('&') : ''));
+    const rmDataPromise = api('/api/roadmap/' + id);
+    const data = await dataPromise;
     if (data.error) { view.innerHTML = ''; setStatus(data.error); return; }
 
     $('breadcrumb').innerHTML = '';
@@ -1105,7 +1115,7 @@ CHAT_HTML = """<!doctype html>
     rail.appendChild(hlCard);
 
     const roadmapCard = card('Roadmap', null, null);
-    const rmData = await api('/api/roadmap/' + id);
+    const rmData = await rmDataPromise;
     if (!rmData.roadmap) {
       const goalInput = document.createElement('input');
       goalInput.placeholder = 'What are you working toward?';
@@ -1383,9 +1393,13 @@ CHAT_HTML = """<!doctype html>
       // Cascades new cards so repeated adds don't stack exactly on top
       // of each other before the user drags them apart.
       const offset = (nodesList.length % 6) * 40;
-      await jsonSend('/api/roadmap-node/' + roadmap.id,
-                     {title, x: 40 + offset, y: 40 + offset});
-      openRoadmapView(projectId, projectName);
+      const node = await jsonSend('/api/roadmap-node/' + roadmap.id,
+                                  {title, x: 40 + offset, y: 40 + offset});
+      if (node.error) { toast(node.error, {error: true}); return; }
+      // The server hands back the full node, so the new card can be
+      // added straight into the canvas instead of re-fetching everything.
+      nodesList.push(node);
+      renderRoadmap(projectId, projectName, roadmap, nodesList);
     };
     top.appendChild(addBtn);
 
@@ -1451,45 +1465,54 @@ CHAT_HTML = """<!doctype html>
       });
     }
 
-    async function updateNode(n, patch) {
-      const res = await jsonSend('/api/roadmap-node/' + n.id, patch, 'PATCH');
-      if (res.error) { toast(res.error, {error: true}); return; }
-      Object.assign(n, res);
+    // Optimistic: applies the change and re-renders immediately, then
+    // persists in the background. On failure, rolls back and re-renders
+    // again so a slow or failed request never leaves the canvas stuck
+    // showing a change the server didn't actually save.
+    function updateNode(n, patch) {
+      const previous = {...n};
+      Object.assign(n, patch);
+      renderRoadmap(projectId, projectName, roadmap, nodesList);
+      jsonSend('/api/roadmap-node/' + n.id, patch, 'PATCH').then(res => {
+        if (res.error) {
+          Object.assign(n, previous);
+          renderRoadmap(projectId, projectName, roadmap, nodesList);
+          toast(res.error, {error: true});
+          return;
+        }
+        Object.assign(n, res);
+      });
     }
 
     function nodeMenuItems(n) {
       const items = [];
       if (n.status !== 'accepted') {
-        items.push({label: 'Accept', run: async () => {
-          await updateNode(n, {status: 'accepted'});
-          renderRoadmap(projectId, projectName, roadmap, nodesList);
-        }});
+        items.push({label: 'Accept', run: () => updateNode(n, {status: 'accepted'})});
       }
       if (n.status !== 'done') {
-        items.push({label: 'Mark done', run: async () => {
-          await updateNode(n, {status: 'done'});
-          renderRoadmap(projectId, projectName, roadmap, nodesList);
-        }});
+        items.push({label: 'Mark done', run: () => updateNode(n, {status: 'done'})});
       }
       if (n.status !== 'rejected') {
-        items.push({label: 'Reject', run: async () => {
-          await updateNode(n, {status: 'rejected'});
-          renderRoadmap(projectId, projectName, roadmap, nodesList);
-        }});
+        items.push({label: 'Reject', run: () => updateNode(n, {status: 'rejected'})});
       }
       items.push({label: n.note ? 'Edit note' : 'Add note', run: async () => {
         const note = await askText('Note', n.note || '', 'A note for this step');
         if (note === null) return;
-        await updateNode(n, {note});
-        renderRoadmap(projectId, projectName, roadmap, nodesList);
+        updateNode(n, {note});
       }});
       items.push({divider: true});
       items.push({label: 'Delete', danger: true, run: async () => {
         const ok = await askConfirm('Delete step', '"' + n.title + '" will be removed.', 'Delete');
         if (!ok) return;
+        const idx = nodesList.indexOf(n);
+        nodesList.splice(idx, 1);
+        renderRoadmap(projectId, projectName, roadmap, nodesList);
         const res = await api('/api/roadmap-node/' + n.id, {method: 'DELETE'});
-        if (res.error) { toast(res.error, {error: true}); return; }
-        openRoadmapView(projectId, projectName);
+        if (res.error) {
+          nodesList.splice(idx, 0, n);
+          renderRoadmap(projectId, projectName, roadmap, nodesList);
+          toast(res.error, {error: true});
+        }
       }});
       return items;
     }
@@ -1524,20 +1547,12 @@ CHAT_HTML = """<!doctype html>
         const acc = document.createElement('button');
         acc.className = 'accept';
         acc.textContent = 'Accept';
-        acc.onclick = async ev => {
-          ev.stopPropagation();
-          await updateNode(n, {status: 'accepted'});
-          renderRoadmap(projectId, projectName, roadmap, nodesList);
-        };
+        acc.onclick = ev => { ev.stopPropagation(); updateNode(n, {status: 'accepted'}); };
         actions.appendChild(acc);
         const rej = document.createElement('button');
         rej.className = 'reject';
         rej.textContent = 'Reject';
-        rej.onclick = async ev => {
-          ev.stopPropagation();
-          await updateNode(n, {status: 'rejected'});
-          renderRoadmap(projectId, projectName, roadmap, nodesList);
-        };
+        rej.onclick = ev => { ev.stopPropagation(); updateNode(n, {status: 'rejected'}); };
         actions.appendChild(rej);
       }
       const more = document.createElement('button');
@@ -1566,7 +1581,13 @@ CHAT_HTML = """<!doctype html>
       const endDrag = () => {
         if (!dragging) return;
         dragging = null;
-        updateNode(n, {x: n.x, y: n.y});
+        // The dragged position is already on screen, so this persists in
+        // the background without the full-canvas re-render updateNode
+        // does elsewhere — nothing here needs to change visually.
+        jsonSend('/api/roadmap-node/' + n.id, {x: n.x, y: n.y}, 'PATCH').then(res => {
+          if (res.error) toast(res.error, {error: true});
+          else Object.assign(n, res);
+        });
       };
       el.addEventListener('pointerup', endDrag);
       el.addEventListener('pointercancel', endDrag);
