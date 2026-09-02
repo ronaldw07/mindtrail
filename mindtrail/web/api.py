@@ -9,6 +9,11 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+from mindtrail.advice.highlights import (
+    generate_highlights,
+    highlights_from_json,
+    highlights_to_json,
+)
 from mindtrail.ingest.documents import DocumentError, extract_pdf_text
 from mindtrail.ingest.researcher import Researcher
 from mindtrail.llm import LLMClient, LLMError
@@ -49,6 +54,72 @@ def handle_sidebar(projects: ProjectStore, chats: ConversationStore) -> dict:
     }
 
 
+def project_entries(
+    store: MemoryStore, chats: ConversationStore, project_id: str
+) -> list:
+    """Every entry across every conversation filed under a project."""
+    entries = []
+    for conversation in chats.in_project(project_id):
+        entries.extend(store.by_conversation(conversation.id))
+    return entries
+
+
+def handle_project_detail(
+    store: MemoryStore,
+    chats: ConversationStore,
+    projects: ProjectStore,
+    llm: LLMClient,
+    project_id: str,
+    refresh: bool = False,
+) -> dict:
+    """A project's chats, files, instructions, and next-step highlights.
+
+    Highlights are cached with a count of what they were generated from,
+    so they regenerate only when the project has actually moved on -
+    otherwise opening a project would cost an LLM call every time.
+    """
+    project = projects.get(project_id)
+    if project is None:
+        return {"error": "no such project"}
+
+    entries = project_entries(store, chats, project_id)
+    usable = [e for e in entries if e.kind != "advice"]
+    stale = len(usable) != project.advice_basis_count
+
+    highlights = highlights_from_json(project.advice)
+    error = ""
+    if usable and (refresh or stale or not highlights):
+        try:
+            generated = generate_highlights(llm, usable, project.instructions)
+            projects.save_advice(project_id, highlights_to_json(generated), len(usable))
+            project = projects.get(project_id) or project
+            highlights = generated
+        except (LLMError, ValueError) as exc:
+            # Keep showing the previous highlights rather than blanking
+            # the panel because a refresh failed.
+            error = str(exc)
+
+    conversations = chats.in_project(project_id)
+    return {
+        "id": project.id,
+        "name": project.name,
+        "instructions": project.instructions,
+        "conversations": [_conversation_json(c) for c in conversations],
+        "files": [
+            {"name": e.query.replace("Document: ", ""), "conversation_id": e.conversation_id}
+            for e in entries
+            if e.kind == "document"
+        ],
+        "highlights": [
+            {"headline": h.headline, "detail": h.detail, "source": h.source}
+            for h in highlights
+        ],
+        "highlights_generated_at": project.advice_generated_at,
+        "highlights_error": error,
+        "entry_count": len(usable),
+    }
+
+
 def handle_create_project(projects: ProjectStore, name: str) -> dict:
     try:
         project = projects.create(name)
@@ -58,8 +129,12 @@ def handle_create_project(projects: ProjectStore, name: str) -> dict:
 
 
 def handle_update_project(projects: ProjectStore, project_id: str, body: dict) -> dict:
+    """Rename and/or set instructions; only supplied fields are applied."""
     try:
-        projects.rename(project_id, str(body.get("name", "")))
+        if "name" in body:
+            projects.rename(project_id, str(body["name"]))
+        if "instructions" in body:
+            projects.set_instructions(project_id, str(body["instructions"]))
     except ValueError as exc:
         return {"error": str(exc)}
     return {"ok": True}
@@ -145,6 +220,7 @@ def handle_ask(
     message: str,
     conversation_id: str = "",
     project_id: str | None = None,
+    projects: ProjectStore | None = None,
 ) -> dict:
     """Answer a question, creating a conversation if this is a new chat."""
     if not message.strip():
@@ -157,11 +233,22 @@ def handle_ask(
         )
         conversation_id = conversation.id
         created_conversation = True
-    elif chats.get(conversation_id) is None:
-        return {"error": "no such conversation"}
+    else:
+        conversation = chats.get(conversation_id)
+        if conversation is None:
+            return {"error": "no such conversation"}
+        project_id = conversation.project_id
+
+    # A chat inside a project inherits that project's instructions.
+    instructions = ""
+    if projects is not None and project_id:
+        project = projects.get(project_id)
+        instructions = project.instructions if project else ""
 
     try:
-        result = researcher.research_and_store(message, conversation_id=conversation_id)
+        result = researcher.research_and_store(
+            message, conversation_id=conversation_id, instructions=instructions
+        )
     except Exception as exc:  # noqa: BLE001 - surfaced in the chat UI
         if created_conversation:
             # Don't leave an empty chat behind when the very first

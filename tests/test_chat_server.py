@@ -21,8 +21,9 @@ class StubResearcher:
         self._error = error
         self.last_conversation_id = None
 
-    def research_and_store(self, query, conversation_id=""):
+    def research_and_store(self, query, conversation_id="", instructions=""):
         self.last_conversation_id = conversation_id
+        self.last_instructions = instructions
         if self._error:
             raise self._error
         return self._result
@@ -268,6 +269,182 @@ def test_deleting_a_project_keeps_its_chats(projects, chats):
 
 def test_creating_a_project_with_a_blank_name_errors(projects):
     assert "error" in api.handle_create_project(projects, "   ")
+
+
+# --- project detail and highlights ------------------------------------
+
+
+HL_JSON = '{"highlights": [{"headline": "Do the thing", "detail": "d", "source": "s"}]}'
+
+
+class HighlightLLM:
+    def __init__(self, text=HL_JSON, error=None):
+        self._text = text
+        self._error = error
+        self.calls = 0
+
+    def complete(self, system, user, max_tokens=800):
+        self.calls += 1
+        if self._error:
+            raise self._error
+        from mindtrail.llm import Completion
+
+        return Completion(text=self._text, tokens=1, model="stub")
+
+
+def test_project_detail_reports_its_chats_and_files(store, chats, projects):
+    project = projects.create("Career")
+    chat = chats.create("c", project_id=project.id)
+    store.add("q", "a", [], conversation_id=chat.id)
+    store.add("Document: cv.pdf", "text", [], kind="document", conversation_id=chat.id)
+
+    data = api.handle_project_detail(
+        store, chats, projects, HighlightLLM(), project.id
+    )
+
+    assert data["name"] == "Career"
+    assert [c["title"] for c in data["conversations"]] == ["c"]
+    assert [f["name"] for f in data["files"]] == ["cv.pdf"]
+
+
+def test_highlights_are_generated_for_a_project_with_content(store, chats, projects):
+    project = projects.create("Career")
+    chat = chats.create("c", project_id=project.id)
+    store.add("q", "a", [], conversation_id=chat.id)
+
+    data = api.handle_project_detail(
+        store, chats, projects, HighlightLLM(), project.id
+    )
+
+    assert [h["headline"] for h in data["highlights"]] == ["Do the thing"]
+
+
+def test_unchanged_projects_reuse_cached_highlights(store, chats, projects):
+    project = projects.create("Career")
+    chat = chats.create("c", project_id=project.id)
+    store.add("q", "a", [], conversation_id=chat.id)
+    llm = HighlightLLM()
+
+    api.handle_project_detail(store, chats, projects, llm, project.id)
+    api.handle_project_detail(store, chats, projects, llm, project.id)
+
+    assert llm.calls == 1, "opening an unchanged project must not cost a second call"
+
+
+def test_new_activity_makes_highlights_regenerate(store, chats, projects):
+    project = projects.create("Career")
+    chat = chats.create("c", project_id=project.id)
+    store.add("q1", "a", [], conversation_id=chat.id)
+    llm = HighlightLLM()
+
+    api.handle_project_detail(store, chats, projects, llm, project.id)
+    store.add("q2", "a", [], conversation_id=chat.id)
+    api.handle_project_detail(store, chats, projects, llm, project.id)
+
+    assert llm.calls == 2
+
+
+def test_refresh_forces_regeneration(store, chats, projects):
+    project = projects.create("Career")
+    chat = chats.create("c", project_id=project.id)
+    store.add("q", "a", [], conversation_id=chat.id)
+    llm = HighlightLLM()
+
+    api.handle_project_detail(store, chats, projects, llm, project.id)
+    api.handle_project_detail(store, chats, projects, llm, project.id, refresh=True)
+
+    assert llm.calls == 2
+
+
+def test_an_empty_project_generates_nothing(store, chats, projects):
+    project = projects.create("Empty")
+    llm = HighlightLLM()
+
+    data = api.handle_project_detail(store, chats, projects, llm, project.id)
+
+    assert data["highlights"] == []
+    assert llm.calls == 0
+
+
+def test_a_failed_refresh_keeps_the_previous_highlights(store, chats, projects):
+    from mindtrail.llm import LLMError
+
+    project = projects.create("Career")
+    chat = chats.create("c", project_id=project.id)
+    store.add("q", "a", [], conversation_id=chat.id)
+    api.handle_project_detail(store, chats, projects, HighlightLLM(), project.id)
+
+    data = api.handle_project_detail(
+        store, chats, projects, HighlightLLM(error=LLMError("rate limited")),
+        project.id, refresh=True,
+    )
+
+    assert [h["headline"] for h in data["highlights"]] == ["Do the thing"]
+    assert "rate limited" in data["highlights_error"]
+
+
+def test_project_detail_of_a_missing_project_errors(store, chats, projects):
+    assert "error" in api.handle_project_detail(
+        store, chats, projects, HighlightLLM(), "nope"
+    )
+
+
+def test_instructions_can_be_saved_and_read_back(store, chats, projects):
+    project = projects.create("Career")
+
+    api.handle_update_project(projects, project.id, {"instructions": "no AI refs"})
+
+    data = api.handle_project_detail(
+        store, chats, projects, HighlightLLM(), project.id
+    )
+    assert data["instructions"] == "no AI refs"
+
+
+def test_updating_instructions_does_not_clear_the_name(projects):
+    project = projects.create("Career")
+
+    api.handle_update_project(projects, project.id, {"instructions": "x"})
+
+    assert projects.get(project.id).name == "Career"
+
+
+# --- instructions reach the researcher --------------------------------
+
+
+def test_a_chat_in_a_project_passes_its_instructions_to_research(store, chats, projects):
+    class CapturingResearcher:
+        def __init__(self):
+            self.instructions = None
+
+        def research_and_store(self, query, conversation_id="", instructions=""):
+            self.instructions = instructions
+            return a_result()
+
+    project = projects.create("Career")
+    projects.set_instructions(project.id, "never cite AI")
+    chat = chats.create("c", project_id=project.id)
+    researcher = CapturingResearcher()
+
+    api.handle_ask(researcher, store, chats, "q", chat.id, None, projects)
+
+    assert researcher.instructions == "never cite AI"
+
+
+def test_a_chat_outside_a_project_gets_no_instructions(store, chats, projects):
+    class CapturingResearcher:
+        def __init__(self):
+            self.instructions = None
+
+        def research_and_store(self, query, conversation_id="", instructions=""):
+            self.instructions = instructions
+            return a_result()
+
+    chat = chats.create("loose")
+    researcher = CapturingResearcher()
+
+    api.handle_ask(researcher, store, chats, "q", chat.id, None, projects)
+
+    assert researcher.instructions == ""
 
 
 # --- dictation and upload --------------------------------------------

@@ -123,6 +123,44 @@ CHAT_HTML = """<!doctype html>
     .empty-state { color: #6a6a6a; font-size: 0.9rem; text-align: center;
                    margin-top: 22vh; line-height: 1.7; }
 
+    /* --- project detail --- */
+    #project-view { flex: 1; overflow-y: auto; display: none; padding: 1.75rem 2rem; }
+    #project-view.open { display: block; }
+    .proj-layout { display: flex; gap: 1.75rem; max-width: 1180px; margin: 0 auto;
+                   align-items: flex-start; }
+    .proj-main { flex: 1; min-width: 0; }
+    .proj-rail { width: 330px; flex-shrink: 0; }
+    .proj-title { font-size: 1.55rem; font-weight: 600; margin: 0 0 1.25rem; }
+    .card { background: #1f1f1f; border: 1px solid #2e2e2e; border-radius: 10px;
+            padding: 1rem 1.1rem; margin-bottom: 1rem; }
+    .card h4 { margin: 0 0 0.7rem; font-size: 0.72rem; text-transform: uppercase;
+               letter-spacing: 0.06em; color: #8a8a8a; display: flex;
+               align-items: center; gap: 0.4rem; }
+    .card h4 .spacer { flex: 1; }
+    .card-btn { border: none; background: transparent; color: #8a8a8a; cursor: pointer;
+                font-size: 0.8rem; padding: 0.15rem 0.4rem; border-radius: 5px; }
+    .card-btn:hover { background: #2c2c2c; color: #fff; }
+    .hl { padding: 0.65rem 0; border-bottom: 1px solid #292929; }
+    .hl:last-child { border-bottom: none; padding-bottom: 0; }
+    .hl-head { font-size: 0.88rem; font-weight: 600; color: #ececec;
+               margin-bottom: 0.2rem; }
+    .hl-detail { font-size: 0.82rem; color: #a5a5a5; line-height: 1.5; }
+    .hl-source { font-size: 0.73rem; color: #6f6f6f; margin-top: 0.25rem; }
+    .stamp { font-size: 0.72rem; color: #6a6a6a; margin-top: 0.6rem; }
+    .instructions-box { width: 100%; min-height: 84px; resize: vertical;
+                        background: #191919; border: 1px solid #333; border-radius: 8px;
+                        color: #dcdcdc; font-size: 0.84rem; padding: 0.6rem 0.7rem;
+                        font-family: inherit; line-height: 1.5; outline: none; }
+    .instructions-box:focus { border-color: #4f46e5; }
+    .proj-chat { display: flex; align-items: center; gap: 0.5rem; padding: 0.7rem 0.2rem;
+                 border-bottom: 1px solid #262626; cursor: pointer; font-size: 0.9rem; }
+    .proj-chat:hover { color: #fff; }
+    .proj-chat .when { color: #757575; font-size: 0.78rem; }
+    .file-chip { display: inline-block; background: #262626; border: 1px solid #333;
+                 border-radius: 6px; padding: 0.3rem 0.6rem; font-size: 0.8rem;
+                 color: #c5c5c5; margin: 0.2rem 0.3rem 0.2rem 0; }
+    .muted { color: #6f6f6f; font-size: 0.84rem; }
+
     #composer { padding: 1rem 1.5rem 1.5rem; flex-shrink: 0; }
     form { max-width: 760px; margin: 0 auto; display: flex; align-items: center;
            gap: 0.4rem; background: #212121; border: 1px solid #333; border-radius: 26px;
@@ -155,6 +193,7 @@ CHAT_HTML = """<!doctype html>
         <div id="breadcrumb">New chat</div>
       </div>
       <div id="log"></div>
+      <div id="project-view"></div>
       <div id="composer">
         <form id="form">
           <button type="button" class="icon-btn" id="attach" title="Upload a PDF">+</button>
@@ -175,6 +214,8 @@ CHAT_HTML = """<!doctype html>
   const log = $('log'), input = $('input'), send = $('send'), status = $('status');
   const menu = $('menu'), overlay = $('overlay');
   let current = null;
+  let currentProject = null;
+  let pendingProject = null;   // project a not-yet-created chat belongs to
   let sidebar = {projects: [], unfiled: []};
   let projectsOpen = false;
   const openProjects = new Set();
@@ -346,6 +387,9 @@ CHAT_HTML = """<!doctype html>
         const name = document.createElement('span');
         name.style.flex = '1';
         name.textContent = p.name;
+        // Clicking the name opens the project screen; the caret to its
+        // left is what expands the chat list inline.
+        name.onclick = e => { e.stopPropagation(); openProject(p.id); };
         head.appendChild(name);
         const btn = document.createElement('button');
         btn.className = 'menu-btn';
@@ -589,6 +633,9 @@ CHAT_HTML = """<!doctype html>
   async function openConversation(id) {
     const data = await api('/api/conversations/' + id);
     if (data.error) { setStatus(data.error); return; }
+    showChatView();
+    currentProject = null;
+    pendingProject = null;
     current = data.conversation;
     log.innerHTML = '';
     data.entries.forEach(e => {
@@ -605,10 +652,214 @@ CHAT_HTML = """<!doctype html>
 
   function newChat() {
     current = null;
+    currentProject = null;
+    pendingProject = null;
+    showChatView();
     showEmptyState();
     setBreadcrumb();
     recordVisit(null);
     renderTree();
+    input.focus();
+  }
+
+  // ---------- project detail ----------
+
+  function relTime(iso) {
+    if (!iso) return '';
+    const secs = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (secs < 90) return 'just now';
+    if (secs < 3600) return Math.round(secs / 60) + ' min ago';
+    if (secs < 86400) return Math.round(secs / 3600) + ' hours ago';
+    return Math.round(secs / 86400) + ' days ago';
+  }
+
+  function card(title, buttonLabel, onClick) {
+    const c = document.createElement('div');
+    c.className = 'card';
+    const h = document.createElement('h4');
+    h.appendChild(document.createTextNode(title));
+    const sp = document.createElement('span'); sp.className = 'spacer';
+    h.appendChild(sp);
+    if (buttonLabel) {
+      const b = document.createElement('button');
+      b.className = 'card-btn';
+      b.textContent = buttonLabel;
+      b.onclick = onClick;
+      h.appendChild(b);
+    }
+    c.appendChild(h);
+    return c;
+  }
+
+  function showChatView() {
+    $('project-view').classList.remove('open');
+    log.style.display = '';
+    $('composer').style.display = '';
+  }
+
+  function showProjectView() {
+    $('project-view').classList.add('open');
+    log.style.display = 'none';
+    $('composer').style.display = 'none';
+  }
+
+  async function openProject(id, opts) {
+    const refresh = opts && opts.refresh;
+    currentProject = id;
+    current = null;
+    showProjectView();
+
+    const view = $('project-view');
+    view.innerHTML = '<div class="muted">Loading project\\u2026</div>';
+    $('breadcrumb').textContent = 'Projects';
+
+    const data = await api('/api/projects/' + id + (refresh ? '?refresh=1' : ''));
+    if (data.error) { view.innerHTML = ''; setStatus(data.error); return; }
+
+    $('breadcrumb').innerHTML = '';
+    $('breadcrumb').appendChild(document.createTextNode('Projects / '));
+    const b = document.createElement('b');
+    b.textContent = data.name;
+    $('breadcrumb').appendChild(b);
+
+    view.innerHTML = '';
+    const layout = document.createElement('div');
+    layout.className = 'proj-layout';
+
+    // --- left: title, new chat, conversations ---
+    const main = document.createElement('div');
+    main.className = 'proj-main';
+    const title = document.createElement('div');
+    title.className = 'proj-title';
+    title.textContent = data.name;
+    main.appendChild(title);
+
+    const startCard = card('Start a chat in this project', null, null);
+    const startBtn = document.createElement('button');
+    startBtn.className = 'send';
+    startBtn.textContent = '+ New chat here';
+    startBtn.onclick = () => newChatInProject(id, data.name);
+    startCard.appendChild(startBtn);
+    main.appendChild(startCard);
+
+    const chatsCard = card('Chats', null, null);
+    if (!data.conversations.length) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'No chats yet. Start one above, or move an existing chat here.';
+      chatsCard.appendChild(p);
+    }
+    data.conversations.forEach(c => {
+      const row = document.createElement('div');
+      row.className = 'proj-chat';
+      const t = document.createElement('span');
+      t.style.flex = '1';
+      t.textContent = (c.pinned ? '\\ud83d\\udccc  ' : '') + c.title;
+      row.appendChild(t);
+      const w = document.createElement('span');
+      w.className = 'when';
+      w.textContent = relTime(c.updated_at);
+      row.appendChild(w);
+      row.onclick = () => { showChatView(); openConversation(c.id); };
+      chatsCard.appendChild(row);
+    });
+    main.appendChild(chatsCard);
+    layout.appendChild(main);
+
+    // --- right rail: highlights, instructions, files ---
+    const rail = document.createElement('div');
+    rail.className = 'proj-rail';
+
+    const hlCard = card('What\\u2019s next', '\\u21bb Refresh',
+      () => openProject(id, {refresh: true}));
+    if (data.highlights_error) {
+      const e = document.createElement('div');
+      e.className = 'muted';
+      e.textContent = data.highlights_error;
+      hlCard.appendChild(e);
+    }
+    if (!data.highlights.length && !data.highlights_error) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = data.entry_count
+        ? 'Nothing to suggest yet.'
+        : 'Add chats or a document, and suggestions appear here.';
+      hlCard.appendChild(p);
+    }
+    data.highlights.forEach(h => {
+      const item = document.createElement('div');
+      item.className = 'hl';
+      const head = document.createElement('div');
+      head.className = 'hl-head';
+      head.textContent = h.headline;
+      item.appendChild(head);
+      if (h.detail) {
+        const d = document.createElement('div');
+        d.className = 'hl-detail';
+        d.textContent = h.detail;
+        item.appendChild(d);
+      }
+      if (h.source) {
+        const s = document.createElement('div');
+        s.className = 'hl-source';
+        // The prompt labels entries "[RESEARCH] ..." so the model can tell
+        // documents from chats; that tag is internal and reads as noise here.
+        s.textContent = 'from: ' + h.source.replace(/^\\[[A-Z]+\\]\\s*/, '');
+        item.appendChild(s);
+      }
+      hlCard.appendChild(item);
+    });
+    if (data.highlights_generated_at) {
+      const stamp = document.createElement('div');
+      stamp.className = 'stamp';
+      stamp.textContent = 'Updated ' + relTime(data.highlights_generated_at) +
+                          ' \\u00b7 based on ' + data.entry_count + ' item(s)';
+      hlCard.appendChild(stamp);
+    }
+    rail.appendChild(hlCard);
+
+    const instrCard = card('Instructions', 'Save', null);
+    const box = document.createElement('textarea');
+    box.className = 'instructions-box';
+    box.value = data.instructions || '';
+    box.placeholder = 'Guidance applied to every answer in this project.';
+    instrCard.appendChild(box);
+    instrCard.querySelector('.card-btn').onclick = async () => {
+      await jsonSend('/api/projects/' + id, {instructions: box.value}, 'PATCH');
+      setStatus('Instructions saved.');
+    };
+    rail.appendChild(instrCard);
+
+    const filesCard = card('Files', null, null);
+    if (!data.files.length) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'No documents yet.';
+      filesCard.appendChild(p);
+    }
+    data.files.forEach(f => {
+      const chip = document.createElement('span');
+      chip.className = 'file-chip';
+      chip.textContent = f.name;
+      chip.onclick = () => { showChatView(); openConversation(f.conversation_id); };
+      filesCard.appendChild(chip);
+    });
+    rail.appendChild(filesCard);
+
+    layout.appendChild(rail);
+    view.appendChild(layout);
+  }
+
+  function newChatInProject(projectId, projectName) {
+    showChatView();
+    current = null;
+    pendingProject = {id: projectId, name: projectName};
+    showEmptyState();
+    $('breadcrumb').innerHTML = '';
+    $('breadcrumb').appendChild(document.createTextNode(projectName + ' / '));
+    const b = document.createElement('b');
+    b.textContent = 'New chat';
+    $('breadcrumb').appendChild(b);
     input.focus();
   }
 
@@ -629,7 +880,9 @@ CHAT_HTML = """<!doctype html>
 
     try {
       const data = await jsonSend('/api/ask', {
-        message, conversation_id: current ? current.id : ''
+        message,
+        conversation_id: current ? current.id : '',
+        project_id: (!current && pendingProject) ? pendingProject.id : null
       });
       pending.classList.remove('pending');
       if (data.error) { pending.textContent = 'Error: ' + data.error; }
@@ -637,7 +890,12 @@ CHAT_HTML = """<!doctype html>
         pending.textContent = data.answer;
         metaBlock(t, data.recalled, data.sources);
         if (!current) {
-          current = {id: data.conversation_id, title: message.slice(0, 60), project_id: null};
+          current = {
+            id: data.conversation_id,
+            title: message.slice(0, 60),
+            project_id: pendingProject ? pendingProject.id : null
+          };
+          pendingProject = null;
           recordVisit(data.conversation_id);
         }
         setBreadcrumb();

@@ -128,12 +128,22 @@ class Researcher:
         rewritten = completion.text.strip().strip('"')
         return rewritten[:REWRITE_MAX_CHARS] or query
 
-    def research(self, query: str, conversation_id: str = "") -> Research:
+    def research(
+        self, query: str, conversation_id: str = "", instructions: str = ""
+    ) -> Research:
         recalled = self._store.search(query, k=config.RELATED_MEMORIES_TO_INJECT)
         history = self._store.by_conversation(conversation_id)
         texts, urls = _gather_pages(self._provider, self._search_query(query, history))
 
+        # Project instructions lead the prompt so they frame everything
+        # after them, rather than trailing a wall of source text.
+        preamble = (
+            f"INSTRUCTIONS FOR THIS PROJECT (follow these):\n{instructions}\n\n"
+            if instructions.strip()
+            else ""
+        )
         prompt = (
+            f"{preamble}"
             f"{_format_conversation(history)}"
             f"{_format_prior(recalled)}QUESTION: {query}\n\n"
             f"SOURCES:\n" + "\n\n".join(texts)
@@ -148,8 +158,12 @@ class Researcher:
             tokens=completion.tokens,
         )
 
-    def research_and_store(self, query: str, conversation_id: str = "") -> Research:
-        result = self.research(query, conversation_id=conversation_id)
+    def research_and_store(
+        self, query: str, conversation_id: str = "", instructions: str = ""
+    ) -> Research:
+        result = self.research(
+            query, conversation_id=conversation_id, instructions=instructions
+        )
         topic, key_facts = self._assign_topic(result)
         self._store.add(
             result.query,
