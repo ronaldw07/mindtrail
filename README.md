@@ -51,6 +51,18 @@ Opens a browser chat window at `localhost:8765`. The sidebar holds
 - **+ upload a PDF** into the open chat, parsed and stored as knowledge
   you can then ask about.
 
+Clicking a project name opens its own screen, with three things beside
+its chats:
+
+- **What's next** — three to five concrete actions drawn from that
+  project's chats and files, each citing what it came from. Regenerates
+  when the project has actually moved on, so opening an unchanged
+  project costs nothing and renders from cache.
+- **Instructions** — free text applied to every answer in that project.
+  Writing "cite only primary sources" there changes the research, rather
+  than being a note to yourself.
+- **Files** — documents uploaded into that project.
+
 Follow-ups within a chat carry that conversation's earlier turns, so
 "what are its drawbacks?" resolves against what you were just discussing
 rather than being searched literally.
@@ -250,7 +262,8 @@ mindtrail web
 | `mindtrail/web/chat_ui.py` | Chat page markup, styles, and client script |
 | `mindtrail/organize/` | Projects and conversations in SQLite, plus the backfill |
 | `mindtrail/ingest/documents.py` | PDF text extraction, local, no vision model available |
-| `mindtrail/advice/planner.py` | Grounded next-steps plan from stored documents/notes/research |
+| `mindtrail/advice/planner.py` | Grounded next-steps plan across everything stored |
+| `mindtrail/advice/highlights.py` | Per-project "what's next", cached with staleness detection |
 | `mindtrail/predict/next_query.py` | Three ranked next-question candidates (not validated — see Results) |
 | `mindtrail/llm.py` | Groq client with rate-limit backoff |
 | `eval/` | Retrieval and prediction harness, plus the LLM judge |
@@ -358,7 +371,7 @@ whenever you want it current.
 
 ## Tests
 
-216 tests, no network and no API key required — search, fetch, and the model
+247 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.
