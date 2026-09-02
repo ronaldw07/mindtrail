@@ -30,6 +30,9 @@ EVAL_TEMPERATURE = 0.0
 CHROMA_DIR = os.getenv("MINDTRAIL_CHROMA_DIR", "chroma_data")
 COLLECTION_NAME = "research"
 
-SEARCH_RESULTS_PER_QUERY = 4
-PAGES_FETCHED_PER_QUERY = 3
+SEARCH_RESULTS_PER_QUERY = 6
+# Four sources rather than three: synthesis quality is limited more by
+# how much material it has than by the prompt. Each page is truncated, so
+# this stays inside the free tier's per-minute token budget.
+PAGES_FETCHED_PER_QUERY = 4
 RELATED_MEMORIES_TO_INJECT = 3

@@ -114,8 +114,28 @@ CHAT_HTML = """<!doctype html>
     .user-line { display: flex; justify-content: flex-end; margin-bottom: 0.6rem; }
     .user-line span { background: #2a2a2a; padding: 0.5rem 0.9rem; border-radius: 14px;
                        max-width: 80%; white-space: pre-wrap; font-size: 0.95rem; }
-    .assistant-text { white-space: pre-wrap; line-height: 1.6; font-size: 0.97rem; }
-    .assistant-text.pending { color: #888; font-style: italic; }
+    .assistant-text { line-height: 1.65; font-size: 0.97rem; }
+    .assistant-text.pending { color: #888; font-style: italic; white-space: pre-wrap; }
+    .assistant-text p { margin: 0 0 0.85rem; }
+    .assistant-text p:last-child { margin-bottom: 0; }
+    .assistant-text h3, .assistant-text h4, .assistant-text h5 {
+      margin: 1.15rem 0 0.5rem; font-size: 1rem; font-weight: 600; color: #f4f4f4; }
+    .assistant-text h3:first-child, .assistant-text h4:first-child { margin-top: 0; }
+    .assistant-text ul, .assistant-text ol { margin: 0 0 0.85rem; padding-left: 1.35rem; }
+    .assistant-text li { margin-bottom: 0.35rem; }
+    .assistant-text strong { color: #fff; font-weight: 600; }
+    .assistant-text code { background: #2a2a2a; border-radius: 4px; padding: 0.1rem 0.35rem;
+                           font-size: 0.88em; font-family: ui-monospace, monospace; }
+    .assistant-text a { color: #8ab4f8; }
+    .assistant-text blockquote { margin: 0 0 0.85rem; padding-left: 0.8rem;
+                                 border-left: 3px solid #3a3a3a; color: #b8b8b8; }
+    .assistant-text table { border-collapse: collapse; width: 100%;
+                            margin: 0 0 0.95rem; font-size: 0.9rem; display: block;
+                            overflow-x: auto; }
+    .assistant-text th, .assistant-text td { border: 1px solid #333; padding: 0.45rem 0.6rem;
+                                             text-align: left; vertical-align: top; }
+    .assistant-text th { background: #242424; color: #f0f0f0; font-weight: 600; }
+    .assistant-text hr { border: none; border-top: 1px solid #2f2f2f; margin: 1.1rem 0; }
     .meta { margin-top: 0.6rem; font-size: 0.78rem; color: #888; }
     .meta a { color: #8ab4f8; display: block; text-decoration: none; }
     .meta a:hover { text-decoration: underline; }
@@ -317,6 +337,94 @@ CHAT_HTML = """<!doctype html>
       if (field) { field.focus(); field.select(); }
       else ok.focus();
     });
+  }
+
+  // ---------- markdown ----------
+  // Answers come back as markdown. Escaping happens first and the
+  // converter only ever emits a fixed set of tags, so model output (which
+  // includes text fetched from arbitrary web pages) cannot inject markup.
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+  }
+
+  function inlineMarkdown(t) {
+    return t
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
+      .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\\*([^*\\n]+)\\*/g, '$1<em>$2</em>')
+      .replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^)\\s]+)\\)/g,
+               '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  }
+
+  const TABLE_ROW = /^\\s*\\|(.+)\\|\\s*$/;
+  const TABLE_RULE = /^\\s*\\|?[\\s:-]*-[\\s:|-]*$/;
+
+  function tableCells(line) {
+    return line.replace(/^\\s*\\|/, '').replace(/\\|\\s*$/, '')
+               .split('|').map(c => c.trim());
+  }
+
+  function renderMarkdown(src) {
+    const lines = escapeHtml(src || '').split('\\n');
+    let html = '', list = null;
+    const closeList = () => { if (list) { html += '</' + list + '>'; list = null; } };
+
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      const line = raw.replace(/\\s+$/, '');
+      if (!line.trim()) { closeList(); continue; }
+
+      // Comparison answers come back as pipe tables; without this they
+      // render as a wall of literal pipes.
+      if (TABLE_ROW.test(line) && i + 1 < lines.length && TABLE_RULE.test(lines[i + 1])) {
+        closeList();
+        const head = tableCells(line);
+        html += '<table><thead><tr>' +
+                head.map(c => '<th>' + inlineMarkdown(c) + '</th>').join('') +
+                '</tr></thead><tbody>';
+        i += 2;
+        while (i < lines.length && TABLE_ROW.test(lines[i])) {
+          html += '<tr>' +
+                  tableCells(lines[i]).map(c => '<td>' + inlineMarkdown(c) + '</td>').join('') +
+                  '</tr>';
+          i++;
+        }
+        i--;
+        html += '</tbody></table>';
+        continue;
+      }
+
+      let m;
+      if ((m = line.match(/^(#{1,5})\\s+(.*)$/))) {
+        closeList();
+        const level = Math.min(m[1].length + 2, 6);
+        html += '<h' + level + '>' + inlineMarkdown(m[2]) + '</h' + level + '>';
+      } else if ((m = line.match(/^\\s*&gt;\\s?(.*)$/))) {
+        closeList();
+        html += '<blockquote>' + inlineMarkdown(m[1]) + '</blockquote>';
+      } else if ((m = line.match(/^\\s*[-*+]\\s+(.*)$/))) {
+        if (list !== 'ul') { closeList(); html += '<ul>'; list = 'ul'; }
+        html += '<li>' + inlineMarkdown(m[1]) + '</li>';
+      } else if ((m = line.match(/^\\s*\\d+[.)]\\s+(.*)$/))) {
+        if (list !== 'ol') { closeList(); html += '<ol>'; list = 'ol'; }
+        html += '<li>' + inlineMarkdown(m[1]) + '</li>';
+      } else {
+        closeList();
+        html += '<p>' + inlineMarkdown(line) + '</p>';
+      }
+    }
+    closeList();
+    return html;
+  }
+
+  function setMarkdown(el, text) {
+    el.classList.remove('pending');
+    el.innerHTML = renderMarkdown(text);
   }
 
   // ---------- toasts ----------
@@ -674,13 +782,22 @@ CHAT_HTML = """<!doctype html>
     const s = document.createElement('span'); s.textContent = text;
     row.appendChild(s); c.appendChild(row);
   }
-  function assistantText(c, text, kind) {
+  function assistantText(c, text, kind, opts) {
     if (kind && kind !== 'research') {
       const t = document.createElement('div'); t.className = 'kind-tag';
       t.textContent = kind; c.appendChild(t);
     }
     const d = document.createElement('div'); d.className = 'assistant-text';
-    d.textContent = text; c.appendChild(d); return d;
+    // Uploaded documents are raw extracted text, not markdown, so they
+    // are shown verbatim rather than run through the converter.
+    if (opts && opts.plain) {
+      d.style.whiteSpace = 'pre-wrap';
+      d.textContent = text;
+    } else {
+      setMarkdown(d, text);
+    }
+    c.appendChild(d);
+    return d;
   }
   function metaBlock(c, recalled, sources) {
     if (!(recalled || []).length && !(sources || []).length) return;
@@ -773,7 +890,7 @@ CHAT_HTML = """<!doctype html>
     data.entries.forEach(e => {
       const t = turn();
       userLine(t, e.query);
-      assistantText(t, e.summary, e.kind);
+      assistantText(t, e.summary, e.kind, {plain: e.kind === 'document'});
       metaBlock(t, [], e.sources);
     });
     setBreadcrumb();
@@ -1090,7 +1207,7 @@ CHAT_HTML = """<!doctype html>
       pending.classList.remove('pending');
       if (data.error) { pending.textContent = 'Error: ' + data.error; }
       else {
-        pending.textContent = data.answer;
+        setMarkdown(pending, data.answer);
         metaBlock(t, data.recalled, data.sources);
         if (!current) {
           current = {
