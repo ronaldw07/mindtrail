@@ -39,10 +39,12 @@ running — the command regenerates the file and opens it.
 $ mindtrail chat
 ```
 
-Opens a browser chat window at `localhost:8765`. Type a question, get an
-answer with sources and any recalled prior research shown inline — same
-researcher as `ask`, just a chat interface instead of one-shot terminal
-commands. Runs until you `Ctrl+C` it.
+Opens a browser chat window at `localhost:8765`, with a sidebar listing
+every topic (the same auto-labeling `web` groups by) and a search box.
+Click a topic to load its history as a conversation thread and keep
+asking; "+ New" starts fresh. Type a question, get an answer with sources
+and recalled prior research shown inline — same researcher as `ask`, just
+a chat interface. Runs until you `Ctrl+C` it.
 
 ```
 $ mindtrail docs resume.pdf
@@ -332,7 +334,7 @@ whenever you want it current.
 
 ## Tests
 
-151 tests, no network and no API key required — search, fetch, and the model
+159 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.
