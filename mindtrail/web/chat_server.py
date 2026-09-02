@@ -104,6 +104,18 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         deps.store, deps.chats, self._tail("/api/conversations/")
                     )
                 )
+            elif path.startswith("/api/projects/"):
+                refresh = parse_qs(urlparse(self.path).query).get("refresh", [""])[0]
+                self._json(
+                    api.handle_project_detail(
+                        deps.store,
+                        deps.chats,
+                        deps.projects,
+                        deps.llm,
+                        self._tail("/api/projects/"),
+                        refresh == "1",
+                    )
+                )
             else:
                 self._not_found()
 
@@ -124,6 +136,7 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         str(body.get("message", "")),
                         str(body.get("conversation_id", "") or ""),
                         body.get("project_id") or None,
+                        deps.projects,
                     )
                 )
             elif path == "/api/projects":
