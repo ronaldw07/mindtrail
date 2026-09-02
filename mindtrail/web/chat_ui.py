@@ -26,6 +26,10 @@ CHAT_HTML = """<!doctype html>
     #sidebar.collapsed { width: 0; border-right-width: 0; }
     .brand { padding: 1rem 1rem 0.75rem; font-weight: 600; letter-spacing: 0.01em;
              white-space: nowrap; }
+    .side-btn { display: block; width: calc(100% - 1rem); margin: 0 0.5rem 0.5rem;
+                text-align: left; padding: 0.45rem 0.6rem; border-radius: 6px; border: none;
+                background: transparent; color: #b8b8b8; font-size: 0.85rem; cursor: pointer; }
+    .side-btn:hover { background: #212121; color: #fff; }
     #tree { flex: 1; overflow-y: auto; padding: 0 0.5rem 1.5rem; }
 
     .section { display: flex; align-items: center; gap: 0.35rem;
@@ -145,8 +149,10 @@ CHAT_HTML = """<!doctype html>
                    margin-top: 22vh; line-height: 1.7; }
 
     /* --- project detail --- */
-    #project-view { flex: 1; overflow-y: auto; display: none; padding: 1.75rem 2rem; }
-    #project-view.open { display: block; }
+    #project-view, #profile-view { flex: 1; overflow-y: auto; display: none; padding: 1.75rem 2rem; }
+    #project-view.open, #profile-view.open { display: block; }
+    #roadmap-view { flex: 1; display: none; overflow: hidden; position: relative; }
+    #roadmap-view.open { display: block; }
     .proj-layout { display: flex; gap: 1.75rem; max-width: 1180px; margin: 0 auto;
                    align-items: flex-start; }
     .proj-main { flex: 1; min-width: 0; }
@@ -181,6 +187,47 @@ CHAT_HTML = """<!doctype html>
                  border-radius: 6px; padding: 0.3rem 0.6rem; font-size: 0.8rem;
                  color: #c5c5c5; margin: 0.2rem 0.3rem 0.2rem 0; }
     .muted { color: #6f6f6f; font-size: 0.84rem; }
+
+    /* --- roadmap canvas --- */
+    #roadmap-top { display: flex; align-items: center; gap: 0.6rem; padding: 0.8rem 1.25rem;
+                   border-bottom: 1px solid #2a2a2a; }
+    #roadmap-top .goal { flex: 1; font-size: 0.92rem; font-weight: 600; }
+    #canvas-scroll { position: absolute; inset: 0; top: 49px; overflow: auto; }
+    #canvas { position: relative; width: 2400px; height: 1600px; }
+    #canvas svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                  pointer-events: none; }
+    #canvas svg path { fill: none; stroke: #3d3d3d; stroke-width: 1.5; }
+    .node { position: absolute; width: 220px; background: #212121; border: 1px solid #3a3a3a;
+            border-radius: 10px; padding: 0.7rem 0.85rem; cursor: grab; font-size: 0.85rem;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.3); user-select: none; }
+    .node:active { cursor: grabbing; }
+    .node.proposed { border-style: dashed; opacity: 0.85; }
+    .node.accepted { border-color: #4f46e5; }
+    .node.done { border-color: #2f9e5c; }
+    .node.done .node-title { text-decoration: line-through; color: #8fae9c; }
+    .node.rejected { display: none; }
+    .node-title { font-weight: 600; color: #ececec; margin-bottom: 0.3rem; }
+    .node-detail { color: #a5a5a5; font-size: 0.78rem; line-height: 1.4; margin-bottom: 0.4rem; }
+    .node-note { font-size: 0.76rem; color: #cdd8ff; background: #1e2340; border-radius: 6px;
+                 padding: 0.3rem 0.5rem; margin-bottom: 0.4rem; }
+    .node-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .node-actions button { font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 5px;
+                            border: 1px solid #3a3a3a; background: #2a2a2a; color: #ccc;
+                            cursor: pointer; }
+    .node-actions button:hover { background: #333; color: #fff; }
+    .node-actions button.accept:hover { border-color: #4f46e5; }
+    .node-actions button.reject:hover { border-color: #b91c1c; }
+    #roadmap-empty { padding: 2rem; max-width: 480px; }
+    #roadmap-empty input { width: 100%; padding: 0.6rem 0.75rem; border-radius: 8px;
+                            border: 1px solid #333; background: #191919; color: #ececec;
+                            font-size: 0.9rem; margin: 0.6rem 0; }
+
+    /* --- profile view --- */
+    #profile-view textarea { width: 100%; min-height: 220px; background: #191919;
+                             border: 1px solid #333; border-radius: 8px; color: #dcdcdc;
+                             font-size: 0.9rem; padding: 0.8rem; font-family: inherit;
+                             line-height: 1.55; resize: vertical; outline: none; }
+    #profile-view textarea:focus { border-color: #4f46e5; }
 
     /* --- priority on highlights --- */
     .hl.now { border-left: 3px solid #4f8ef7; padding-left: 0.65rem; }
@@ -231,6 +278,7 @@ CHAT_HTML = """<!doctype html>
   <div id="app">
     <aside id="sidebar">
       <div class="brand">mindtrail</div>
+      <button class="side-btn" id="open-profile">&#128100; Profile</button>
       <div id="tree"></div>
     </aside>
     <main>
@@ -242,6 +290,8 @@ CHAT_HTML = """<!doctype html>
       </div>
       <div id="log"></div>
       <div id="project-view"></div>
+      <div id="roadmap-view"></div>
+      <div id="profile-view"></div>
       <div id="composer">
         <form id="form">
           <button type="button" class="icon-btn" id="attach" title="Upload a PDF">+</button>
@@ -940,17 +990,18 @@ CHAT_HTML = """<!doctype html>
     return c;
   }
 
-  function showChatView() {
-    $('project-view').classList.remove('open');
-    log.style.display = '';
-    $('composer').style.display = '';
+  function setActiveView(name) {
+    $('project-view').classList.toggle('open', name === 'project');
+    $('roadmap-view').classList.toggle('open', name === 'roadmap');
+    $('profile-view').classList.toggle('open', name === 'profile');
+    log.style.display = name === 'chat' ? '' : 'none';
+    $('composer').style.display = name === 'chat' ? '' : 'none';
   }
 
-  function showProjectView() {
-    $('project-view').classList.add('open');
-    log.style.display = 'none';
-    $('composer').style.display = 'none';
-  }
+  function showChatView() { setActiveView('chat'); }
+  function showProjectView() { setActiveView('project'); }
+  function showRoadmapView() { setActiveView('roadmap'); }
+  function showProfileView() { setActiveView('profile'); }
 
   async function openProject(id, opts) {
     opts = opts || {};
@@ -1042,6 +1093,44 @@ CHAT_HTML = """<!doctype html>
     });
     fillHighlights(hlCard, data, id);
     rail.appendChild(hlCard);
+
+    const roadmapCard = card('Roadmap', null, null);
+    const rmData = await api('/api/roadmap/' + id);
+    if (!rmData.roadmap) {
+      const goalInput = document.createElement('input');
+      goalInput.placeholder = 'What are you working toward?';
+      goalInput.style.cssText = 'width:100%;padding:0.5rem 0.65rem;border-radius:8px;' +
+        'border:1px solid #333;background:#191919;color:#ececec;font-size:0.85rem;' +
+        'margin:0.5rem 0;';
+      roadmapCard.appendChild(goalInput);
+      const genBtn = document.createElement('button');
+      genBtn.className = 'send';
+      genBtn.textContent = 'Generate roadmap';
+      genBtn.onclick = async () => {
+        const goal = goalInput.value.trim();
+        if (!goal) { toast('Enter a goal first', {error: true}); return; }
+        genBtn.disabled = true;
+        genBtn.textContent = 'Generating\\u2026';
+        const res = await jsonSend('/api/roadmap/' + id + '/generate', {goal});
+        genBtn.disabled = false;
+        genBtn.textContent = 'Generate roadmap';
+        if (res.error) { toast(res.error, {error: true}); return; }
+        openRoadmapView(id, data.name);
+      };
+      roadmapCard.appendChild(genBtn);
+    } else {
+      const summary = document.createElement('div');
+      summary.className = 'muted';
+      summary.textContent = rmData.roadmap.goal;
+      roadmapCard.appendChild(summary);
+      const openBtn = document.createElement('button');
+      openBtn.className = 'send';
+      openBtn.style.marginTop = '0.5rem';
+      openBtn.textContent = 'Open roadmap';
+      openBtn.onclick = () => openRoadmapView(id, data.name);
+      roadmapCard.appendChild(openBtn);
+    }
+    rail.appendChild(roadmapCard);
 
     const instrCard = card('Instructions', null, null);
     const box = document.createElement('textarea');
@@ -1206,6 +1295,327 @@ CHAT_HTML = """<!doctype html>
     $('breadcrumb').appendChild(b);
     input.focus();
   }
+
+  // ---------- roadmap ----------
+
+  async function openRoadmapView(projectId, projectName) {
+    currentProject = projectId;
+    current = null;
+    showRoadmapView();
+    $('breadcrumb').innerHTML = '';
+    $('breadcrumb').appendChild(document.createTextNode(projectName + ' / '));
+    const b = document.createElement('b');
+    b.textContent = 'Roadmap';
+    $('breadcrumb').appendChild(b);
+
+    const view = $('roadmap-view');
+    view.innerHTML = '<div class="muted" style="padding:1.5rem;">Loading roadmap\\u2026</div>';
+
+    const data = await api('/api/roadmap/' + projectId);
+    if (!data.roadmap) {
+      view.innerHTML = '';
+      const empty = document.createElement('div');
+      empty.id = 'roadmap-empty';
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'No roadmap yet for this project.';
+      empty.appendChild(p);
+      const back = document.createElement('button');
+      back.className = 'send';
+      back.textContent = 'Back to project';
+      back.onclick = () => openProject(projectId);
+      empty.appendChild(back);
+      view.appendChild(empty);
+      return;
+    }
+    renderRoadmap(projectId, projectName, data.roadmap, data.nodes);
+  }
+
+  function renderRoadmap(projectId, projectName, roadmap, nodesList) {
+    const view = $('roadmap-view');
+    view.innerHTML = '';
+
+    const top = document.createElement('div');
+    top.id = 'roadmap-top';
+    const goalEl = document.createElement('div');
+    goalEl.className = 'goal';
+    goalEl.textContent = roadmap.goal;
+    top.appendChild(goalEl);
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'card-btn';
+    addBtn.textContent = '+ Add step';
+    addBtn.onclick = async () => {
+      const title = await askText('New step', '', 'Title');
+      if (!title) return;
+      await jsonSend('/api/roadmap-node/' + roadmap.id, {title, x: 40, y: 40});
+      openRoadmapView(projectId, projectName);
+    };
+    top.appendChild(addBtn);
+
+    const regenBtn = document.createElement('button');
+    regenBtn.className = 'card-btn';
+    regenBtn.textContent = '\\u21bb Regenerate';
+    regenBtn.onclick = async () => {
+      regenBtn.disabled = true;
+      regenBtn.textContent = '\\u21bb Regenerating\\u2026';
+      const res = await jsonSend('/api/roadmap/' + projectId + '/generate', {goal: roadmap.goal});
+      regenBtn.disabled = false;
+      regenBtn.textContent = '\\u21bb Regenerate';
+      if (res.error) { toast(res.error, {error: true}); return; }
+      renderRoadmap(projectId, projectName, res.roadmap, res.nodes);
+    };
+    top.appendChild(regenBtn);
+
+    const backBtn = document.createElement('button');
+    backBtn.className = 'card-btn';
+    backBtn.textContent = 'Back';
+    backBtn.onclick = () => openProject(projectId);
+    top.appendChild(backBtn);
+
+    view.appendChild(top);
+
+    const scroll = document.createElement('div');
+    scroll.id = 'canvas-scroll';
+    const canvas = document.createElement('div');
+    canvas.id = 'canvas';
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    canvas.appendChild(svg);
+    scroll.appendChild(canvas);
+    view.appendChild(scroll);
+
+    const byId = {};
+    nodesList.forEach(n => { byId[n.id] = n; });
+    const els = {};
+
+    function edgeAnchor(n, side) {
+      const el = els[n.id];
+      const w = el ? el.offsetWidth : 220;
+      const h = el ? el.offsetHeight : 70;
+      return side === 'out' ? {x: n.x + w, y: n.y + h / 2} : {x: n.x, y: n.y + h / 2};
+    }
+
+    function drawEdges() {
+      svg.innerHTML = '';
+      nodesList.forEach(n => {
+        if (n.status === 'rejected') return;
+        (n.depends_on || []).forEach(depId => {
+          const dep = byId[depId];
+          if (!dep || dep.status === 'rejected') return;
+          const from = edgeAnchor(dep, 'out');
+          const to = edgeAnchor(n, 'in');
+          const mx = (from.x + to.x) / 2;
+          const path = document.createElementNS(svgNS, 'path');
+          path.setAttribute('d',
+            'M' + from.x + ',' + from.y +
+            ' C' + mx + ',' + from.y + ' ' + mx + ',' + to.y + ' ' + to.x + ',' + to.y);
+          svg.appendChild(path);
+        });
+      });
+    }
+
+    async function updateNode(n, patch) {
+      const res = await jsonSend('/api/roadmap-node/' + n.id, patch, 'PATCH');
+      if (res.error) { toast(res.error, {error: true}); return; }
+      Object.assign(n, res);
+    }
+
+    function nodeMenuItems(n) {
+      const items = [];
+      if (n.status !== 'accepted') {
+        items.push({label: 'Accept', run: async () => {
+          await updateNode(n, {status: 'accepted'});
+          renderRoadmap(projectId, projectName, roadmap, nodesList);
+        }});
+      }
+      if (n.status !== 'done') {
+        items.push({label: 'Mark done', run: async () => {
+          await updateNode(n, {status: 'done'});
+          renderRoadmap(projectId, projectName, roadmap, nodesList);
+        }});
+      }
+      if (n.status !== 'rejected') {
+        items.push({label: 'Reject', run: async () => {
+          await updateNode(n, {status: 'rejected'});
+          renderRoadmap(projectId, projectName, roadmap, nodesList);
+        }});
+      }
+      items.push({label: n.note ? 'Edit note' : 'Add note', run: async () => {
+        const note = await askText('Note', n.note || '', 'A note for this step');
+        if (note === null) return;
+        await updateNode(n, {note});
+        renderRoadmap(projectId, projectName, roadmap, nodesList);
+      }});
+      items.push({divider: true});
+      items.push({label: 'Delete', danger: true, run: async () => {
+        const ok = await askConfirm('Delete step', '"' + n.title + '" will be removed.', 'Delete');
+        if (!ok) return;
+        const res = await api('/api/roadmap-node/' + n.id, {method: 'DELETE'});
+        if (res.error) { toast(res.error, {error: true}); return; }
+        openRoadmapView(projectId, projectName);
+      }});
+      return items;
+    }
+
+    nodesList.forEach(n => {
+      if (n.status === 'rejected') return;
+      const el = document.createElement('div');
+      el.className = 'node ' + n.status;
+      el.style.left = n.x + 'px';
+      el.style.top = n.y + 'px';
+
+      const title = document.createElement('div');
+      title.className = 'node-title';
+      title.textContent = n.title;
+      el.appendChild(title);
+
+      if (n.detail) {
+        const d = document.createElement('div');
+        d.className = 'node-detail';
+        d.textContent = n.detail;
+        el.appendChild(d);
+      }
+      if (n.note) {
+        const note = document.createElement('div');
+        note.className = 'node-note';
+        note.textContent = n.note;
+        el.appendChild(note);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'node-actions';
+      if (n.status === 'proposed') {
+        const acc = document.createElement('button');
+        acc.className = 'accept';
+        acc.textContent = 'Accept';
+        acc.onclick = async ev => {
+          ev.stopPropagation();
+          await updateNode(n, {status: 'accepted'});
+          renderRoadmap(projectId, projectName, roadmap, nodesList);
+        };
+        actions.appendChild(acc);
+        const rej = document.createElement('button');
+        rej.className = 'reject';
+        rej.textContent = 'Reject';
+        rej.onclick = async ev => {
+          ev.stopPropagation();
+          await updateNode(n, {status: 'rejected'});
+          renderRoadmap(projectId, projectName, roadmap, nodesList);
+        };
+        actions.appendChild(rej);
+      }
+      const more = document.createElement('button');
+      more.textContent = '\\u22ef';
+      more.onclick = ev => { ev.stopPropagation(); showMenu(ev, nodeMenuItems(n)); };
+      actions.appendChild(more);
+      el.appendChild(actions);
+
+      // Pointer events (not mouse events) so dragging works with touch too.
+      let dragging = null;
+      el.addEventListener('pointerdown', ev => {
+        if (ev.target.closest('button')) return;
+        dragging = {startX: ev.clientX, startY: ev.clientY, origX: n.x, origY: n.y};
+        el.setPointerCapture(ev.pointerId);
+      });
+      el.addEventListener('pointermove', ev => {
+        if (!dragging) return;
+        n.x = dragging.origX + (ev.clientX - dragging.startX);
+        n.y = dragging.origY + (ev.clientY - dragging.startY);
+        el.style.left = n.x + 'px';
+        el.style.top = n.y + 'px';
+        drawEdges();
+      });
+      const endDrag = () => {
+        if (!dragging) return;
+        dragging = null;
+        updateNode(n, {x: n.x, y: n.y});
+      };
+      el.addEventListener('pointerup', endDrag);
+      el.addEventListener('pointercancel', endDrag);
+
+      canvas.appendChild(el);
+      els[n.id] = el;
+    });
+
+    drawEdges();
+  }
+
+  // ---------- profile ----------
+
+  async function openProfileView() {
+    currentProject = null;
+    current = null;
+    showProfileView();
+    $('breadcrumb').textContent = 'Profile';
+
+    const view = $('profile-view');
+    view.innerHTML = '<div class="muted">Loading profile\\u2026</div>';
+    const data = await api('/api/profile');
+    view.innerHTML = '';
+
+    const layout = document.createElement('div');
+    layout.className = 'proj-layout';
+    const main = document.createElement('div');
+    main.className = 'proj-main';
+
+    const title = document.createElement('div');
+    title.className = 'proj-title';
+    title.textContent = 'Profile';
+    main.appendChild(title);
+
+    const aboutCard = card('About you', 'Draft from my documents', async ev => {
+      const btn = ev.currentTarget;
+      btn.disabled = true;
+      btn.textContent = 'Drafting\\u2026';
+      const res = await api('/api/profile/draft', {method: 'POST'});
+      btn.disabled = false;
+      btn.textContent = 'Draft from my documents';
+      if (res.error) { toast(res.error, {error: true}); return; }
+      box.value = res.draft;
+      box.oninput();
+      toast('Draft generated \\u2014 review and save');
+    });
+
+    const box = document.createElement('textarea');
+    box.value = data.content || '';
+    box.placeholder = 'Tell mindtrail about yourself \\u2014 role, goals, background. ' +
+                      'Used to personalize answers.';
+    aboutCard.appendChild(box);
+
+    const saveRow = document.createElement('div');
+    saveRow.style.cssText = 'display:flex;align-items:center;gap:0.6rem;margin-top:0.6rem;';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'send';
+    saveBtn.textContent = 'Save profile';
+    saveBtn.disabled = true;
+    const dirtyNote = document.createElement('span');
+    dirtyNote.className = 'muted';
+    saveRow.appendChild(saveBtn);
+    saveRow.appendChild(dirtyNote);
+    aboutCard.appendChild(saveRow);
+
+    let original = box.value;
+    box.oninput = () => {
+      const changed = box.value !== original;
+      saveBtn.disabled = !changed;
+      dirtyNote.textContent = changed ? 'Unsaved changes' : '';
+    };
+    saveBtn.onclick = async () => {
+      const res = await jsonSend('/api/profile', {content: box.value});
+      if (res.error) { toast(res.error, {error: true}); return; }
+      original = box.value;
+      saveBtn.disabled = true;
+      dirtyNote.textContent = '';
+      toast('Profile saved');
+    };
+
+    main.appendChild(aboutCard);
+    layout.appendChild(main);
+    view.appendChild(layout);
+  }
+
+  $('open-profile').onclick = () => openProfileView();
 
   // ---------- asking ----------
 
