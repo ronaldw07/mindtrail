@@ -92,6 +92,68 @@ def test_format_prior_is_empty_without_entries():
     assert _format_prior([]) == ""
 
 
+class RecordingProvider:
+    """Captures the query the search layer actually received."""
+
+    def __init__(self):
+        self.queries = []
+
+    def search(self, query, max_results):
+        self.queries.append(query)
+        return [SearchResult(title="T", url="http://a.com", snippet="snippet")]
+
+
+def test_a_first_question_is_searched_verbatim(store):
+    provider = RecordingProvider()
+
+    Researcher(store, provider, StubLLM()).research("what is HNSW")
+
+    assert provider.queries == ["what is HNSW"]
+
+
+def test_a_follow_up_is_rewritten_before_searching(store):
+    # Searching "what are its drawbacks" literally returns pages about
+    # drawbacks in general, not about the subject under discussion.
+    chat_id = "c1"
+    store.add("what is HNSW indexing", "A graph-based ANN index.", [], conversation_id=chat_id)
+    provider = RecordingProvider()
+    llm = StubLLM("HNSW indexing drawbacks")
+
+    Researcher(store, provider, llm).research("what are its drawbacks", conversation_id=chat_id)
+
+    assert provider.queries == ["HNSW indexing drawbacks"]
+
+
+def test_rewrite_failure_falls_back_to_the_original_query(store):
+    from mindtrail.llm import LLMError
+
+    class FailingRewriteLLM(StubLLM):
+        def complete(self, system, user, max_tokens=900):
+            if "standalone web search" in system:
+                raise LLMError("rate limited")
+            return super().complete(system, user, max_tokens)
+
+    store.add("earlier", "context", [], conversation_id="c1")
+    provider = RecordingProvider()
+
+    Researcher(store, provider, FailingRewriteLLM()).research(
+        "follow up", conversation_id="c1"
+    )
+
+    assert provider.queries == ["follow up"], "a worse search beats no answer"
+
+
+def test_quotes_around_a_rewritten_query_are_stripped(store):
+    store.add("earlier", "context", [], conversation_id="c1")
+    provider = RecordingProvider()
+
+    Researcher(store, provider, StubLLM('"HNSW drawbacks"')).research(
+        "and its downsides", conversation_id="c1"
+    )
+
+    assert provider.queries == ["HNSW drawbacks"]
+
+
 class StubTopicExtractor:
     def __init__(self, assignment=None, error=None):
         self._assignment = assignment or TopicAssignment("Topic", ("fact",))

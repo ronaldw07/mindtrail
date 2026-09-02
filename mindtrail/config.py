@@ -12,6 +12,9 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 # removed from Groq's catalog, so do not reintroduce llama-3.3-* here.
 SYNTHESIS_MODEL = "openai/gpt-oss-120b"
 FALLBACK_MODEL = "openai/gpt-oss-20b"
+# No vision model exists on this account, but Whisper does, so dictation
+# is server-side rather than depending on browser speech APIs.
+TRANSCRIPTION_MODEL = "whisper-large-v3-turbo"
 
 # Free tier is roughly 30 RPM / 12K TPM, so retries are mandatory rather
 # than optional. See README for the measured limits.
