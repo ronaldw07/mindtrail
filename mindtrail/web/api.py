@@ -20,6 +20,7 @@ from mindtrail.llm import LLMClient, LLMError
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import ConversationStore, title_from_question
 from mindtrail.organize.projects import ProjectStore
+from mindtrail.organize.trash import DeletedConversation, Trash
 
 
 def _conversation_json(conversation) -> dict:
@@ -71,6 +72,7 @@ def handle_project_detail(
     llm: LLMClient,
     project_id: str,
     refresh: bool = False,
+    allow_generate: bool = True,
 ) -> dict:
     """A project's chats, files, instructions, and next-step highlights.
 
@@ -88,7 +90,10 @@ def handle_project_detail(
 
     highlights = highlights_from_json(project.advice)
     error = ""
-    if usable and (refresh or stale or not highlights):
+    # allow_generate is false when the view is being refreshed as a side
+    # effect of something else (a move, a rename), where a multi-second
+    # regeneration would make an unrelated action feel broken.
+    if allow_generate and usable and (refresh or stale or not highlights):
         try:
             generated = generate_highlights(llm, usable, project.instructions)
             projects.save_advice(project_id, highlights_to_json(generated), len(usable))
@@ -111,11 +116,17 @@ def handle_project_detail(
             if e.kind == "document"
         ],
         "highlights": [
-            {"headline": h.headline, "detail": h.detail, "source": h.source}
+            {
+                "headline": h.headline,
+                "detail": h.detail,
+                "source": h.source,
+                "priority": h.priority,
+            }
             for h in highlights
         ],
         "highlights_generated_at": project.advice_generated_at,
         "highlights_error": error,
+        "highlights_stale": stale and bool(usable),
         "entry_count": len(usable),
     }
 
@@ -198,19 +209,71 @@ def handle_update_conversation(
 
 
 def handle_delete_conversation(
-    store: MemoryStore, chats: ConversationStore, conversation_id: str
+    store: MemoryStore,
+    chats: ConversationStore,
+    conversation_id: str,
+    trash: Trash | None = None,
 ) -> dict:
-    """Delete the chat and its entries.
+    """Delete the chat and its entries, holding a copy for undo.
 
-    Unlike deleting a project, this is meant to destroy content - the
-    entries would otherwise be unreachable from any view.
+    Unlike deleting a project, this destroys content - the entries would
+    otherwise be unreachable from any view. The copy in the trash is what
+    makes the undo button in the UI honest.
     """
-    if chats.get(conversation_id) is None:
+    conversation = chats.get(conversation_id)
+    if conversation is None:
         return {"error": "no such conversation"}
+
+    entries = store.by_conversation(conversation_id)
+    if trash is not None:
+        trash.put(
+            DeletedConversation(
+                conversation_id=conversation_id,
+                title=conversation.title,
+                project_id=conversation.project_id,
+                pinned=conversation.pinned,
+                unread=conversation.unread,
+                entries=tuple(
+                    (e.query, e.summary, list(e.sources), e.topic, list(e.key_facts), e.kind)
+                    for e in entries
+                ),
+            )
+        )
 
     removed = store.delete_conversation_entries(conversation_id)
     chats.delete(conversation_id)
-    return {"ok": True, "entries_deleted": removed}
+    return {"ok": True, "entries_deleted": removed, "undoable": trash is not None}
+
+
+def handle_undo_delete(
+    store: MemoryStore, chats: ConversationStore, trash: Trash, conversation_id: str
+) -> dict:
+    """Restore a conversation deleted within the undo window."""
+    held = trash.take(conversation_id)
+    if held is None:
+        return {"error": "nothing left to undo"}
+
+    # A new conversation row is created rather than reusing the id, since
+    # the original was deleted; the id only needs to be stable for the
+    # client to reopen it.
+    restored = chats.create(title=held.title, project_id=held.project_id)
+    if held.pinned:
+        chats.set_pinned(restored.id, True)
+    if held.unread:
+        chats.set_unread(restored.id, True)
+
+    for query, summary, sources, topic, key_facts, kind in held.entries:
+        store.add(
+            query,
+            summary,
+            sources,
+            topic=topic,
+            key_facts=key_facts,
+            kind=kind,
+            conversation_id=restored.id,
+        )
+
+    return {"ok": True, "conversation_id": restored.id, "entries": len(held.entries)}
 
 
 def handle_ask(

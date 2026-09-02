@@ -383,6 +383,33 @@ def test_a_failed_refresh_keeps_the_previous_highlights(store, chats, projects):
     assert "rate limited" in data["highlights_error"]
 
 
+def test_background_refresh_never_costs_an_api_call(store, chats, projects):
+    # A move or rename refreshes the project view as a side effect; a
+    # multi-second regeneration there would make the action feel broken.
+    project = projects.create("Career")
+    chat = chats.create("c", project_id=project.id)
+    store.add("q", "a", [], conversation_id=chat.id)
+    llm = HighlightLLM()
+
+    api.handle_project_detail(
+        store, chats, projects, llm, project.id, allow_generate=False
+    )
+
+    assert llm.calls == 0
+
+
+def test_background_refresh_reports_staleness_instead(store, chats, projects):
+    project = projects.create("Career")
+    chat = chats.create("c", project_id=project.id)
+    store.add("q", "a", [], conversation_id=chat.id)
+
+    data = api.handle_project_detail(
+        store, chats, projects, HighlightLLM(), project.id, allow_generate=False
+    )
+
+    assert data["highlights_stale"] is True
+
+
 def test_project_detail_of_a_missing_project_errors(store, chats, projects):
     assert "error" in api.handle_project_detail(
         store, chats, projects, HighlightLLM(), "nope"
