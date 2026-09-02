@@ -34,24 +34,24 @@ CHAT_HTML = """<!doctype html>
 
     .section { display: flex; align-items: center; gap: 0.35rem;
                padding: 0.75rem 0.6rem 0.35rem; font-size: 0.7rem;
-               text-transform: uppercase; letter-spacing: 0.05em; color: #6b6b6b;
+               text-transform: uppercase; letter-spacing: 0.05em; color: #868686;
                user-select: none; }
     .section.clickable { cursor: pointer; border-radius: 6px; }
     .section.clickable:hover { color: #9a9a9a; }
     .section .label { flex: 1; }
-    .sec-caret { font-size: 0.6rem; width: 0.7rem; color: #6b6b6b; }
+    .sec-caret { font-size: 0.6rem; width: 0.7rem; color: #868686; }
     .add { border: none; background: transparent; color: #7d7d7d; cursor: pointer;
            font-size: 1.05rem; line-height: 1; padding: 0.1rem 0.3rem;
            border-radius: 5px; }
     .add:hover { background: #2a2a2a; color: #fff; }
-    .empty-hint { padding: 0.35rem 0.75rem 0.5rem; font-size: 0.78rem; color: #5f5f5f; }
+    .empty-hint { padding: 0.35rem 0.75rem 0.5rem; font-size: 0.78rem; color: #868686; }
 
     .project { margin-bottom: 0.1rem; }
     .project-head { display: flex; align-items: center; gap: 0.35rem;
                     padding: 0.4rem 0.6rem; border-radius: 6px; cursor: pointer;
                     color: #d0d0d0; font-size: 0.85rem; font-weight: 500; }
     .project-head:hover { background: #212121; }
-    .caret { font-size: 0.65rem; color: #777; width: 0.7rem; }
+    .caret { font-size: 0.65rem; color: #868686; width: 0.7rem; }
     .chat { display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.6rem;
             border-radius: 6px; cursor: pointer; font-size: 0.84rem; color: #b8b8b8; }
     .chat:hover { background: #212121; }
@@ -172,7 +172,7 @@ CHAT_HTML = """<!doctype html>
     .hl-head { font-size: 0.88rem; font-weight: 600; color: #ececec;
                margin-bottom: 0.2rem; }
     .hl-detail { font-size: 0.82rem; color: #a5a5a5; line-height: 1.5; }
-    .hl-source { font-size: 0.73rem; color: #6f6f6f; margin-top: 0.25rem; }
+    .hl-source { font-size: 0.73rem; color: #868686; margin-top: 0.25rem; }
     .stamp { font-size: 0.72rem; color: #6a6a6a; margin-top: 0.6rem; }
     .instructions-box { width: 100%; min-height: 84px; resize: vertical;
                         background: #191919; border: 1px solid #333; border-radius: 8px;
@@ -186,7 +186,7 @@ CHAT_HTML = """<!doctype html>
     .file-chip { display: inline-block; background: #262626; border: 1px solid #333;
                  border-radius: 6px; padding: 0.3rem 0.6rem; font-size: 0.8rem;
                  color: #c5c5c5; margin: 0.2rem 0.3rem 0.2rem 0; }
-    .muted { color: #6f6f6f; font-size: 0.84rem; }
+    .muted { color: #868686; font-size: 0.84rem; }
 
     /* --- roadmap canvas --- */
     #roadmap-top { display: flex; align-items: center; gap: 0.6rem; padding: 0.8rem 1.25rem;
@@ -205,7 +205,8 @@ CHAT_HTML = """<!doctype html>
     .node.accepted { border-color: #4f46e5; }
     .node.done { border-color: #2f9e5c; }
     .node.done .node-title { text-decoration: line-through; color: #8fae9c; }
-    .node.rejected { display: none; }
+    .node.rejected { opacity: 0.45; border-style: dotted; }
+    .node.rejected .node-title { text-decoration: line-through; }
     .node-title { font-weight: 600; color: #ececec; margin-bottom: 0.3rem; }
     .node-detail { color: #a5a5a5; font-size: 0.78rem; line-height: 1.4; margin-bottom: 0.4rem; }
     .node-note { font-size: 0.76rem; color: #cdd8ff; background: #1e2340; border-radius: 6px;
@@ -262,7 +263,7 @@ CHAT_HTML = """<!doctype html>
            padding: 0.35rem 0.4rem 0.35rem 0.9rem; }
     #input { flex: 1; background: transparent; border: none; outline: none;
              color: #ececec; font-size: 0.95rem; padding: 0.5rem 0; }
-    #input::placeholder { color: #777; }
+    #input::placeholder { color: #868686; }
     .icon-btn { background: transparent; border: none; color: #aaa; cursor: pointer;
                 font-size: 1.05rem; padding: 0.35rem 0.5rem; border-radius: 50%; }
     .icon-btn:hover { background: #2e2e2e; color: #fff; }
@@ -283,9 +284,12 @@ CHAT_HTML = """<!doctype html>
     </aside>
     <main>
       <div id="topbar">
-        <button class="nav-btn" id="toggle-sidebar" title="Toggle sidebar">&#9707;</button>
-        <button class="nav-btn" id="nav-back" title="Back" disabled>&#8592;</button>
-        <button class="nav-btn" id="nav-fwd" title="Forward" disabled>&#8594;</button>
+        <button class="nav-btn" id="toggle-sidebar" title="Toggle sidebar"
+                aria-label="Toggle sidebar">&#9707;</button>
+        <button class="nav-btn" id="nav-back" title="Back" aria-label="Back"
+                disabled>&#8592;</button>
+        <button class="nav-btn" id="nav-fwd" title="Forward" aria-label="Forward"
+                disabled>&#8594;</button>
         <div id="breadcrumb">New chat</div>
       </div>
       <div id="log"></div>
@@ -294,8 +298,10 @@ CHAT_HTML = """<!doctype html>
       <div id="profile-view"></div>
       <div id="composer">
         <form id="form">
-          <button type="button" class="icon-btn" id="attach" title="Upload a PDF">+</button>
-          <button type="button" class="icon-btn" id="mic" title="Dictate">&#127908;</button>
+          <button type="button" class="icon-btn" id="attach" title="Upload a PDF"
+                  aria-label="Upload a PDF">+</button>
+          <button type="button" class="icon-btn" id="mic" title="Dictate"
+                  aria-label="Dictate">&#127908;</button>
           <input id="input" autocomplete="off" placeholder="Ask something..." autofocus>
           <button class="send" id="send">Ask</button>
         </form>
@@ -586,6 +592,8 @@ CHAT_HTML = """<!doctype html>
     const btn = document.createElement('button');
     btn.className = 'menu-btn';
     btn.textContent = '\\u22ef';
+    btn.title = 'Chat options';
+    btn.setAttribute('aria-label', 'Chat options');
     btn.onclick = e => { e.stopPropagation(); openChatMenu(e, c); };
     row.appendChild(btn);
     row.onclick = () => openConversation(c.id);
@@ -633,6 +641,8 @@ CHAT_HTML = """<!doctype html>
         const btn = document.createElement('button');
         btn.className = 'menu-btn';
         btn.textContent = '\\u22ef';
+        btn.title = 'Project options';
+        btn.setAttribute('aria-label', 'Project options');
         btn.onclick = e => { e.stopPropagation(); openProjectMenu(e, p); };
         head.appendChild(btn);
         head.onclick = () => {
@@ -1318,10 +1328,32 @@ CHAT_HTML = """<!doctype html>
       empty.id = 'roadmap-empty';
       const p = document.createElement('div');
       p.className = 'muted';
-      p.textContent = 'No roadmap yet for this project.';
+      p.textContent = 'No roadmap yet for this project. What are you working toward?';
       empty.appendChild(p);
+
+      const goalInput = document.createElement('input');
+      goalInput.placeholder = 'What are you working toward?';
+      empty.appendChild(goalInput);
+
+      const genBtn = document.createElement('button');
+      genBtn.className = 'send';
+      genBtn.textContent = 'Generate roadmap';
+      genBtn.onclick = async () => {
+        const goal = goalInput.value.trim();
+        if (!goal) { toast('Enter a goal first', {error: true}); return; }
+        genBtn.disabled = true;
+        genBtn.textContent = 'Generating\\u2026';
+        const res = await jsonSend('/api/roadmap/' + projectId + '/generate', {goal});
+        genBtn.disabled = false;
+        genBtn.textContent = 'Generate roadmap';
+        if (res.error) { toast(res.error, {error: true}); return; }
+        renderRoadmap(projectId, projectName, res.roadmap, res.nodes);
+      };
+      empty.appendChild(genBtn);
+
       const back = document.createElement('button');
-      back.className = 'send';
+      back.className = 'card-btn';
+      back.style.marginLeft = '0.5rem';
       back.textContent = 'Back to project';
       back.onclick = () => openProject(projectId);
       empty.appendChild(back);
@@ -1348,7 +1380,11 @@ CHAT_HTML = """<!doctype html>
     addBtn.onclick = async () => {
       const title = await askText('New step', '', 'Title');
       if (!title) return;
-      await jsonSend('/api/roadmap-node/' + roadmap.id, {title, x: 40, y: 40});
+      // Cascades new cards so repeated adds don't stack exactly on top
+      // of each other before the user drags them apart.
+      const offset = (nodesList.length % 6) * 40;
+      await jsonSend('/api/roadmap-node/' + roadmap.id,
+                     {title, x: 40 + offset, y: 40 + offset});
       openRoadmapView(projectId, projectName);
     };
     top.appendChild(addBtn);
@@ -1459,7 +1495,6 @@ CHAT_HTML = """<!doctype html>
     }
 
     nodesList.forEach(n => {
-      if (n.status === 'rejected') return;
       const el = document.createElement('div');
       el.className = 'node ' + n.status;
       el.style.left = n.x + 'px';
@@ -1507,6 +1542,8 @@ CHAT_HTML = """<!doctype html>
       }
       const more = document.createElement('button');
       more.textContent = '\\u22ef';
+      more.title = 'More actions for this step';
+      more.setAttribute('aria-label', 'More actions for this step');
       more.onclick = ev => { ev.stopPropagation(); showMenu(ev, nodeMenuItems(n)); };
       actions.appendChild(more);
       el.appendChild(actions);
@@ -1724,7 +1761,8 @@ CHAT_HTML = """<!doctype html>
       recorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
         mic.classList.remove('recording');
-        setStatus('Transcribing...');
+        mic.title = mic.ariaLabel = 'Dictate';
+        setStatus('Transcribing\\u2026');
         const blob = new Blob(chunks, {type: 'audio/webm'});
         const res = await fetch('/api/transcribe', {method: 'POST', body: blob});
         const data = await res.json();
@@ -1735,6 +1773,7 @@ CHAT_HTML = """<!doctype html>
       };
       recorder.start();
       mic.classList.add('recording');
+      mic.title = mic.ariaLabel = 'Stop recording';
       setStatus('Recording\\u2026 click the mic again to stop.');
     } catch (err) {
       setStatus('Microphone unavailable: ' + err.message);
