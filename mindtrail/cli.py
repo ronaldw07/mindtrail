@@ -144,7 +144,7 @@ def cmd_chat(args) -> int:
         store, default_search(), llm, topic_extractor=TopicExtractor(llm)
     )
     run_chat_server(
-        researcher, port=args.port, open_browser=not args.no_open, host=args.host
+        researcher, store, port=args.port, open_browser=not args.no_open, host=args.host
     )
     return 0
 
