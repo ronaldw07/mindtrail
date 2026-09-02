@@ -34,11 +34,37 @@ class Research:
     tokens: int
 
 
+CONVERSATION_TURN_CHARS = 400
+
+REWRITE_PROMPT = (
+    "Rewrite the user's latest question into a standalone web search "
+    "query, resolving pronouns and implied subjects using the "
+    "conversation. Reply with the query text only - no quotes, no "
+    "explanation. If it already stands alone, repeat it unchanged."
+)
+REWRITE_MAX_CHARS = 200
+
+
 def _format_prior(entries: list[Entry]) -> str:
     if not entries:
         return ""
     lines = [f"- Previously asked '{e.query}': {e.summary}" for e in entries]
     return "PRIOR RESEARCH FROM THIS USER:\n" + "\n".join(lines) + "\n\n"
+
+
+def _format_conversation(entries: list[Entry]) -> str:
+    """Earlier turns of the open chat, so follow-ups read as continuous.
+
+    Semantic recall alone does not give conversational continuity: it
+    surfaces topically similar entries from anywhere in memory, which is
+    not the same as knowing what was just said in this thread.
+    """
+    if not entries:
+        return ""
+    lines = [
+        f"Q: {e.query}\nA: {e.summary[:CONVERSATION_TURN_CHARS]}" for e in entries
+    ]
+    return "EARLIER IN THIS CONVERSATION:\n" + "\n\n".join(lines) + "\n\n"
 
 
 def _gather_pages(
@@ -80,11 +106,35 @@ class Researcher:
         self._llm = llm
         self._topic_extractor = topic_extractor
 
-    def research(self, query: str) -> Research:
+    def _search_query(self, query: str, history: list[Entry]) -> str:
+        """Resolve a follow-up into something worth searching for.
+
+        "what are its main drawbacks?" searched literally returns pages
+        about drawbacks in general. The synthesis prompt gets the
+        conversation, but the search engine does not, so the query is
+        rewritten first. Failure falls back to the original text - a
+        worse search beats no answer.
+        """
+        if not history:
+            return query
+        try:
+            completion = self._llm.complete(
+                REWRITE_PROMPT,
+                f"{_format_conversation(history[-2:])}LATEST QUESTION: {query}",
+                max_tokens=120,
+            )
+        except LLMError:
+            return query
+        rewritten = completion.text.strip().strip('"')
+        return rewritten[:REWRITE_MAX_CHARS] or query
+
+    def research(self, query: str, conversation_id: str = "") -> Research:
         recalled = self._store.search(query, k=config.RELATED_MEMORIES_TO_INJECT)
-        texts, urls = _gather_pages(self._provider, query)
+        history = self._store.by_conversation(conversation_id)
+        texts, urls = _gather_pages(self._provider, self._search_query(query, history))
 
         prompt = (
+            f"{_format_conversation(history)}"
             f"{_format_prior(recalled)}QUESTION: {query}\n\n"
             f"SOURCES:\n" + "\n\n".join(texts)
         )
@@ -98,8 +148,8 @@ class Researcher:
             tokens=completion.tokens,
         )
 
-    def research_and_store(self, query: str) -> Research:
-        result = self.research(query)
+    def research_and_store(self, query: str, conversation_id: str = "") -> Research:
+        result = self.research(query, conversation_id=conversation_id)
         topic, key_facts = self._assign_topic(result)
         self._store.add(
             result.query,
@@ -107,6 +157,7 @@ class Researcher:
             list(result.sources),
             topic=topic,
             key_facts=list(key_facts),
+            conversation_id=conversation_id,
         )
         return result
 

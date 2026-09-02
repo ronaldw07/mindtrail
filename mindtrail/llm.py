@@ -55,6 +55,18 @@ class LLMClient:
             model=self._model,
         )
 
+    def transcribe(self, audio: bytes, filename: str = "audio.webm") -> str:
+        """Speech to text via Whisper, for the chat's dictation button."""
+        if not audio:
+            raise LLMError("no audio received")
+        try:
+            result = self._client.audio.transcriptions.create(
+                file=(filename, audio), model=config.TRANSCRIPTION_MODEL
+            )
+        except Exception as exc:
+            raise LLMError(f"transcription failed: {exc}") from exc
+        return (result.text or "").strip()
+
     def _with_retries(self, messages: list[dict], max_tokens: int):
         backoff = config.INITIAL_BACKOFF_SECONDS
         last_error: Exception | None = None
