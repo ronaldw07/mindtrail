@@ -55,6 +55,20 @@ def handle_sidebar(projects: ProjectStore, chats: ConversationStore) -> dict:
     }
 
 
+def _friendly_highlight_error(exc: Exception) -> str:
+    """A short reason, never the model's raw output.
+
+    Parse failures carry the offending text, which for a truncated
+    response is a wall of half-finished JSON.
+    """
+    text = str(exc)
+    if isinstance(exc, LLMError):
+        return "rate limited" if "rate limited" in text else "the model was unavailable"
+    if "no JSON" in text or "usable" in text:
+        return "the suggestions came back malformed"
+    return "suggestions could not be generated"
+
+
 def project_entries(
     store: MemoryStore, chats: ConversationStore, project_id: str
 ) -> list:
@@ -101,8 +115,10 @@ def handle_project_detail(
             highlights = generated
         except (LLMError, ValueError) as exc:
             # Keep showing the previous highlights rather than blanking
-            # the panel because a refresh failed.
-            error = str(exc)
+            # the panel because a refresh failed. The underlying message
+            # can be a truncated JSON dump, which is useless to a reader,
+            # so only a short reason is surfaced.
+            error = _friendly_highlight_error(exc)
 
     conversations = chats.in_project(project_id)
     return {
