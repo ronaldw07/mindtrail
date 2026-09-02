@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS projects (
     name       TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+-- Columns added after the first release are applied by _add_missing_columns
+-- rather than here, since CREATE TABLE IF NOT EXISTS will not alter an
+-- existing table and would silently leave old databases without them.
 
 CREATE TABLE IF NOT EXISTS conversations (
     id         TEXT PRIMARY KEY,
@@ -75,7 +78,29 @@ def connect(path: str | None = None):
         conn.close()
 
 
+# Columns introduced after the initial schema, applied to existing
+# databases on startup. Kept as (table, column, definition) so adding one
+# later is a single line here.
+ADDED_COLUMNS = [
+    ("projects", "instructions", "TEXT NOT NULL DEFAULT ''"),
+    ("projects", "advice", "TEXT NOT NULL DEFAULT ''"),
+    ("projects", "advice_generated_at", "TEXT NOT NULL DEFAULT ''"),
+    ("projects", "advice_basis_count", "INTEGER NOT NULL DEFAULT 0"),
+]
+
+
+def _add_missing_columns(conn) -> None:
+    for table, column, definition in ADDED_COLUMNS:
+        existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def initialize(path: str | None = None) -> None:
-    """Create tables if they do not exist. Safe to call repeatedly."""
+    """Create tables if they do not exist, then apply later columns.
+
+    Safe to call repeatedly; both halves are no-ops once current.
+    """
     with connect(path) as conn:
         conn.executescript(SCHEMA)
+        _add_missing_columns(conn)
