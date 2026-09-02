@@ -20,6 +20,7 @@ from mindtrail.llm import LLMClient
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import ConversationStore
 from mindtrail.organize.projects import ProjectStore
+from mindtrail.organize.trash import Trash
 from mindtrail.web import api
 from mindtrail.web.chat_ui import CHAT_HTML
 
@@ -48,6 +49,7 @@ class Deps:
         self.chats = chats
         self.llm = llm
         self.topic_extractor = topic_extractor
+        self.trash = Trash()
 
 
 def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
@@ -105,7 +107,7 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                     )
                 )
             elif path.startswith("/api/projects/"):
-                refresh = parse_qs(urlparse(self.path).query).get("refresh", [""])[0]
+                params = parse_qs(urlparse(self.path).query)
                 self._json(
                     api.handle_project_detail(
                         deps.store,
@@ -113,7 +115,8 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         deps.projects,
                         deps.llm,
                         self._tail("/api/projects/"),
-                        refresh == "1",
+                        params.get("refresh", [""])[0] == "1",
+                        params.get("background", [""])[0] != "1",
                     )
                 )
             else:
@@ -145,6 +148,15 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                     self._json({"error": "malformed request body"}, 400)
                     return
                 self._json(api.handle_create_project(deps.projects, str(body.get("name", ""))))
+            elif path.startswith("/api/undo-delete/"):
+                self._json(
+                    api.handle_undo_delete(
+                        deps.store,
+                        deps.chats,
+                        deps.trash,
+                        self._tail("/api/undo-delete/"),
+                    )
+                )
             elif path == "/api/transcribe":
                 self._json(api.handle_transcribe(deps.llm, self._body()))
             elif path == "/api/upload":
@@ -190,7 +202,10 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
             if path.startswith("/api/conversations/"):
                 self._json(
                     api.handle_delete_conversation(
-                        deps.store, deps.chats, self._tail("/api/conversations/")
+                        deps.store,
+                        deps.chats,
+                        self._tail("/api/conversations/"),
+                        deps.trash,
                     )
                 )
             elif path.startswith("/api/projects/"):

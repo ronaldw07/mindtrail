@@ -79,7 +79,8 @@ CHAT_HTML = """<!doctype html>
              padding: 1.25rem; width: 390px; max-width: calc(100vw - 2rem);
              box-shadow: 0 18px 50px rgba(0,0,0,0.55); }
     .modal h3 { margin: 0 0 0.75rem; font-size: 0.95rem; font-weight: 600; color: #f2f2f2; }
-    .modal p { margin: 0 0 1rem; font-size: 0.86rem; color: #a8a8a8; line-height: 1.55; }
+    .modal p { margin: 0 0 1rem; font-size: 0.86rem; color: #a8a8a8; line-height: 1.55;
+               white-space: pre-wrap; }
     .modal input { width: 100%; padding: 0.6rem 0.75rem; border-radius: 8px;
                    border: 1px solid #3a3a3a; background: #191919; color: #ececec;
                    font-size: 0.9rem; outline: none; }
@@ -161,6 +162,33 @@ CHAT_HTML = """<!doctype html>
                  color: #c5c5c5; margin: 0.2rem 0.3rem 0.2rem 0; }
     .muted { color: #6f6f6f; font-size: 0.84rem; }
 
+    /* --- priority on highlights --- */
+    .hl.now { border-left: 3px solid #4f8ef7; padding-left: 0.65rem; }
+    .hl { cursor: pointer; }
+    .hl:hover .hl-head { color: #fff; text-decoration: underline; }
+    .tier { display: inline-block; font-size: 0.62rem; text-transform: uppercase;
+            letter-spacing: 0.07em; padding: 0.1rem 0.4rem; border-radius: 4px;
+            margin-right: 0.4rem; vertical-align: 1px; }
+    .tier.now   { background: #1e3a6b; color: #a9c9ff; }
+    .tier.next  { background: #2d2d2d; color: #b5b5b5; }
+    .tier.later { background: #262626; color: #8a8a8a; }
+    .stale-note { font-size: 0.75rem; color: #c8a44a; margin-bottom: 0.5rem; }
+
+    /* --- toasts --- */
+    #toasts { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%);
+              display: flex; flex-direction: column; gap: 0.5rem; z-index: 200;
+              align-items: center; }
+    .toast { background: #262626; border: 1px solid #3a3a3a; border-radius: 9px;
+             padding: 0.6rem 0.9rem; font-size: 0.85rem; color: #ececec;
+             box-shadow: 0 8px 26px rgba(0,0,0,0.5); display: flex;
+             align-items: center; gap: 0.75rem; min-width: 280px; }
+    .toast.err { border-color: #7f2b2b; }
+    .toast .msg { flex: 1; }
+    .toast .undo { background: transparent; border: 1px solid #4a4a4a; color: #cdd8ff;
+                   border-radius: 6px; padding: 0.25rem 0.6rem; font-size: 0.78rem;
+                   cursor: pointer; white-space: nowrap; }
+    .toast .undo:hover { background: #333; color: #fff; }
+
     #composer { padding: 1rem 1.5rem 1.5rem; flex-shrink: 0; }
     form { max-width: 760px; margin: 0 auto; display: flex; align-items: center;
            gap: 0.4rem; background: #212121; border: 1px solid #333; border-radius: 26px;
@@ -208,6 +236,7 @@ CHAT_HTML = """<!doctype html>
   </div>
   <div id="menu"></div>
   <div id="overlay"></div>
+  <div id="toasts"></div>
 
   <script>
   const $ = id => document.getElementById(id);
@@ -290,6 +319,47 @@ CHAT_HTML = """<!doctype html>
     });
   }
 
+  // ---------- toasts ----------
+
+  const TOAST_SECONDS = 8;
+
+  function toast(message, opts) {
+    opts = opts || {};
+    const el = document.createElement('div');
+    el.className = 'toast' + (opts.error ? ' err' : '');
+    const msg = document.createElement('span');
+    msg.className = 'msg';
+    msg.textContent = message;
+    el.appendChild(msg);
+
+    let timer = null;
+    const dismiss = () => {
+      if (timer) clearInterval(timer);
+      el.remove();
+    };
+
+    if (opts.undo) {
+      // The countdown is shown rather than implied, so it is obvious how
+      // long the undo actually lasts.
+      let left = opts.seconds || TOAST_SECONDS;
+      const btn = document.createElement('button');
+      btn.className = 'undo';
+      const label = () => { btn.textContent = 'Undo (' + left + ')'; };
+      label();
+      btn.onclick = async () => { dismiss(); await opts.undo(); };
+      el.appendChild(btn);
+      timer = setInterval(() => {
+        left -= 1;
+        if (left <= 0) dismiss(); else label();
+      }, 1000);
+    } else {
+      timer = setTimeout(dismiss, (opts.seconds || 3) * 1000);
+    }
+
+    $('toasts').appendChild(el);
+    return dismiss;
+  }
+
   const askText = (title, value, placeholder) =>
     modal({title, value, placeholder, input: true});
   const askConfirm = (title, message, confirmLabel) =>
@@ -307,7 +377,10 @@ CHAT_HTML = """<!doctype html>
   // otherwise.
   async function refreshViews() {
     await loadSidebar();
-    if (currentProject) await openProject(currentProject);
+    // background: true means "do not spend an API call regenerating
+    // highlights" - this refresh is a side effect of a move or rename,
+    // not the user asking to see the project.
+    if (currentProject) await openProject(currentProject, {background: true});
   }
 
   function sectionRow(label, opts) {
@@ -438,10 +511,11 @@ CHAT_HTML = """<!doctype html>
     const name = await askText('New project', '', 'e.g. Career');
     if (!name) return;
     const res = await jsonSend('/api/projects', {name});
-    if (res.error) { setStatus(res.error); return; }
+    if (res.error) { toast(res.error, {error: true}); return; }
     projectsOpen = true;
     openProjects.add(res.id);
     await loadSidebar();
+    toast('Created project "' + res.name + '"');
   }
 
   // ---------- context menus ----------
@@ -473,33 +547,65 @@ CHAT_HTML = """<!doctype html>
         await jsonSend('/api/conversations/' + c.id, {title: t}, 'PATCH');
         if (current && current.id === c.id) { current.title = t; setBreadcrumb(); }
         await refreshViews();
+        toast('Renamed to "' + t + '"', {undo: async () => {
+          await jsonSend('/api/conversations/' + c.id, {title: c.title}, 'PATCH');
+          if (current && current.id === c.id) { current.title = c.title; setBreadcrumb(); }
+          await refreshViews();
+          toast('Rename undone');
+        }});
       }},
       {label: c.pinned ? 'Unpin' : 'Pin', run: async () => {
         await jsonSend('/api/conversations/' + c.id, {pinned: !c.pinned}, 'PATCH');
         await refreshViews();
+        toast(c.pinned ? 'Unpinned' : 'Pinned', {undo: async () => {
+          await jsonSend('/api/conversations/' + c.id, {pinned: c.pinned}, 'PATCH');
+          await refreshViews();
+          toast('Reverted');
+        }});
       }},
       {label: c.unread ? 'Mark as read' : 'Mark as unread', run: async () => {
         await jsonSend('/api/conversations/' + c.id, {unread: !c.unread}, 'PATCH');
         await refreshViews();
+        toast(c.unread ? 'Marked as read' : 'Marked as unread', {undo: async () => {
+          await jsonSend('/api/conversations/' + c.id, {unread: c.unread}, 'PATCH');
+          await refreshViews();
+          toast('Reverted');
+        }});
       }},
       {divider: true}
     ];
 
     sidebar.projects.filter(p => p.id !== c.project_id).forEach(p => {
       items.push({label: 'Move to ' + p.name, run: async () => {
+        const previous = c.project_id;
         await jsonSend('/api/conversations/' + c.id, {project_id: p.id}, 'PATCH');
         projectsOpen = true; openProjects.add(p.id);
         if (current && current.id === c.id) { current.project_id = p.id; }
         await refreshViews();
         setBreadcrumb();
+        toast('Moved to ' + p.name, {undo: async () => {
+          await jsonSend('/api/conversations/' + c.id, {project_id: previous}, 'PATCH');
+          if (current && current.id === c.id) { current.project_id = previous; }
+          await refreshViews();
+          setBreadcrumb();
+          toast('Move undone');
+        }});
       }});
     });
     if (c.project_id) {
       items.push({label: 'Remove from project', run: async () => {
+        const previous = c.project_id;
         await jsonSend('/api/conversations/' + c.id, {project_id: null}, 'PATCH');
         if (current && current.id === c.id) { current.project_id = null; }
         await refreshViews();
         setBreadcrumb();
+        toast('Removed from project', {undo: async () => {
+          await jsonSend('/api/conversations/' + c.id, {project_id: previous}, 'PATCH');
+          if (current && current.id === c.id) { current.project_id = previous; }
+          await refreshViews();
+          setBreadcrumb();
+          toast('Move undone');
+        }});
       }});
     }
 
@@ -509,9 +615,16 @@ CHAT_HTML = """<!doctype html>
         '"' + c.title + '" and everything in it will be removed. This cannot be undone.',
         'Delete');
       if (!ok) return;
-      await api('/api/conversations/' + c.id, {method: 'DELETE'});
+      const res = await api('/api/conversations/' + c.id, {method: 'DELETE'});
       if (current && current.id === c.id) newChat();
       await refreshViews();
+      if (res.error) { toast(res.error, {error: true}); return; }
+      toast('Deleted "' + c.title + '"', {undo: async () => {
+        const back = await api('/api/undo-delete/' + c.id, {method: 'POST'});
+        if (back.error) { toast(back.error, {error: true}); return; }
+        await refreshViews();
+        toast('Restored with ' + back.entries + ' message(s)');
+      }});
     }});
     showMenu(e, items);
   }
@@ -525,8 +638,14 @@ CHAT_HTML = """<!doctype html>
         await loadSidebar();
         // The project screen renders its own copy of the name, so it has
         // to be re-read or it keeps showing the old one.
-        if (currentProject === p.id) await openProject(p.id);
+        if (currentProject === p.id) await openProject(p.id, {background: true});
         else setBreadcrumb();
+        toast('Project renamed to "' + n + '"', {undo: async () => {
+          await jsonSend('/api/projects/' + p.id, {name: p.name}, 'PATCH');
+          await loadSidebar();
+          if (currentProject === p.id) await openProject(p.id, {background: true});
+          toast('Rename undone');
+        }});
       }},
       {divider: true},
       {label: 'Delete project', danger: true, run: async () => {
@@ -536,8 +655,10 @@ CHAT_HTML = """<!doctype html>
         if (!ok) return;
         await api('/api/projects/' + p.id, {method: 'DELETE'});
         openProjects.delete(p.id);
+        if (currentProject === p.id) newChat();
         await loadSidebar();
         setBreadcrumb();
+        toast('Deleted project "' + p.name + '" \\u2014 its chats were kept');
       }}
     ]);
   }
@@ -715,16 +836,22 @@ CHAT_HTML = """<!doctype html>
   }
 
   async function openProject(id, opts) {
-    const refresh = opts && opts.refresh;
+    opts = opts || {};
     currentProject = id;
     current = null;
     showProjectView();
 
     const view = $('project-view');
-    view.innerHTML = '<div class="muted">Loading project\\u2026</div>';
-    $('breadcrumb').textContent = 'Projects';
+    if (!opts.background) {
+      view.innerHTML = '<div class="muted">Loading project\\u2026</div>';
+      $('breadcrumb').textContent = 'Projects';
+    }
 
-    const data = await api('/api/projects/' + id + (refresh ? '?refresh=1' : ''));
+    const params = [];
+    if (opts.refresh) params.push('refresh=1');
+    if (opts.background) params.push('background=1');
+    const data = await api('/api/projects/' + id +
+                           (params.length ? '?' + params.join('&') : ''));
     if (data.error) { view.innerHTML = ''; setStatus(data.error); return; }
 
     $('breadcrumb').innerHTML = '';
@@ -797,13 +924,27 @@ CHAT_HTML = """<!doctype html>
         : 'Add chats or a document, and suggestions appear here.';
       hlCard.appendChild(p);
     }
+    if (data.highlights_stale) {
+      const note = document.createElement('div');
+      note.className = 'stale-note';
+      note.textContent = 'New activity since these \\u2014 hit Refresh to update.';
+      hlCard.appendChild(note);
+    }
     data.highlights.forEach(h => {
+      const tier = h.priority || 'next';
       const item = document.createElement('div');
-      item.className = 'hl';
+      item.className = 'hl ' + tier;
+      item.title = 'Click to expand';
+
       const head = document.createElement('div');
       head.className = 'hl-head';
-      head.textContent = h.headline;
+      const badge = document.createElement('span');
+      badge.className = 'tier ' + tier;
+      badge.textContent = tier === 'now' ? 'Do now' : tier;
+      head.appendChild(badge);
+      head.appendChild(document.createTextNode(h.headline));
       item.appendChild(head);
+
       if (h.detail) {
         const d = document.createElement('div');
         d.className = 'hl-detail';
@@ -818,6 +959,7 @@ CHAT_HTML = """<!doctype html>
         s.textContent = 'from: ' + h.source.replace(/^\\[[A-Z]+\\]\\s*/, '');
         item.appendChild(s);
       }
+      item.onclick = () => expandHighlight(h, data.name);
       hlCard.appendChild(item);
     });
     if (data.highlights_generated_at) {
@@ -829,19 +971,47 @@ CHAT_HTML = """<!doctype html>
     }
     rail.appendChild(hlCard);
 
-    const instrCard = card('Instructions', 'Save', null);
+    const instrCard = card('Instructions', null, null);
     const box = document.createElement('textarea');
     box.className = 'instructions-box';
     box.value = data.instructions || '';
     box.placeholder = 'Guidance applied to every answer in this project.';
     instrCard.appendChild(box);
-    instrCard.querySelector('.card-btn').onclick = async () => {
-      await jsonSend('/api/projects/' + id, {instructions: box.value}, 'PATCH');
-      setStatus('Instructions saved.');
+
+    const saveRow = document.createElement('div');
+    saveRow.style.cssText = 'display:flex;align-items:center;gap:0.6rem;margin-top:0.6rem;';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'send';
+    saveBtn.textContent = 'Save instructions';
+    saveBtn.disabled = true;
+    const dirtyNote = document.createElement('span');
+    dirtyNote.className = 'muted';
+    saveRow.appendChild(saveBtn);
+    saveRow.appendChild(dirtyNote);
+    instrCard.appendChild(saveRow);
+
+    // The button only lights up when there is something to save, so it
+    // is obvious whether the current text is applied or not.
+    const original = box.value;
+    box.oninput = () => {
+      const changed = box.value !== original;
+      saveBtn.disabled = !changed;
+      dirtyNote.textContent = changed ? 'Unsaved changes' : '';
+    };
+    saveBtn.onclick = async () => {
+      const res = await jsonSend('/api/projects/' + id, {instructions: box.value}, 'PATCH');
+      if (res.error) { toast(res.error, {error: true}); return; }
+      saveBtn.disabled = true;
+      dirtyNote.textContent = '';
+      toast('Instructions saved', {undo: async () => {
+        await jsonSend('/api/projects/' + id, {instructions: original}, 'PATCH');
+        box.value = original;
+        toast('Instructions reverted');
+      }});
     };
     rail.appendChild(instrCard);
 
-    const filesCard = card('Files', null, null);
+    const filesCard = card('Files', '+ Upload', () => uploadInto(id));
     if (!data.files.length) {
       const p = document.createElement('div');
       p.className = 'muted';
@@ -859,6 +1029,28 @@ CHAT_HTML = """<!doctype html>
 
     layout.appendChild(rail);
     view.appendChild(layout);
+  }
+
+  function expandHighlight(h, projectName) {
+    const tier = h.priority || 'next';
+    const parts = [];
+    if (h.detail) parts.push(h.detail);
+    if (h.source) {
+      parts.push('Based on: ' + h.source.replace(/^\\[[A-Z]+\\]\\s*/, ''));
+    }
+    parts.push('Project: ' + projectName);
+    modal({
+      title: (tier === 'now' ? '\\u2605  ' : '') + h.headline,
+      message: parts.join('\\n\\n'),
+      confirmLabel: 'Ask about this'
+    }).then(async ok => {
+      if (!ok) return;
+      // Turning a highlight into a question is the natural next move, so
+      // it drops straight into the composer inside this project.
+      newChatInProject(currentProject, projectName);
+      input.value = h.headline;
+      input.focus();
+    });
   }
 
   function newChatInProject(projectId, projectName) {
@@ -924,20 +1116,47 @@ CHAT_HTML = """<!doctype html>
 
   // ---------- upload ----------
 
-  $('attach').onclick = () => $('file').click();
+  // uploadTarget decides where the picked file lands: null means "the
+  // open chat", a project id means "a new chat inside that project".
+  let uploadTarget = null;
+
+  function uploadInto(projectId) {
+    uploadTarget = {projectId};
+    $('file').click();
+  }
+
+  $('attach').onclick = () => { uploadTarget = null; $('file').click(); };
+
   $('file').onchange = async e => {
     const f = e.target.files[0];
+    e.target.value = '';
     if (!f) return;
-    setStatus('Uploading ' + f.name + '...');
+
+    const target = uploadTarget;
+    uploadTarget = null;
+    const dismiss = toast('Uploading ' + f.name + '\\u2026', {seconds: 120});
+
     const q = '?filename=' + encodeURIComponent(f.name) +
-              '&conversation_id=' + encodeURIComponent(current ? current.id : '');
+              '&conversation_id=' +
+              encodeURIComponent(target ? '' : (current ? current.id : ''));
     const res = await fetch('/api/upload' + q, {method: 'POST', body: f});
     const data = await res.json();
-    e.target.value = '';
-    if (data.error) { setStatus('Upload failed: ' + data.error); return; }
-    setStatus('Stored ' + data.filename + ' (' + data.characters + ' characters)');
+    dismiss();
+
+    if (data.error) { toast('Upload failed: ' + data.error, {error: true}); return; }
+
+    if (target && target.projectId) {
+      await jsonSend('/api/conversations/' + data.conversation_id,
+                     {project_id: target.projectId}, 'PATCH');
+      await loadSidebar();
+      await openProject(target.projectId, {background: true});
+      toast('Added ' + data.filename + ' to this project');
+      return;
+    }
+
     await loadSidebar();
     await openConversation(data.conversation_id);
+    toast('Stored ' + data.filename + ' (' + data.characters + ' characters)');
   };
 
   // ---------- dictation ----------
