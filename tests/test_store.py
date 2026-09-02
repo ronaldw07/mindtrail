@@ -128,6 +128,17 @@ def test_kind_defaults_to_research(store):
     assert entry.kind == "research"
 
 
+def test_summary_does_not_duplicate_the_query_on_read_back(store):
+    # The embedded document is "query\n\nsummary"; reading a stored entry
+    # back must return the summary alone, not that concatenation.
+    store.add("what is a vector database", "It stores embeddings.", [])
+
+    entry = store.all()[0]
+
+    assert entry.summary == "It stores embeddings."
+    assert entry.query not in entry.summary
+
+
 def test_kind_round_trips_through_storage(store):
     store.add("q", "a", [], kind="note")
 

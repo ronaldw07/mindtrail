@@ -46,10 +46,12 @@ def _now_iso() -> str:
 def _to_entry(doc: str, meta: dict, entry_id: str) -> Entry:
     raw_sources = meta.get("sources", "")
     raw_facts = meta.get("key_facts", "")
+    # `doc` is the query+summary blob embedded for search, not the summary
+    # itself - it must be read back from its own metadata field.
     return Entry(
         id=entry_id,
         query=meta.get("query", ""),
-        summary=doc,
+        summary=meta.get("summary", doc),
         sources=tuple(s for s in raw_sources.split("\n") if s),
         created_at=meta.get("created_at", ""),
         topic=meta.get("topic", ""),
@@ -101,6 +103,7 @@ class MemoryStore:
             metadatas=[
                 {
                     "query": entry.query,
+                    "summary": entry.summary,
                     "sources": "\n".join(entry.sources),
                     "created_at": entry.created_at,
                     "topic": entry.topic,
