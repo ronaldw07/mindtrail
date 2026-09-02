@@ -302,6 +302,14 @@ CHAT_HTML = """<!doctype html>
     renderTree();
   }
 
+  // Reload the sidebar, and the project screen too when one is open -
+  // it renders its own copy of names and chat rows, so it goes stale
+  // otherwise.
+  async function refreshViews() {
+    await loadSidebar();
+    if (currentProject) await openProject(currentProject);
+  }
+
   function sectionRow(label, opts) {
     const row = document.createElement('div');
     row.className = 'section' + (opts.onClick ? ' clickable' : '');
@@ -464,15 +472,15 @@ CHAT_HTML = """<!doctype html>
         if (!t) return;
         await jsonSend('/api/conversations/' + c.id, {title: t}, 'PATCH');
         if (current && current.id === c.id) { current.title = t; setBreadcrumb(); }
-        await loadSidebar();
+        await refreshViews();
       }},
       {label: c.pinned ? 'Unpin' : 'Pin', run: async () => {
         await jsonSend('/api/conversations/' + c.id, {pinned: !c.pinned}, 'PATCH');
-        await loadSidebar();
+        await refreshViews();
       }},
       {label: c.unread ? 'Mark as read' : 'Mark as unread', run: async () => {
         await jsonSend('/api/conversations/' + c.id, {unread: !c.unread}, 'PATCH');
-        await loadSidebar();
+        await refreshViews();
       }},
       {divider: true}
     ];
@@ -482,7 +490,7 @@ CHAT_HTML = """<!doctype html>
         await jsonSend('/api/conversations/' + c.id, {project_id: p.id}, 'PATCH');
         projectsOpen = true; openProjects.add(p.id);
         if (current && current.id === c.id) { current.project_id = p.id; }
-        await loadSidebar();
+        await refreshViews();
         setBreadcrumb();
       }});
     });
@@ -490,7 +498,7 @@ CHAT_HTML = """<!doctype html>
       items.push({label: 'Remove from project', run: async () => {
         await jsonSend('/api/conversations/' + c.id, {project_id: null}, 'PATCH');
         if (current && current.id === c.id) { current.project_id = null; }
-        await loadSidebar();
+        await refreshViews();
         setBreadcrumb();
       }});
     }
@@ -503,7 +511,7 @@ CHAT_HTML = """<!doctype html>
       if (!ok) return;
       await api('/api/conversations/' + c.id, {method: 'DELETE'});
       if (current && current.id === c.id) newChat();
-      await loadSidebar();
+      await refreshViews();
     }});
     showMenu(e, items);
   }
@@ -515,7 +523,10 @@ CHAT_HTML = """<!doctype html>
         if (!n) return;
         await jsonSend('/api/projects/' + p.id, {name: n}, 'PATCH');
         await loadSidebar();
-        setBreadcrumb();
+        // The project screen renders its own copy of the name, so it has
+        // to be re-read or it keeps showing the old one.
+        if (currentProject === p.id) await openProject(p.id);
+        else setBreadcrumb();
       }},
       {divider: true},
       {label: 'Delete project', danger: true, run: async () => {
