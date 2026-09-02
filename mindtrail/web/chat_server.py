@@ -19,7 +19,9 @@ from mindtrail.ingest.researcher import Researcher
 from mindtrail.llm import LLMClient
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import ConversationStore
+from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import ProjectStore
+from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.organize.trash import Trash
 from mindtrail.web import api
 from mindtrail.web.chat_ui import CHAT_HTML
@@ -42,6 +44,9 @@ class Deps:
         chats: ConversationStore,
         llm: LLMClient,
         topic_extractor=None,
+        profile: ProfileStore | None = None,
+        roadmaps: RoadmapStore | None = None,
+        roadmap_nodes: RoadmapNodeStore | None = None,
     ):
         self.researcher = researcher
         self.store = store
@@ -50,6 +55,9 @@ class Deps:
         self.llm = llm
         self.topic_extractor = topic_extractor
         self.trash = Trash()
+        self.profile = profile or ProfileStore()
+        self.roadmaps = roadmaps or RoadmapStore()
+        self.roadmap_nodes = roadmap_nodes or RoadmapNodeStore()
 
 
 def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
@@ -106,6 +114,14 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         deps.store, deps.chats, self._tail("/api/conversations/")
                     )
                 )
+            elif path.startswith("/api/roadmap/"):
+                self._json(
+                    api.handle_get_roadmap(
+                        deps.roadmaps, deps.roadmap_nodes, self._tail("/api/roadmap/")
+                    )
+                )
+            elif path == "/api/profile":
+                self._json(api.handle_get_profile(deps.profile))
             elif path.startswith("/api/projects/"):
                 params = parse_qs(urlparse(self.path).query)
                 self._json(
@@ -117,6 +133,7 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         self._tail("/api/projects/"),
                         params.get("refresh", [""])[0] == "1",
                         params.get("background", [""])[0] != "1",
+                        deps.profile,
                     )
                 )
             else:
@@ -140,8 +157,37 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         str(body.get("conversation_id", "") or ""),
                         body.get("project_id") or None,
                         deps.projects,
+                        deps.profile,
                     )
                 )
+            elif path.startswith("/api/roadmap/") and path.endswith("/generate"):
+                body = self._json_body() or {}
+                project_id = path[len("/api/roadmap/") : -len("/generate")]
+                self._json(
+                    api.handle_generate_roadmap(
+                        deps.store,
+                        deps.chats,
+                        deps.projects,
+                        deps.roadmaps,
+                        deps.roadmap_nodes,
+                        deps.llm,
+                        deps.profile,
+                        project_id,
+                        str(body.get("goal", "")),
+                    )
+                )
+            elif path.startswith("/api/roadmap-node/"):
+                body = self._json_body() or {}
+                self._json(
+                    api.handle_add_node(
+                        deps.roadmap_nodes, self._tail("/api/roadmap-node/"), body
+                    )
+                )
+            elif path == "/api/profile":
+                body = self._json_body() or {}
+                self._json(api.handle_save_profile(deps.profile, str(body.get("content", ""))))
+            elif path == "/api/profile/draft":
+                self._json(api.handle_draft_profile(deps.store, deps.llm))
             elif path == "/api/projects":
                 body = self._json_body()
                 if body is None:
@@ -194,6 +240,12 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         deps.projects, self._tail("/api/projects/"), body
                     )
                 )
+            elif path.startswith("/api/roadmap-node/"):
+                self._json(
+                    api.handle_update_node(
+                        deps.roadmap_nodes, self._tail("/api/roadmap-node/"), body
+                    )
+                )
             else:
                 self._not_found()
 
@@ -206,6 +258,12 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         deps.chats,
                         self._tail("/api/conversations/"),
                         deps.trash,
+                    )
+                )
+            elif path.startswith("/api/roadmap-node/"):
+                self._json(
+                    api.handle_delete_node(
+                        deps.roadmap_nodes, self._tail("/api/roadmap-node/")
                     )
                 )
             elif path.startswith("/api/projects/"):

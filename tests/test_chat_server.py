@@ -21,7 +21,7 @@ class StubResearcher:
         self._error = error
         self.last_conversation_id = None
 
-    def research_and_store(self, query, conversation_id="", instructions=""):
+    def research_and_store(self, query, conversation_id="", instructions="", profile=""):
         self.last_conversation_id = conversation_id
         self.last_instructions = instructions
         if self._error:
@@ -443,7 +443,7 @@ def test_a_chat_in_a_project_passes_its_instructions_to_research(store, chats, p
         def __init__(self):
             self.instructions = None
 
-        def research_and_store(self, query, conversation_id="", instructions=""):
+        def research_and_store(self, query, conversation_id="", instructions="", profile=""):
             self.instructions = instructions
             return a_result()
 
@@ -462,7 +462,7 @@ def test_a_chat_outside_a_project_gets_no_instructions(store, chats, projects):
         def __init__(self):
             self.instructions = None
 
-        def research_and_store(self, query, conversation_id="", instructions=""):
+        def research_and_store(self, query, conversation_id="", instructions="", profile=""):
             self.instructions = instructions
             return a_result()
 

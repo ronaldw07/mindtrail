@@ -145,19 +145,23 @@ class Researcher:
         return rewritten[:REWRITE_MAX_CHARS] or query
 
     def research(
-        self, query: str, conversation_id: str = "", instructions: str = ""
+        self,
+        query: str,
+        conversation_id: str = "",
+        instructions: str = "",
+        profile: str = "",
     ) -> Research:
         recalled = self._store.search(query, k=config.RELATED_MEMORIES_TO_INJECT)
         history = self._store.by_conversation(conversation_id)
         texts, urls = _gather_pages(self._provider, self._search_query(query, history))
 
-        # Project instructions lead the prompt so they frame everything
-        # after them, rather than trailing a wall of source text.
-        preamble = (
-            f"INSTRUCTIONS FOR THIS PROJECT (follow these):\n{instructions}\n\n"
-            if instructions.strip()
-            else ""
-        )
+        # Profile leads, then project instructions, so the prompt frames
+        # everything after it: who is asking, then how to answer them.
+        preamble = ""
+        if profile.strip():
+            preamble += f"ABOUT THE USER:\n{profile}\n\n"
+        if instructions.strip():
+            preamble += f"INSTRUCTIONS FOR THIS PROJECT (follow these):\n{instructions}\n\n"
         prompt = (
             f"{preamble}"
             f"{_format_conversation(history)}"
@@ -177,10 +181,17 @@ class Researcher:
         )
 
     def research_and_store(
-        self, query: str, conversation_id: str = "", instructions: str = ""
+        self,
+        query: str,
+        conversation_id: str = "",
+        instructions: str = "",
+        profile: str = "",
     ) -> Research:
         result = self.research(
-            query, conversation_id=conversation_id, instructions=instructions
+            query,
+            conversation_id=conversation_id,
+            instructions=instructions,
+            profile=profile,
         )
         topic, key_facts = self._assign_topic(result)
         self._store.add(
