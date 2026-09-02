@@ -139,6 +139,44 @@ def test_summary_does_not_duplicate_the_query_on_read_back(store):
     assert entry.query not in entry.summary
 
 
+def test_entries_are_grouped_by_conversation_oldest_first(store):
+    store.add("first", "a", [], conversation_id="c1")
+    store.add("second", "a", [], conversation_id="c1")
+    store.add("other", "a", [], conversation_id="c2")
+
+    assert [e.query for e in store.by_conversation("c1")] == ["first", "second"]
+
+
+def test_by_conversation_with_no_id_returns_nothing(store):
+    store.add("q", "a", [], conversation_id="c1")
+
+    assert store.by_conversation("") == []
+
+
+def test_deleting_a_conversation_removes_only_its_entries(store):
+    store.add("doomed", "a", [], conversation_id="c1")
+    store.add("survivor", "a", [], conversation_id="c2")
+
+    removed = store.delete_conversation_entries("c1")
+
+    assert removed == 1
+    assert [e.query for e in store.all()] == ["survivor"]
+
+
+def test_assigning_a_conversation_preserves_other_metadata(store):
+    # Chroma merges metadata on update; a regression here would silently
+    # wipe topic/kind off migrated entries.
+    entry = store.add("q", "a", [], topic="Docker", key_facts=["f"], kind="note")
+
+    store.assign_conversation([entry.id], "c1")
+
+    migrated = store.all()[0]
+    assert migrated.conversation_id == "c1"
+    assert migrated.topic == "Docker"
+    assert migrated.kind == "note"
+    assert migrated.key_facts == ("f",)
+
+
 def test_kind_round_trips_through_storage(store):
     store.add("q", "a", [], kind="note")
 

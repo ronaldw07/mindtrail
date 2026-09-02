@@ -33,6 +33,9 @@ class Entry:
     kind: str = DEFAULT_KIND
     """One of: research (from ask), note (manual), document (uploaded
     file), advice (generated plan)."""
+    conversation_id: str = ""
+    """Which conversation this belongs to. Empty for entries created
+    before conversations existed, and for advice."""
 
     def with_summary(self, summary: str) -> "Entry":
         """Return a copy carrying a new summary, leaving this one untouched."""
@@ -57,6 +60,7 @@ def _to_entry(doc: str, meta: dict, entry_id: str) -> Entry:
         topic=meta.get("topic", ""),
         key_facts=tuple(f for f in raw_facts.split("\n") if f),
         kind=meta.get("kind", DEFAULT_KIND),
+        conversation_id=meta.get("conversation_id", ""),
     )
 
 
@@ -78,6 +82,7 @@ class MemoryStore:
         topic: str = "",
         key_facts: list[str] | None = None,
         kind: str = DEFAULT_KIND,
+        conversation_id: str = "",
     ) -> Entry:
         """Store one researched question. Returns the created entry."""
         if not query.strip():
@@ -94,6 +99,7 @@ class MemoryStore:
             topic=topic,
             key_facts=tuple(key_facts or []),
             kind=kind,
+            conversation_id=conversation_id,
         )
         # Chroma metadata values must be scalars, so list fields are joined
         # here and split back out in _to_entry.
@@ -109,6 +115,7 @@ class MemoryStore:
                     "topic": entry.topic,
                     "key_facts": "\n".join(entry.key_facts),
                     "kind": entry.kind,
+                    "conversation_id": entry.conversation_id,
                 }
             ],
         )
@@ -160,6 +167,40 @@ class MemoryStore:
             )
         ]
         return sorted(entries, key=lambda e: e.created_at, reverse=True)
+
+    def by_conversation(self, conversation_id: str) -> list[Entry]:
+        """A conversation's entries, oldest first so they read as a thread."""
+        if not conversation_id:
+            return []
+        matches = [e for e in self.all() if e.conversation_id == conversation_id]
+        return sorted(matches, key=lambda e: e.created_at)
+
+    def assign_conversation(self, entry_ids: list[str], conversation_id: str) -> None:
+        """Attach existing entries to a conversation.
+
+        Chroma merges metadata on update rather than replacing it
+        (verified against the installed version), so only the changed
+        field is sent.
+        """
+        if not entry_ids:
+            return
+        self._collection.update(
+            ids=entry_ids,
+            metadatas=[{"conversation_id": conversation_id} for _ in entry_ids],
+        )
+
+    def delete_conversation_entries(self, conversation_id: str) -> int:
+        """Delete every entry in a conversation. Returns how many went.
+
+        Deleting a chat is expected to delete its content, unlike
+        deleting a project, which only unfiles.
+        """
+        if not conversation_id:
+            return 0
+        doomed = [e.id for e in self.all() if e.conversation_id == conversation_id]
+        if doomed:
+            self._collection.delete(ids=doomed)
+        return len(doomed)
 
     def topics(self) -> list[str]:
         """Distinct topic labels already in use, for reuse by new entries.
