@@ -1025,67 +1025,22 @@ CHAT_HTML = """<!doctype html>
     const rail = document.createElement('div');
     rail.className = 'proj-rail';
 
-    const hlCard = card('What\\u2019s next', '\\u21bb Refresh',
-      () => openProject(id, {refresh: true}));
-    if (data.highlights_error) {
-      const e = document.createElement('div');
-      e.className = 'muted';
-      e.textContent = data.highlights_error;
-      hlCard.appendChild(e);
-    }
-    if (!data.highlights.length && !data.highlights_error) {
-      const p = document.createElement('div');
-      p.className = 'muted';
-      p.textContent = data.entry_count
-        ? 'Nothing to suggest yet.'
-        : 'Add chats or a document, and suggestions appear here.';
-      hlCard.appendChild(p);
-    }
-    if (data.highlights_stale) {
-      const note = document.createElement('div');
-      note.className = 'stale-note';
-      note.textContent = 'New activity since these \\u2014 hit Refresh to update.';
-      hlCard.appendChild(note);
-    }
-    data.highlights.forEach(h => {
-      const tier = h.priority || 'next';
-      const item = document.createElement('div');
-      item.className = 'hl ' + tier;
-      item.title = 'Click to expand';
-
-      const head = document.createElement('div');
-      head.className = 'hl-head';
-      const badge = document.createElement('span');
-      badge.className = 'tier ' + tier;
-      badge.textContent = tier === 'now' ? 'Do now' : tier;
-      head.appendChild(badge);
-      head.appendChild(document.createTextNode(h.headline));
-      item.appendChild(head);
-
-      if (h.detail) {
-        const d = document.createElement('div');
-        d.className = 'hl-detail';
-        d.textContent = h.detail;
-        item.appendChild(d);
-      }
-      if (h.source) {
-        const s = document.createElement('div');
-        s.className = 'hl-source';
-        // The prompt labels entries "[RESEARCH] ..." so the model can tell
-        // documents from chats; that tag is internal and reads as noise here.
-        s.textContent = 'from: ' + h.source.replace(/^\\[[A-Z]+\\]\\s*/, '');
-        item.appendChild(s);
-      }
-      item.onclick = () => expandHighlight(h, data.name);
-      hlCard.appendChild(item);
+    // Refresh replaces only this panel's contents, so the rest of the
+    // project screen does not flash while one card reloads.
+    const hlCard = card('What\\u2019s next', '\\u21bb Refresh', async ev => {
+      const btn = ev.currentTarget;
+      btn.disabled = true;
+      btn.textContent = '\\u21bb Refreshing\\u2026';
+      const fresh = await api('/api/projects/' + id + '?refresh=1');
+      btn.disabled = false;
+      btn.textContent = '\\u21bb Refresh';
+      if (fresh.error) { toast(fresh.error, {error: true}); return; }
+      fillHighlights(hlCard, fresh, id);
+      toast(fresh.highlights_error
+        ? 'Could not refresh: ' + fresh.highlights_error
+        : 'Suggestions updated', {error: !!fresh.highlights_error});
     });
-    if (data.highlights_generated_at) {
-      const stamp = document.createElement('div');
-      stamp.className = 'stamp';
-      stamp.textContent = 'Updated ' + relTime(data.highlights_generated_at) +
-                          ' \\u00b7 based on ' + data.entry_count + ' item(s)';
-      hlCard.appendChild(stamp);
-    }
+    fillHighlights(hlCard, data, id);
     rail.appendChild(hlCard);
 
     const instrCard = card('Instructions', null, null);
@@ -1146,6 +1101,75 @@ CHAT_HTML = """<!doctype html>
 
     layout.appendChild(rail);
     view.appendChild(layout);
+  }
+
+  // Rebuilds only the body of the What's next card, leaving its header
+  // (and the Refresh button being clicked) in place.
+  function fillHighlights(cardEl, data, projectId) {
+    cardEl.querySelectorAll(':scope > *:not(h4)').forEach(n => n.remove());
+
+    if (data.highlights_error) {
+      const e = document.createElement('div');
+      e.className = 'muted';
+      e.textContent = 'Could not refresh \\u2014 ' + data.highlights_error +
+                      '. Showing the previous suggestions.';
+      cardEl.appendChild(e);
+    }
+    if (!data.highlights.length && !data.highlights_error) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = data.entry_count
+        ? 'Nothing to suggest yet.'
+        : 'Add chats or a document, and suggestions appear here.';
+      cardEl.appendChild(p);
+    }
+    if (data.highlights_stale && !data.highlights_error) {
+      const note = document.createElement('div');
+      note.className = 'stale-note';
+      note.textContent = 'New activity since these \\u2014 hit Refresh to update.';
+      cardEl.appendChild(note);
+    }
+
+    data.highlights.forEach(h => {
+      const tier = h.priority || 'next';
+      const item = document.createElement('div');
+      item.className = 'hl ' + tier;
+      item.title = 'Click to expand';
+
+      const head = document.createElement('div');
+      head.className = 'hl-head';
+      const badge = document.createElement('span');
+      badge.className = 'tier ' + tier;
+      badge.textContent = tier === 'now' ? 'Do now' : tier;
+      head.appendChild(badge);
+      head.appendChild(document.createTextNode(h.headline));
+      item.appendChild(head);
+
+      if (h.detail) {
+        const d = document.createElement('div');
+        d.className = 'hl-detail';
+        d.textContent = h.detail;
+        item.appendChild(d);
+      }
+      if (h.source) {
+        const s = document.createElement('div');
+        s.className = 'hl-source';
+        // The prompt labels entries "[RESEARCH] ..." so the model can tell
+        // documents from chats; that tag is internal and reads as noise here.
+        s.textContent = 'from: ' + h.source.replace(/^\\[[A-Z]+\\]\\s*/, '');
+        item.appendChild(s);
+      }
+      item.onclick = () => expandHighlight(h, data.name);
+      cardEl.appendChild(item);
+    });
+
+    if (data.highlights_generated_at && data.highlights.length) {
+      const stamp = document.createElement('div');
+      stamp.className = 'stamp';
+      stamp.textContent = 'Updated ' + relTime(data.highlights_generated_at) +
+                          ' \\u00b7 based on ' + data.entry_count + ' item(s)';
+      cardEl.appendChild(stamp);
+    }
   }
 
   function expandHighlight(h, projectName) {

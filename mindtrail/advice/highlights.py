@@ -17,6 +17,10 @@ from mindtrail.memory.store import Entry
 
 MAX_HIGHLIGHTS = 5
 SUMMARY_CHARS_PER_ENTRY = 400
+# Five highlights with detail and sources overran 800 tokens and the JSON
+# came back truncated mid-object, so parsing failed on otherwise good
+# output. Sized with headroom rather than trimmed to fit.
+GENERATION_MAX_TOKENS = 1600
 
 PRIORITIES = ("now", "next", "later")
 DEFAULT_PRIORITY = "next"
@@ -26,8 +30,9 @@ SYSTEM_PROMPT = (
     "You are given their research, notes, and documents for one project, "
     "and optionally their own instructions for it.\n\n"
     "Return three to five highlights: short, concrete, and specific to "
-    "this material. Each needs a headline of at most eight words, one or "
-    "two sentences on why it matters now, and a priority.\n\n"
+    "this material. Each needs a headline of at most eight words, a "
+    "detail of at most two sentences, and a priority. Keep detail tight - "
+    "long entries crowd out the later highlights.\n\n"
     "Priority is one of:\n"
     '  "now"   - the single most pressing thing, given what they have '
     "been asking about most recently. Use this sparingly, ideally once.\n"
@@ -108,8 +113,9 @@ def generate_highlights(
 
     prefix = f"PROJECT INSTRUCTIONS:\n{instructions}\n\n" if instructions.strip() else ""
     completion = llm.complete(
-        SYSTEM_PROMPT, f"{prefix}PROJECT MATERIAL:\n{_format_entries(usable)}",
-        max_tokens=800,
+        SYSTEM_PROMPT,
+        f"{prefix}PROJECT MATERIAL:\n{_format_entries(usable)}",
+        max_tokens=GENERATION_MAX_TOKENS,
     )
     return parse_highlights(completion.text)
 
