@@ -104,14 +104,18 @@ def _format_entries(entries: list[Entry]) -> str:
 
 
 def generate_highlights(
-    llm: LLMClient, entries: list[Entry], instructions: str = ""
+    llm: LLMClient, entries: list[Entry], instructions: str = "", profile: str = ""
 ) -> list[Highlight]:
     """Raises ValueError when the project has nothing to reason about."""
     usable = [e for e in entries if e.kind != "advice"]
     if not usable:
         raise ValueError("nothing in this project yet")
 
-    prefix = f"PROJECT INSTRUCTIONS:\n{instructions}\n\n" if instructions.strip() else ""
+    prefix = ""
+    if profile.strip():
+        prefix += f"ABOUT THE USER:\n{profile}\n\n"
+    if instructions.strip():
+        prefix += f"PROJECT INSTRUCTIONS:\n{instructions}\n\n"
     completion = llm.complete(
         SYSTEM_PROMPT,
         f"{prefix}PROJECT MATERIAL:\n{_format_entries(usable)}",

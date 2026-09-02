@@ -14,12 +14,16 @@ from mindtrail.advice.highlights import (
     highlights_from_json,
     highlights_to_json,
 )
+from mindtrail.advice.profile_draft import draft_profile
+from mindtrail.advice.roadmap_gen import generate_roadmap
 from mindtrail.ingest.documents import DocumentError, extract_pdf_text
 from mindtrail.ingest.researcher import Researcher
 from mindtrail.llm import LLMClient, LLMError
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import ConversationStore, title_from_question
+from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import ProjectStore
+from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.organize.trash import DeletedConversation, Trash
 
 
@@ -87,6 +91,7 @@ def handle_project_detail(
     project_id: str,
     refresh: bool = False,
     allow_generate: bool = True,
+    profile: ProfileStore | None = None,
 ) -> dict:
     """A project's chats, files, instructions, and next-step highlights.
 
@@ -109,7 +114,10 @@ def handle_project_detail(
     # regeneration would make an unrelated action feel broken.
     if allow_generate and usable and (refresh or stale or not highlights):
         try:
-            generated = generate_highlights(llm, usable, project.instructions)
+            profile_text = profile.get().content if profile is not None else ""
+            generated = generate_highlights(
+                llm, usable, project.instructions, profile_text
+            )
             projects.save_advice(project_id, highlights_to_json(generated), len(usable))
             project = projects.get(project_id) or project
             highlights = generated
@@ -300,6 +308,7 @@ def handle_ask(
     conversation_id: str = "",
     project_id: str | None = None,
     projects: ProjectStore | None = None,
+    profile: ProfileStore | None = None,
 ) -> dict:
     """Answer a question, creating a conversation if this is a new chat."""
     if not message.strip():
@@ -324,9 +333,14 @@ def handle_ask(
         project = projects.get(project_id)
         instructions = project.instructions if project else ""
 
+    profile_text = profile.get().content if profile is not None else ""
+
     try:
         result = researcher.research_and_store(
-            message, conversation_id=conversation_id, instructions=instructions
+            message,
+            conversation_id=conversation_id,
+            instructions=instructions,
+            profile=profile_text,
         )
     except Exception as exc:  # noqa: BLE001 - surfaced in the chat UI
         if created_conversation:
@@ -411,3 +425,181 @@ def handle_upload(
         "filename": Path(filename).name,
         "characters": len(text),
     }
+
+
+# --- profile ------------------------------------------------------------
+
+
+def handle_get_profile(profile: ProfileStore) -> dict:
+    p = profile.get()
+    return {"content": p.content, "updated_at": p.updated_at, "is_empty": p.is_empty}
+
+
+def handle_save_profile(profile: ProfileStore, content: str) -> dict:
+    saved = profile.save(content)
+    return {"content": saved.content, "updated_at": saved.updated_at}
+
+
+def handle_draft_profile(store: MemoryStore, llm: LLMClient) -> dict:
+    try:
+        draft = draft_profile(llm, store.all())
+    except (LLMError, ValueError) as exc:
+        return {"error": str(exc)}
+    return {"draft": draft}
+
+
+# --- roadmaps -------------------------------------------------------------
+
+
+def _node_json(node) -> dict:
+    return {
+        "id": node.id,
+        "title": node.title,
+        "detail": node.detail,
+        "status": node.status,
+        "note": node.note,
+        "x": node.x,
+        "y": node.y,
+        "depends_on": list(node.depends_on),
+    }
+
+
+def handle_get_roadmap(
+    roadmaps: RoadmapStore, nodes: RoadmapNodeStore, project_id: str
+) -> dict:
+    """The project's roadmap, or an empty shell if none exists yet -
+    the canvas can render either without a special case in the client."""
+    roadmap = roadmaps.for_project(project_id)
+    if roadmap is None:
+        return {"roadmap": None, "nodes": []}
+    return {
+        "roadmap": {"id": roadmap.id, "goal": roadmap.goal},
+        "nodes": [_node_json(n) for n in nodes.for_roadmap(roadmap.id)],
+    }
+
+
+LAYOUT_COLUMN_WIDTH = 260
+LAYOUT_ROW_HEIGHT = 130
+
+
+def _place_new_nodes(existing: list, proposed) -> list[tuple]:
+    """A simple left-to-right, dependency-respecting grid.
+
+    Good enough to start from; the user drags from here. A node's column
+    is one past the furthest column of anything it depends on, so edges
+    generally point rightward instead of crossing back over themselves.
+    """
+    by_title = {n.title: n for n in existing}
+    columns: dict[str, int] = {n.title: int(n.x // LAYOUT_COLUMN_WIDTH) for n in existing}
+    max_col = max(columns.values(), default=-1)
+    placed = []
+
+    for item in proposed:
+        deps_cols = [columns[d] for d in item.depends_on if d in columns]
+        col = (max(deps_cols) + 1) if deps_cols else 0
+        row = sum(1 for c in columns.values() if c == col)
+        columns[item.title] = col
+        placed.append((item, col * LAYOUT_COLUMN_WIDTH, row * LAYOUT_ROW_HEIGHT))
+        max_col = max(max_col, col)
+
+    return placed
+
+
+def handle_generate_roadmap(
+    store: MemoryStore,
+    chats: ConversationStore,
+    projects: ProjectStore,
+    roadmaps: RoadmapStore,
+    nodes: RoadmapNodeStore,
+    llm: LLMClient,
+    profile: ProfileStore,
+    project_id: str,
+    goal: str = "",
+) -> dict:
+    """Create or extend a project's roadmap toward a goal.
+
+    Decided nodes (accepted/done/rejected) and their notes are preserved
+    and shown to the model as context; only proposed nodes are replaced,
+    so a regeneration builds on what the user already decided.
+    """
+    project = projects.get(project_id)
+    if project is None:
+        return {"error": "no such project"}
+
+    roadmap = roadmaps.for_project(project_id)
+    if roadmap is None:
+        if not goal.strip():
+            return {"error": "a goal is required to start a roadmap"}
+        roadmap = roadmaps.create(goal, project_id=project_id)
+
+    existing = nodes.for_roadmap(roadmap.id)
+    decided = [n for n in existing if n.status != "proposed"]
+    still_proposed = [n for n in existing if n.status == "proposed"]
+
+    try:
+        proposal = generate_roadmap(
+            llm,
+            roadmap.goal,
+            profile=profile.get().content,
+            project_entries=project_entries(store, chats, project_id),
+            existing_nodes=decided,
+        )
+    except (LLMError, ValueError) as exc:
+        return {"error": str(exc)}
+
+    for stale in still_proposed:
+        nodes.delete(stale.id)
+
+    title_to_id = {n.title: n.id for n in decided}
+    placed = _place_new_nodes(decided, proposal)
+    for item, x, y in placed:
+        created = nodes.add(
+            roadmap.id, item.title, item.detail, status="proposed", x=x, y=y
+        )
+        title_to_id[item.title] = created.id
+
+    for item, _, _ in placed:
+        deps = [title_to_id[d] for d in item.depends_on if d in title_to_id]
+        if deps:
+            nodes.set_depends_on(title_to_id[item.title], deps)
+
+    return handle_get_roadmap(roadmaps, nodes, project_id)
+
+
+def handle_update_node(nodes: RoadmapNodeStore, node_id: str, body: dict) -> dict:
+    try:
+        if "status" in body:
+            nodes.set_status(node_id, str(body["status"]))
+        if "note" in body:
+            nodes.set_note(node_id, str(body["note"]))
+        if "x" in body and "y" in body:
+            nodes.move(node_id, float(body["x"]), float(body["y"]))
+        if "title" in body:
+            nodes.rename(node_id, str(body["title"]), str(body.get("detail", "")))
+    except ValueError as exc:
+        return {"error": str(exc)}
+    updated = nodes.get(node_id)
+    return {"error": "no such node"} if updated is None else _node_json(updated)
+
+
+def handle_add_node(nodes: RoadmapNodeStore, roadmap_id: str, body: dict) -> dict:
+    title = str(body.get("title", ""))
+    if not title.strip():
+        return {"error": "node title must not be empty"}
+    node = nodes.add(
+        roadmap_id,
+        title,
+        str(body.get("detail", "")),
+        status="accepted",  # a node the user adds by hand is already decided
+        x=float(body.get("x", 0)),
+        y=float(body.get("y", 0)),
+    )
+    return _node_json(node)
+
+
+def handle_delete_node(nodes: RoadmapNodeStore, node_id: str) -> dict:
+    try:
+        nodes.delete(node_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"ok": True}
