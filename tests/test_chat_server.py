@@ -1,29 +1,42 @@
-"""Tests for the chat request logic. The socket server itself is glue and
-is exercised by a live smoke test instead of a unit test, matching how
-network I/O is treated elsewhere in this project.
+"""Chat request handlers. Pure functions, no socket and no API key.
+
+The HTTP plumbing in chat_server.py is glue and is exercised by a live
+smoke test instead, matching how network I/O is treated elsewhere here.
 """
+
+import pytest
 
 from mindtrail.ingest.researcher import Research
 from mindtrail.memory.store import MemoryStore
-from mindtrail.web.chat_server import (
-    CHAT_HTML,
-    handle_ask,
-    handle_topic_entries,
-    handle_topics,
-)
+from mindtrail.organize.conversations import ConversationStore
+from mindtrail.organize.db import initialize
+from mindtrail.organize.projects import ProjectStore
+from mindtrail.web import api
+from mindtrail.web.chat_ui import CHAT_HTML
 
 
 class StubResearcher:
     def __init__(self, result=None, error=None):
         self._result = result
         self._error = error
-        self.last_query = None
+        self.last_conversation_id = None
 
-    def research_and_store(self, query):
-        self.last_query = query
+    def research_and_store(self, query, conversation_id=""):
+        self.last_conversation_id = conversation_id
         if self._error:
             raise self._error
         return self._result
+
+
+class StubLLM:
+    def __init__(self, text="transcribed", error=None):
+        self._text = text
+        self._error = error
+
+    def transcribe(self, audio, filename="audio.webm"):
+        if self._error:
+            raise self._error
+        return self._text
 
 
 def a_result(**overrides):
@@ -34,118 +47,270 @@ def a_result(**overrides):
     return Research(**defaults)
 
 
-def a_store(tmp_path):
-    return MemoryStore(path=str(tmp_path / "chroma"), collection="test")
+@pytest.fixture
+def store(tmp_path):
+    return MemoryStore(path=str(tmp_path / "chroma"), collection="testcol")
 
 
-def test_a_normal_message_returns_the_answer_and_sources(tmp_path):
-    store = a_store(tmp_path)
-    store.add("q", "the answer", ["http://a.com"], topic="Vector DBs")
-
-    response = handle_ask(StubResearcher(a_result()), store, "what is X")
-
-    assert response["answer"] == "the answer"
-    assert response["sources"] == ["http://a.com"]
-    assert response["recalled"] == []
+@pytest.fixture
+def db(tmp_path):
+    path = str(tmp_path / "test.db")
+    initialize(path)
+    return path
 
 
-def test_response_includes_the_assigned_topic(tmp_path):
-    store = a_store(tmp_path)
-    store.add("q", "a", [], topic="Docker")
-
-    response = handle_ask(StubResearcher(a_result()), store, "what is X")
-
-    assert response["topic"] == "Docker"
+@pytest.fixture
+def chats(db):
+    return ConversationStore(db)
 
 
-def test_recalled_entries_are_reduced_to_their_questions(tmp_path):
-    from mindtrail.memory.store import Entry
-
-    store = a_store(tmp_path)
-    store.add("q", "a", [])
-    recalled = (Entry(id="1", query="earlier q", summary="s", sources=(), created_at="t"),)
-
-    response = handle_ask(StubResearcher(a_result(recalled=recalled)), store, "what is X")
-
-    assert response["recalled"] == ["earlier q"]
+@pytest.fixture
+def projects(db):
+    return ProjectStore(db)
 
 
-def test_empty_message_is_rejected_without_calling_the_researcher(tmp_path):
+# --- sidebar ----------------------------------------------------------
+
+
+def test_sidebar_nests_conversations_under_their_project(projects, chats):
+    project = projects.create("Career")
+    chats.create("filed chat", project_id=project.id)
+
+    data = api.handle_sidebar(projects, chats)
+
+    assert data["projects"][0]["name"] == "Career"
+    assert data["projects"][0]["conversations"][0]["title"] == "filed chat"
+
+
+def test_sidebar_lists_unfiled_conversations_separately(projects, chats):
+    chats.create("loose chat")
+
+    data = api.handle_sidebar(projects, chats)
+
+    assert [c["title"] for c in data["unfiled"]] == ["loose chat"]
+
+
+def test_empty_project_still_appears(projects, chats):
+    projects.create("Empty")
+
+    data = api.handle_sidebar(projects, chats)
+
+    assert data["projects"][0]["conversations"] == []
+
+
+# --- asking -----------------------------------------------------------
+
+
+def test_asking_without_a_conversation_creates_one(store, chats):
     researcher = StubResearcher(a_result())
 
-    response = handle_ask(researcher, a_store(tmp_path), "   ")
+    response = api.handle_ask(researcher, store, chats, "what is X")
 
-    assert "error" in response
-    assert researcher.last_query is None
+    assert response["conversation_id"]
+    assert chats.get(response["conversation_id"]).title == "what is X"
 
 
-def test_a_failure_is_surfaced_as_an_error_field_not_raised(tmp_path):
-    response = handle_ask(
-        StubResearcher(error=ValueError("no sources")), a_store(tmp_path), "what is X"
+def test_asking_within_a_conversation_reuses_it(store, chats):
+    existing = chats.create("existing")
+    researcher = StubResearcher(a_result())
+
+    response = api.handle_ask(researcher, store, chats, "follow up", existing.id)
+
+    assert response["conversation_id"] == existing.id
+    assert researcher.last_conversation_id == existing.id
+
+
+def test_empty_message_is_rejected_without_creating_a_conversation(store, chats):
+    api.handle_ask(StubResearcher(a_result()), store, chats, "   ")
+
+    assert chats.all() == []
+
+
+def test_asking_into_a_missing_conversation_errors(store, chats):
+    response = api.handle_ask(
+        StubResearcher(a_result()), store, chats, "hi", "nonexistent"
     )
 
+    assert "error" in response
+
+
+def test_a_failed_first_question_does_not_leave_an_empty_chat(store, chats):
+    researcher = StubResearcher(error=ValueError("no sources"))
+
+    response = api.handle_ask(researcher, store, chats, "what is X")
+
     assert response["error"] == "no sources"
+    assert chats.all() == [], "an empty chat should not survive a failed first ask"
 
 
-def test_chat_html_references_the_api_endpoints():
-    assert "/api/ask" in CHAT_HTML
-    assert "/api/topics" in CHAT_HTML
-    assert "/api/topic/" in CHAT_HTML
+def test_a_failure_in_an_existing_chat_leaves_it_alone(store, chats):
+    existing = chats.create("keep me")
+    researcher = StubResearcher(error=ValueError("boom"))
+
+    api.handle_ask(researcher, store, chats, "q", existing.id)
+
+    assert chats.get(existing.id) is not None
 
 
-def test_topics_are_counted_and_sorted(tmp_path):
-    store = a_store(tmp_path)
-    store.add("q1", "a", [], topic="Docker")
-    store.add("q2", "a", [], topic="Docker")
-    store.add("q3", "a", [], topic="Kubernetes")
-
-    response = handle_topics(store)
-
-    assert response["topics"] == [
-        {"name": "Docker", "count": 2},
-        {"name": "Kubernetes", "count": 1},
-    ]
+# --- conversation entries --------------------------------------------
 
 
-def test_untopiced_entries_are_counted_as_uncategorized(tmp_path):
-    store = a_store(tmp_path)
-    store.add("q1", "a", [])
+def test_opening_a_conversation_returns_its_entries(store, chats):
+    chat = chats.create("t")
+    store.add("q1", "a1", [], conversation_id=chat.id)
 
-    response = handle_topics(store)
+    data = api.handle_conversation_entries(store, chats, chat.id)
 
-    assert response["topics"] == [{"name": "Uncategorized", "count": 1}]
-
-
-def test_advice_entries_are_excluded_from_topic_counts(tmp_path):
-    store = a_store(tmp_path)
-    store.add("Advice", "a plan", [], topic="Advice", kind="advice")
-
-    assert handle_topics(store)["topics"] == []
+    assert [e["query"] for e in data["entries"]] == ["q1"]
 
 
-def test_topic_entries_are_returned_oldest_first(tmp_path):
-    store = a_store(tmp_path)
-    store.add("first", "a1", [], topic="Docker")
-    store.add("second", "a2", [], topic="Docker")
+def test_opening_a_conversation_clears_unread(store, chats):
+    chat = chats.create("t")
+    chats.set_unread(chat.id, True)
 
-    response = handle_topic_entries(store, "Docker")
+    api.handle_conversation_entries(store, chats, chat.id)
 
-    assert [e["query"] for e in response["entries"]] == ["first", "second"]
-
-
-def test_topic_entries_only_include_the_requested_topic(tmp_path):
-    store = a_store(tmp_path)
-    store.add("q1", "a", [], topic="Docker")
-    store.add("q2", "a", [], topic="Kubernetes")
-
-    response = handle_topic_entries(store, "Docker")
-
-    assert len(response["entries"]) == 1
-    assert response["entries"][0]["query"] == "q1"
+    assert chats.get(chat.id).unread is False
 
 
-def test_unknown_topic_returns_no_entries(tmp_path):
-    store = a_store(tmp_path)
-    store.add("q1", "a", [], topic="Docker")
+def test_the_open_response_reports_the_cleared_unread_state(store, chats):
+    # Returning the pre-clear snapshot would tell the client a chat it
+    # just opened is still unread.
+    chat = chats.create("t")
+    chats.set_unread(chat.id, True)
 
-    assert handle_topic_entries(store, "Nonexistent")["entries"] == []
+    data = api.handle_conversation_entries(store, chats, chat.id)
+
+    assert data["conversation"]["unread"] is False
+
+
+def test_opening_a_missing_conversation_errors(store, chats):
+    assert "error" in api.handle_conversation_entries(store, chats, "nope")
+
+
+# --- mutations --------------------------------------------------------
+
+
+def test_renaming_through_the_handler(chats):
+    chat = chats.create("old")
+
+    api.handle_update_conversation(chats, chat.id, {"title": "new"})
+
+    assert chats.get(chat.id).title == "new"
+
+
+def test_pinning_through_the_handler(chats):
+    chat = chats.create("t")
+
+    api.handle_update_conversation(chats, chat.id, {"pinned": True})
+
+    assert chats.get(chat.id).pinned is True
+
+
+def test_marking_unread_through_the_handler(chats):
+    chat = chats.create("t")
+
+    api.handle_update_conversation(chats, chat.id, {"unread": True})
+
+    assert chats.get(chat.id).unread is True
+
+
+def test_moving_into_and_out_of_a_project(chats, projects):
+    project = projects.create("Career")
+    chat = chats.create("t")
+
+    api.handle_update_conversation(chats, chat.id, {"project_id": project.id})
+    assert chats.get(chat.id).project_id == project.id
+
+    api.handle_update_conversation(chats, chat.id, {"project_id": None})
+    assert chats.get(chat.id).project_id is None
+
+
+def test_only_supplied_fields_are_changed(chats):
+    chat = chats.create("original")
+    chats.set_pinned(chat.id, True)
+
+    api.handle_update_conversation(chats, chat.id, {"title": "renamed"})
+
+    updated = chats.get(chat.id)
+    assert updated.title == "renamed"
+    assert updated.pinned is True, "an unsent field must not be reset"
+
+
+def test_updating_a_missing_conversation_errors(chats):
+    assert "error" in api.handle_update_conversation(chats, "nope", {"title": "x"})
+
+
+def test_deleting_a_conversation_removes_it_and_its_entries(store, chats):
+    chat = chats.create("t")
+    store.add("q", "a", [], conversation_id=chat.id)
+
+    response = api.handle_delete_conversation(store, chats, chat.id)
+
+    assert response["entries_deleted"] == 1
+    assert chats.get(chat.id) is None
+    assert store.count() == 0
+
+
+def test_deleting_a_missing_conversation_errors(store, chats):
+    assert "error" in api.handle_delete_conversation(store, chats, "nope")
+
+
+def test_deleting_a_project_keeps_its_chats(projects, chats):
+    project = projects.create("Career")
+    chat = chats.create("keep me", project_id=project.id)
+
+    api.handle_delete_project(projects, project.id)
+
+    assert chats.get(chat.id) is not None
+    assert chats.get(chat.id).project_id is None
+
+
+def test_creating_a_project_with_a_blank_name_errors(projects):
+    assert "error" in api.handle_create_project(projects, "   ")
+
+
+# --- dictation and upload --------------------------------------------
+
+
+def test_transcription_returns_text():
+    assert api.handle_transcribe(StubLLM("hello there"), b"audio")["text"] == "hello there"
+
+
+def test_transcription_failure_is_surfaced():
+    from mindtrail.llm import LLMError
+
+    response = api.handle_transcribe(StubLLM(error=LLMError("no audio")), b"")
+
+    assert "error" in response
+
+
+def test_upload_rejects_non_pdf(store, chats):
+    response = api.handle_upload(store, chats, StubLLM(), "notes.txt", b"data")
+
+    assert "error" in response
+
+
+def test_upload_rejects_empty_body(store, chats):
+    assert "error" in api.handle_upload(store, chats, StubLLM(), "a.pdf", b"")
+
+
+def test_upload_of_an_unparseable_pdf_errors(store, chats):
+    response = api.handle_upload(store, chats, StubLLM(), "a.pdf", b"not really a pdf")
+
+    assert "error" in response
+
+
+# --- ui ---------------------------------------------------------------
+
+
+def test_chat_html_references_every_endpoint_it_uses():
+    for endpoint in [
+        "/api/sidebar",
+        "/api/ask",
+        "/api/projects",
+        "/api/conversations/",
+        "/api/upload",
+        "/api/transcribe",
+    ]:
+        assert endpoint in CHAT_HTML

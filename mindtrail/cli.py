@@ -14,8 +14,12 @@ from mindtrail.ingest.search import SearchError, default_search
 from mindtrail.ingest.topic import TopicExtractor
 from mindtrail.llm import LLMClient, LLMError
 from mindtrail.memory.store import MemoryStore
+from mindtrail.organize.conversations import ConversationStore
+from mindtrail.organize.db import initialize
+from mindtrail.organize.migrate import backfill_conversations
+from mindtrail.organize.projects import ProjectStore
 from mindtrail.predict.next_query import predict_from_store
-from mindtrail.web.chat_server import run_chat_server
+from mindtrail.web.chat_server import Deps, run_chat_server
 from mindtrail.web.generate import build_html
 
 DIVIDER = "-" * 68
@@ -140,11 +144,25 @@ def cmd_advice(args) -> int:
 def cmd_chat(args) -> int:
     store = MemoryStore()
     llm = LLMClient()
-    researcher = Researcher(
-        store, default_search(), llm, topic_extractor=TopicExtractor(llm)
+    extractor = TopicExtractor(llm)
+    researcher = Researcher(store, default_search(), llm, topic_extractor=extractor)
+
+    initialize()
+    chats = ConversationStore()
+    created = backfill_conversations(store, chats)
+    if created:
+        print(f"organized {created} existing topic(s) into conversations")
+
+    deps = Deps(
+        researcher=researcher,
+        store=store,
+        projects=ProjectStore(),
+        chats=chats,
+        llm=llm,
+        topic_extractor=extractor,
     )
     run_chat_server(
-        researcher, store, port=args.port, open_browser=not args.no_open, host=args.host
+        deps, port=args.port, open_browser=not args.no_open, host=args.host
     )
     return 0
 
