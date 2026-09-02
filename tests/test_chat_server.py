@@ -314,3 +314,23 @@ def test_chat_html_references_every_endpoint_it_uses():
         "/api/transcribe",
     ]:
         assert endpoint in CHAT_HTML
+
+
+def test_no_native_dialogs_are_used():
+    # window.prompt/confirm/alert render in the OS light theme regardless
+    # of the page, which breaks the dark UI. Everything goes through the
+    # in-page modal instead.
+    for call in ["prompt(", "confirm(", "alert("]:
+        assert call not in CHAT_HTML, f"native {call} would render an unstyled dialog"
+
+
+def test_the_in_page_modal_exists():
+    assert 'id="overlay"' in CHAT_HTML
+    assert ".modal {" in CHAT_HTML, "the modal needs styling to replace native dialogs"
+    assert "function modal(" in CHAT_HTML
+
+
+def test_sidebar_can_be_collapsed_and_navigated():
+    for element in ["toggle-sidebar", "nav-back", "nav-fwd"]:
+        assert element in CHAT_HTML
+    assert "#sidebar.collapsed" in CHAT_HTML
