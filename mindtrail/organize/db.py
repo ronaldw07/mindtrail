@@ -41,6 +41,38 @@ CREATE TABLE IF NOT EXISTS conversations (
 
 CREATE INDEX IF NOT EXISTS idx_conversations_project
     ON conversations(project_id);
+
+-- One row, enforced by the CHECK: there is a single user here, and a
+-- singleton table keeps every caller from having to pick an id.
+CREATE TABLE IF NOT EXISTS profile (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    content    TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS roadmaps (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    goal       TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS roadmap_nodes (
+    id         TEXT PRIMARY KEY,
+    roadmap_id TEXT NOT NULL REFERENCES roadmaps(id) ON DELETE CASCADE,
+    title      TEXT NOT NULL,
+    detail     TEXT NOT NULL DEFAULT '',
+    -- proposed (agent suggestion) | accepted | rejected | done
+    status     TEXT NOT NULL DEFAULT 'proposed',
+    note       TEXT NOT NULL DEFAULT '',
+    x          REAL NOT NULL DEFAULT 0,
+    y          REAL NOT NULL DEFAULT 0,
+    depends_on TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_nodes_roadmap ON roadmap_nodes(roadmap_id);
+CREATE INDEX IF NOT EXISTS idx_roadmaps_project ON roadmaps(project_id);
 """
 
 
