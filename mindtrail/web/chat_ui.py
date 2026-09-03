@@ -209,7 +209,7 @@ CHAT_HTML = """<!doctype html>
                   pointer-events: none; }
     #canvas svg path { fill: none; stroke: #3d3d3d; stroke-width: 1.5; }
     .node { position: absolute; width: 220px; background: #212121; border: 1px solid #3a3a3a;
-            border-radius: 10px; padding: 0.7rem 0.85rem; cursor: grab; font-size: 0.85rem;
+            border-radius: 10px; padding: 0.7rem 0.85rem 2rem; cursor: grab; font-size: 0.85rem;
             box-shadow: 0 4px 14px rgba(0,0,0,0.3); user-select: none; }
     .node:active { cursor: grabbing; }
     .node.proposed { border-style: dashed; opacity: 0.85; }
@@ -222,13 +222,22 @@ CHAT_HTML = """<!doctype html>
     .node-detail { color: #a5a5a5; font-size: 0.78rem; line-height: 1.4; margin-bottom: 0.4rem; }
     .node-note { font-size: 0.76rem; color: #cdd8ff; background: #1e2340; border-radius: 6px;
                  padding: 0.3rem 0.5rem; margin-bottom: 0.4rem; }
-    .node-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .node-actions { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
     .node-actions button { font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 5px;
                             border: 1px solid #3a3a3a; background: #2a2a2a; color: #ccc;
                             cursor: pointer; }
     .node-actions button:hover { background: #333; color: #fff; }
     .node-actions button.accept:hover { border-color: #4f46e5; }
     .node-actions button.reject:hover { border-color: #b91c1c; }
+    .node-check { width: 15px; height: 15px; accent-color: #2f9e5c; cursor: pointer; }
+    .node-check-label { font-size: 0.76rem; color: #a5a5a5; cursor: pointer; }
+    /* Pinned to the same corner on every card, separate from the
+       accept/reject/checkbox row, so it's always where a person expects
+       an overflow menu to be regardless of how much text is above it. */
+    .node-more { position: absolute; bottom: 0.5rem; right: 0.6rem; border: 1px solid #3a3a3a;
+                 background: #2a2a2a; color: #ccc; border-radius: 5px; padding: 0.1rem 0.5rem;
+                 font-size: 0.85rem; line-height: 1.4; cursor: pointer; }
+    .node-more:hover { background: #333; color: #fff; }
     #roadmap-empty { padding: 2rem; max-width: 480px; }
     #roadmap-empty input { width: 100%; padding: 0.6rem 0.75rem; border-radius: 8px;
                             border: 1px solid #333; background: #191919; color: #ececec;
@@ -1588,18 +1597,40 @@ CHAT_HTML = """<!doctype html>
         rej.onclick = ev => { ev.stopPropagation(); updateNode(n, {status: 'rejected'}); };
         actions.appendChild(rej);
       }
+      if (n.status === 'accepted' || n.status === 'done') {
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.className = 'node-check';
+        check.checked = n.status === 'done';
+        check.title = n.status === 'done' ? 'Mark not done' : 'Mark done';
+        check.onclick = ev => {
+          ev.stopPropagation();
+          updateNode(n, {status: check.checked ? 'done' : 'accepted'});
+        };
+        actions.appendChild(check);
+        const label = document.createElement('span');
+        label.className = 'node-check-label';
+        label.textContent = 'Done';
+        label.onclick = ev => { ev.stopPropagation(); check.click(); };
+        actions.appendChild(label);
+      }
+      el.appendChild(actions);
+
+      // Pinned to the card's own corner (see .node-more), not inline
+      // with accept/reject/checkbox, so it doesn't drift around
+      // depending on which of those happen to be showing.
       const more = document.createElement('button');
+      more.className = 'node-more';
       more.textContent = '\\u22ef';
       more.title = 'More actions for this step';
       more.setAttribute('aria-label', 'More actions for this step');
       more.onclick = ev => { ev.stopPropagation(); showMenu(ev, nodeMenuItems(n)); };
-      actions.appendChild(more);
-      el.appendChild(actions);
+      el.appendChild(more);
 
       // Pointer events (not mouse events) so dragging works with touch too.
       let dragging = null;
       el.addEventListener('pointerdown', ev => {
-        if (ev.target.closest('button')) return;
+        if (ev.target.closest('button, input, label')) return;
         dragging = {startX: ev.clientX, startY: ev.clientY, origX: n.x, origY: n.y};
         el.setPointerCapture(ev.pointerId);
       });
