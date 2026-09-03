@@ -1423,6 +1423,19 @@ CHAT_HTML = """<!doctype html>
     };
     top.appendChild(addBtn);
 
+    const tidyBtn = document.createElement('button');
+    tidyBtn.className = 'card-btn';
+    tidyBtn.textContent = 'Tidy up';
+    tidyBtn.title = 'Re-space every step into a clean grid';
+    tidyBtn.onclick = async () => {
+      tidyBtn.disabled = true;
+      const res = await jsonSend('/api/roadmap-node/' + roadmap.id + '/tidy', {});
+      tidyBtn.disabled = false;
+      if (res.error) { toast(res.error, {error: true}); return; }
+      renderRoadmap(projectId, projectName, roadmap, res.nodes);
+    };
+    top.appendChild(tidyBtn);
+
     const regenBtn = document.createElement('button');
     regenBtn.className = 'card-btn';
     regenBtn.textContent = '\\u21bb Regenerate';
@@ -1733,19 +1746,8 @@ CHAT_HTML = """<!doctype html>
     const grid = document.createElement('div');
     grid.className = 'dash-grid';
 
-    const hlCard = card('Across your projects', null, null);
-    if (!data.highlights.length) {
-      const p = document.createElement('div');
-      p.className = 'muted';
-      p.textContent = 'Nothing yet \\u2014 project highlights show up here.';
-      hlCard.appendChild(p);
-    }
-    data.highlights.forEach(h => {
-      hlCard.appendChild(dashItem(h.headline, h.project_name,
-                                  () => openProject(h.project_id)));
-    });
-    grid.appendChild(hlCard);
-
+    // Next up leads - accepted roadmap steps are the most actionable
+    // thing on this screen, so they get first position, not third.
     const nextCard = card('Next up', null, null);
     if (!data.next_up.length) {
       const p = document.createElement('div');
@@ -1759,6 +1761,19 @@ CHAT_HTML = """<!doctype html>
                                     () => openRoadmapView(n.project_id, n.project_name)));
     });
     grid.appendChild(nextCard);
+
+    const hlCard = card('Across your projects', null, null);
+    if (!data.highlights.length) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'Nothing yet \\u2014 project highlights show up here.';
+      hlCard.appendChild(p);
+    }
+    data.highlights.forEach(h => {
+      hlCard.appendChild(dashItem(h.headline, h.project_name,
+                                  () => openProject(h.project_id)));
+    });
+    grid.appendChild(hlCard);
 
     const recentCard = card('Recent', null, null);
     if (!data.recent.length) {
