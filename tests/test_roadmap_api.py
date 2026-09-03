@@ -211,6 +211,62 @@ def test_get_roadmap_on_a_project_with_none_yet_returns_empty_shell(
     assert data["nodes"] == []
 
 
+# --- spacing ------------------------------------------------------------
+
+# A card is 220px wide; measured real cards run up to ~220px tall.
+CARD_WIDTH = 220
+MAX_OBSERVED_CARD_HEIGHT = 220
+
+
+def test_column_width_leaves_a_gap_past_a_full_width_card():
+    assert api.LAYOUT_COLUMN_WIDTH > CARD_WIDTH
+
+
+def test_row_height_clears_the_tallest_observed_card():
+    assert api.LAYOUT_ROW_HEIGHT > MAX_OBSERVED_CARD_HEIGHT
+
+
+# --- tidy up --------------------------------------------------------------
+
+
+def test_tidy_up_spaces_independent_nodes_into_the_same_column(nodes, roadmaps, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    a = nodes.add(roadmap.id, "A", x=5, y=5)
+    b = nodes.add(roadmap.id, "B", x=8, y=8)
+
+    api.handle_tidy_roadmap(nodes, roadmap.id)
+
+    a2, b2 = nodes.get(a.id), nodes.get(b.id)
+    assert a2.x == b2.x == 0
+    assert {a2.y, b2.y} == {0, api.LAYOUT_ROW_HEIGHT}
+
+
+def test_tidy_up_places_a_dependent_node_one_column_past_its_dependency(
+    nodes, roadmaps, project
+):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    base = nodes.add(roadmap.id, "Base", x=999, y=999)
+    nodes.set_depends_on(base.id, [])
+    dependent = nodes.add(roadmap.id, "Dependent", x=1, y=1)
+    nodes.set_depends_on(dependent.id, [base.id])
+
+    api.handle_tidy_roadmap(nodes, roadmap.id)
+
+    base2 = nodes.get(base.id)
+    dependent2 = nodes.get(dependent.id)
+    assert dependent2.x == base2.x + api.LAYOUT_COLUMN_WIDTH
+
+
+def test_tidy_up_returns_the_updated_nodes(nodes, roadmaps, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    nodes.add(roadmap.id, "A", x=999, y=999)
+
+    data = api.handle_tidy_roadmap(nodes, roadmap.id)
+
+    assert data["nodes"][0]["x"] == 0
+    assert data["nodes"][0]["y"] == 0
+
+
 # --- node mutation --------------------------------------------------------
 
 

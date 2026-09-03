@@ -545,8 +545,14 @@ def handle_get_roadmap(
     }
 
 
-LAYOUT_COLUMN_WIDTH = 260
-LAYOUT_ROW_HEIGHT = 130
+# A card is 220px wide and, with a title, a couple lines of detail, and
+# sometimes a note, commonly renders 160-220px tall - measured against
+# real generated content, not guessed. The old constants (260/130) gave
+# a 40px horizontal gap and a row height *shorter* than a typical card,
+# so neighbors routinely overlapped. These leave real breathing room on
+# both axes.
+LAYOUT_COLUMN_WIDTH = 320
+LAYOUT_ROW_HEIGHT = 260
 
 
 def _place_new_nodes(existing: list, proposed) -> list[tuple]:
@@ -570,6 +576,58 @@ def _place_new_nodes(existing: list, proposed) -> list[tuple]:
         max_col = max(max_col, col)
 
     return placed
+
+
+def _grid_positions(all_nodes: list) -> dict[str, tuple[float, float]]:
+    """Column = one past the deepest dependency's column, so edges point
+    rightward. Row = position within that column, in creation order.
+    Shared by the tidy-up re-layout below - same spacing rule as fresh
+    generation, just applied to every node instead of only new ones.
+    """
+    by_id = {n.id: n for n in all_nodes}
+    column: dict[str, int] = {}
+
+    def col_of(node_id: str, path: frozenset[str] = frozenset()) -> int:
+        if node_id in column:
+            return column[node_id]
+        node = by_id.get(node_id)
+        # A dependency cycle shouldn't happen, but a stray one must not
+        # recurse forever - treat it as a root instead of hanging.
+        if node is None or not node.depends_on or node_id in path:
+            column[node_id] = 0
+            return 0
+        deps = [col_of(d, path | {node_id}) for d in node.depends_on if d in by_id]
+        column[node_id] = (max(deps) + 1) if deps else 0
+        return column[node_id]
+
+    for n in all_nodes:
+        col_of(n.id)
+
+    row_counts: dict[int, int] = {}
+    positions = {}
+    for n in all_nodes:
+        col = column[n.id]
+        row = row_counts.get(col, 0)
+        row_counts[col] = row + 1
+        positions[n.id] = (col * LAYOUT_COLUMN_WIDTH, row * LAYOUT_ROW_HEIGHT)
+    return positions
+
+
+def handle_tidy_roadmap(nodes: RoadmapNodeStore, roadmap_id: str) -> dict:
+    """Re-run the grid layout over every node in the roadmap, ignoring
+    current positions.
+
+    For a roadmap dragged into a tangle, or one generated before the
+    spacing was fixed, this is the reset button - accepted, done, and
+    rejected nodes get re-laid-out too, since their *positions* aren't
+    a decision the way their status is.
+    """
+    all_nodes = nodes.for_roadmap(roadmap_id)
+    positions = _grid_positions(all_nodes)
+    for n in all_nodes:
+        x, y = positions[n.id]
+        nodes.move(n.id, x, y)
+    return {"nodes": [_node_json(n) for n in nodes.for_roadmap(roadmap_id)]}
 
 
 def handle_generate_roadmap(

@@ -182,6 +182,9 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         str(body.get("goal", "")),
                     )
                 )
+            elif path.startswith("/api/roadmap-node/") and path.endswith("/tidy"):
+                roadmap_id = path[len("/api/roadmap-node/") : -len("/tidy")]
+                self._json(api.handle_tidy_roadmap(deps.roadmap_nodes, roadmap_id))
             elif path.startswith("/api/roadmap-node/"):
                 body = self._json_body() or {}
                 self._json(
