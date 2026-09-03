@@ -39,7 +39,7 @@ CHAT_HTML = """<!doctype html>
     .section.clickable { cursor: pointer; border-radius: 6px; }
     .section.clickable:hover { color: #9a9a9a; }
     .section .label { flex: 1; }
-    .sec-caret { font-size: 0.6rem; width: 0.7rem; color: #868686; }
+    .sec-caret { font-size: 0.95rem; width: 1rem; color: #868686; }
     .add { border: none; background: transparent; color: #7d7d7d; cursor: pointer;
            font-size: 1.05rem; line-height: 1; padding: 0.1rem 0.3rem;
            border-radius: 5px; }
@@ -51,7 +51,7 @@ CHAT_HTML = """<!doctype html>
                     padding: 0.4rem 0.6rem; border-radius: 6px; cursor: pointer;
                     color: #d0d0d0; font-size: 0.85rem; font-weight: 500; }
     .project-head:hover { background: #212121; }
-    .caret { font-size: 0.65rem; color: #868686; width: 0.7rem; }
+    .caret { font-size: 0.95rem; color: #868686; width: 1rem; }
     .chat { display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.6rem;
             border-radius: 6px; cursor: pointer; font-size: 0.84rem; color: #b8b8b8; }
     .chat:hover { background: #212121; }
@@ -323,6 +323,7 @@ CHAT_HTML = """<!doctype html>
   let pendingProject = null;   // project a not-yet-created chat belongs to
   let sidebar = {projects: [], unfiled: []};
   let projectsOpen = false;
+  let chatsOpen = true;
   const openProjects = new Set();
 
   const api = async (path, opts) => (await fetch(path, opts)).json();
@@ -672,12 +673,17 @@ CHAT_HTML = """<!doctype html>
       });
     }
 
-    // Chats: + starts a new one.
+    // Chats: click the header to minimize the list, + starts a new one.
     tree.appendChild(sectionRow('Chats', {
+      caret: true,
+      open: chatsOpen,
       onAdd: newChat,
-      addTitle: 'New chat'
+      addTitle: 'New chat',
+      onClick: () => { chatsOpen = !chatsOpen; renderTree(); }
     }));
-    sidebar.unfiled.forEach(c => tree.appendChild(chatRow(c)));
+    if (chatsOpen) {
+      sidebar.unfiled.forEach(c => tree.appendChild(chatRow(c)));
+    }
   }
 
   async function createProject() {
