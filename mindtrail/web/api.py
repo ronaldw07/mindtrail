@@ -582,9 +582,17 @@ def _place_new_nodes(existing: list, proposed) -> list[tuple]:
     return placed
 
 
+# Within a column, row order follows what's worth looking at first:
+# accepted work in progress, then proposed suggestions still waiting on
+# a decision, then what's already done, with rejected trailing at the
+# bottom - so tidying doesn't just de-overlap, it puts what matters
+# most near the top-left.
+ROW_PRIORITY = {"accepted": 0, "proposed": 1, "done": 2, "rejected": 3}
+
+
 def _grid_positions(all_nodes: list) -> dict[str, tuple[float, float]]:
     """Column = one past the deepest dependency's column, so edges point
-    rightward. Row = position within that column, in creation order.
+    rightward. Row = priority order within that column (see ROW_PRIORITY).
     Shared by the tidy-up re-layout below - same spacing rule as fresh
     generation, just applied to every node instead of only new ones.
     """
@@ -607,9 +615,11 @@ def _grid_positions(all_nodes: list) -> dict[str, tuple[float, float]]:
     for n in all_nodes:
         col_of(n.id)
 
+    ordered = sorted(all_nodes, key=lambda n: (column[n.id], ROW_PRIORITY.get(n.status, 1)))
+
     row_counts: dict[int, int] = {}
     positions = {}
-    for n in all_nodes:
+    for n in ordered:
         col = column[n.id]
         row = row_counts.get(col, 0)
         row_counts[col] = row + 1

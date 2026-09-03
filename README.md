@@ -396,7 +396,7 @@ whenever you want it current.
 
 ## Tests
 
-367 tests, no network and no API key required — search, fetch, and the model
+369 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.

@@ -1427,7 +1427,7 @@ CHAT_HTML = """<!doctype html>
         genBtn.disabled = false;
         genBtn.textContent = 'Generate roadmap';
         if (res.error) { toast(res.error, {error: true}); return; }
-        renderRoadmap(projectId, projectName, res.roadmap, res.nodes);
+        renderRoadmap(projectId, projectName, res.roadmap, res.nodes, {fitView: true});
       };
       empty.appendChild(genBtn);
 
@@ -1440,10 +1440,11 @@ CHAT_HTML = """<!doctype html>
       view.appendChild(empty);
       return;
     }
-    renderRoadmap(projectId, projectName, data.roadmap, data.nodes);
+    renderRoadmap(projectId, projectName, data.roadmap, data.nodes, {fitView: true});
   }
 
-  function renderRoadmap(projectId, projectName, roadmap, nodesList) {
+  function renderRoadmap(projectId, projectName, roadmap, nodesList, opts) {
+    opts = opts || {};
     const view = $('roadmap-view');
     view.innerHTML = '';
 
@@ -1482,7 +1483,7 @@ CHAT_HTML = """<!doctype html>
       const res = await jsonSend('/api/roadmap-node/' + roadmap.id + '/tidy', {});
       tidyBtn.disabled = false;
       if (res.error) { toast(res.error, {error: true}); return; }
-      renderRoadmap(projectId, projectName, roadmap, res.nodes);
+      renderRoadmap(projectId, projectName, roadmap, res.nodes, {fitView: true});
     };
     top.appendChild(tidyBtn);
 
@@ -1496,7 +1497,7 @@ CHAT_HTML = """<!doctype html>
       regenBtn.disabled = false;
       regenBtn.textContent = '\\u21bb Regenerate';
       if (res.error) { toast(res.error, {error: true}); return; }
-      renderRoadmap(projectId, projectName, res.roadmap, res.nodes);
+      renderRoadmap(projectId, projectName, res.roadmap, res.nodes, {fitView: true});
     };
     top.appendChild(regenBtn);
 
@@ -1520,6 +1521,10 @@ CHAT_HTML = """<!doctype html>
     canvas.appendChild(svg);
     scroll.appendChild(canvas);
     body.appendChild(scroll);
+    // Attached to the live document before any node is measured -
+    // offsetWidth/offsetHeight read 0 for a detached element, which
+    // would silently break both edge anchoring and fit-to-view below.
+    view.appendChild(body);
 
     const byId = {};
     nodesList.forEach(n => { byId[n.id] = n; });
@@ -1530,6 +1535,32 @@ CHAT_HTML = """<!doctype html>
       const w = el ? el.offsetWidth : 220;
       const h = el ? el.offsetHeight : 70;
       return side === 'out' ? {x: n.x + w, y: n.y + h / 2} : {x: n.x, y: n.y + h / 2};
+    }
+
+    // Shrinks and scales the canvas so every card fits in the visible
+    // viewport at once - "zoom out" scaled to how much content there
+    // is, never zooming in past 100% for a small roadmap.
+    function fitCanvasToContent() {
+      if (!nodesList.length) return;
+      const margin = 80;
+      let maxRight = 0, maxBottom = 0;
+      nodesList.forEach(n => {
+        const el = els[n.id];
+        if (!el) return;
+        maxRight = Math.max(maxRight, n.x + el.offsetWidth);
+        maxBottom = Math.max(maxBottom, n.y + el.offsetHeight);
+      });
+      const contentWidth = Math.max(maxRight + margin, 400);
+      const contentHeight = Math.max(maxBottom + margin, 300);
+      canvas.style.width = contentWidth + 'px';
+      canvas.style.height = contentHeight + 'px';
+      const scale = Math.min(
+        scroll.clientWidth / contentWidth,
+        scroll.clientHeight / contentHeight,
+        1
+      );
+      canvas.style.transform = 'scale(' + scale + ')';
+      canvas.style.transformOrigin = '0 0';
     }
 
     function drawEdges() {
@@ -1706,8 +1737,6 @@ CHAT_HTML = """<!doctype html>
 
     drawEdges();
 
-    view.appendChild(body);
-
     // ---------- roadmap chat panel ----------
     // The model only ever proposes actions here; nothing touches the
     // roadmap until the user clicks Accept on a specific one, which
@@ -1746,7 +1775,8 @@ CHAT_HTML = """<!doctype html>
         const ok = await applyRoadmapChatAction(roadmap, nodesList, action);
         if (!ok) { accept.disabled = false; return; }
         action.resolved = 'accepted';
-        renderRoadmap(projectId, projectName, roadmap, nodesList);
+        renderRoadmap(projectId, projectName, roadmap, nodesList,
+                      {fitView: action.type === 'tidy'});
       };
       buttons.appendChild(accept);
       const reject = document.createElement('button');
@@ -1814,12 +1844,22 @@ CHAT_HTML = """<!doctype html>
     chatPanel.appendChild(form);
 
     body.appendChild(chatPanel);
+
+    // Measured after the chat panel is in place, so the available
+    // width already excludes the space it takes up.
+    if (opts.fitView) fitCanvasToContent();
   }
 
   // Applies one accepted chat-proposed action through the same endpoints
   // the rest of the canvas uses, so a chat-driven change and a
   // hand-dragged one are indistinguishable to the server.
   async function applyRoadmapChatAction(roadmap, nodesList, action) {
+    if (action.type === 'tidy') {
+      const res = await api('/api/roadmap-node/' + roadmap.id + '/tidy', {method: 'POST'});
+      if (res.error) { toast(res.error, {error: true}); return false; }
+      nodesList.splice(0, nodesList.length, ...res.nodes);
+      return true;
+    }
     if (action.type === 'add_node') {
       const offset = (nodesList.length % 6) * 40;
       const node = await jsonSend('/api/roadmap-node/' + roadmap.id, {
