@@ -15,6 +15,7 @@ from mindtrail.advice.highlights import (
     highlights_to_json,
 )
 from mindtrail.advice.profile_draft import draft_profile
+from mindtrail.advice.roadmap_chat import chat_about_roadmap
 from mindtrail.advice.roadmap_gen import generate_roadmap
 from mindtrail.ingest.documents import DocumentError, extract_pdf_text
 from mindtrail.ingest.researcher import Researcher
@@ -628,6 +629,48 @@ def handle_tidy_roadmap(nodes: RoadmapNodeStore, roadmap_id: str) -> dict:
         x, y = positions[n.id]
         nodes.move(n.id, x, y)
     return {"nodes": [_node_json(n) for n in nodes.for_roadmap(roadmap_id)]}
+
+
+def handle_roadmap_chat(
+    roadmaps: RoadmapStore,
+    nodes: RoadmapNodeStore,
+    llm: LLMClient,
+    profile: ProfileStore,
+    roadmap_id: str,
+    message: str,
+    history: list[dict],
+) -> dict:
+    """A conversational turn about one roadmap. Never writes to it - the
+    model can only propose actions, which the caller applies (or doesn't)
+    through the existing node endpoints once the user accepts each one.
+    """
+    roadmap = roadmaps.get(roadmap_id)
+    if roadmap is None:
+        return {"error": "no such roadmap"}
+
+    current_nodes = nodes.for_roadmap(roadmap_id)
+    try:
+        result = chat_about_roadmap(
+            llm, roadmap.goal, current_nodes, profile.get().content, history, message
+        )
+    except (LLMError, ValueError) as exc:
+        return {"error": str(exc)}
+
+    return {
+        "reply": result.reply,
+        "actions": [
+            {
+                "type": a.type,
+                "node_id": a.node_id,
+                "title": a.title,
+                "detail": a.detail,
+                "status": a.status,
+                "note": a.note,
+                "label": a.label,
+            }
+            for a in result.actions
+        ],
+    }
 
 
 def handle_generate_roadmap(

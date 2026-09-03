@@ -153,8 +153,8 @@ CHAT_HTML = """<!doctype html>
       flex: 1; overflow-y: auto; display: none; padding: 1.75rem 2rem;
     }
     #project-view.open, #profile-view.open, #dashboard-view.open { display: block; }
-    #roadmap-view { flex: 1; display: none; overflow: hidden; position: relative; }
-    #roadmap-view.open { display: block; }
+    #roadmap-view { flex: 1; display: none; overflow: hidden; flex-direction: column; }
+    #roadmap-view.open { display: flex; }
 
     /* --- dashboard --- */
     .dash-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem;
@@ -201,13 +201,43 @@ CHAT_HTML = """<!doctype html>
 
     /* --- roadmap canvas --- */
     #roadmap-top { display: flex; align-items: center; gap: 0.6rem; padding: 0.8rem 1.25rem;
-                   border-bottom: 1px solid #2a2a2a; }
+                   border-bottom: 1px solid #2a2a2a; flex-shrink: 0; }
     #roadmap-top .goal { flex: 1; font-size: 0.92rem; font-weight: 600; }
-    #canvas-scroll { position: absolute; inset: 0; top: 49px; overflow: auto; }
+    #roadmap-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+    #canvas-scroll { flex: 1; position: relative; overflow: auto; }
     #canvas { position: relative; width: 2400px; height: 1600px; }
     #canvas svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%;
                   pointer-events: none; }
     #canvas svg path { fill: none; stroke: #3d3d3d; stroke-width: 1.5; }
+
+    /* --- roadmap chat --- */
+    #roadmap-chat { width: 340px; flex-shrink: 0; border-left: 1px solid #2a2a2a;
+                    background: #181818; display: flex; flex-direction: column; }
+    #roadmap-chat-log { flex: 1; overflow-y: auto; padding: 1rem; display: flex;
+                        flex-direction: column; gap: 0.85rem; }
+    .rc-msg { font-size: 0.85rem; line-height: 1.5; max-width: 92%; }
+    .rc-msg.user { align-self: flex-end; color: #d8d8ff; background: #262a4a;
+                   border-radius: 10px; padding: 0.45rem 0.65rem; }
+    .rc-msg.assistant { align-self: flex-start; color: #ececec; }
+    .rc-action { background: #212121; border: 1px solid #333; border-radius: 8px;
+                 padding: 0.55rem 0.7rem; font-size: 0.8rem; margin-top: 0.5rem;
+                 align-self: flex-start; max-width: 92%; }
+    .rc-action-label { margin-bottom: 0.45rem; color: #dcdcdc; }
+    .rc-action-buttons { display: flex; gap: 0.4rem; }
+    .rc-action-buttons button { font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 5px;
+                                border: 1px solid #3a3a3a; background: #2a2a2a; color: #ccc;
+                                cursor: pointer; }
+    .rc-action-buttons button:hover { background: #333; color: #fff; }
+    .rc-action-buttons button.rc-accept:hover { border-color: #4f46e5; }
+    .rc-action-buttons button.rc-reject:hover { border-color: #b91c1c; }
+    .rc-action.resolved { opacity: 0.55; }
+    .rc-action-resolved-note { font-size: 0.76rem; color: #868686; }
+    #roadmap-chat-form { display: flex; gap: 0.4rem; padding: 0.75rem; flex-shrink: 0;
+                         border-top: 1px solid #2a2a2a; }
+    #roadmap-chat-input { flex: 1; background: #191919; border: 1px solid #333;
+                          border-radius: 8px; color: #ececec; padding: 0.5rem 0.65rem;
+                          font-size: 0.85rem; outline: none; }
+    #roadmap-chat-input:focus { border-color: #4f46e5; }
     .node { position: absolute; width: 220px; background: #212121; border: 1px solid #3a3a3a;
             border-radius: 10px; padding: 0.7rem 0.85rem 2rem; cursor: grab; font-size: 0.85rem;
             box-shadow: 0 4px 14px rgba(0,0,0,0.3); user-select: none; }
@@ -345,6 +375,9 @@ CHAT_HTML = """<!doctype html>
   let sidebar = {projects: [], unfiled: []};
   let projectsOpen = false;
   let chatsOpen = true;
+  // {role: 'user'|'assistant', content, actions?}[] for the roadmap chat
+  // panel - reset whenever a roadmap view is (re)opened, not persisted.
+  let roadmapChatLog = [];
   const openProjects = new Set();
 
   const api = async (path, opts) => (await fetch(path, opts)).json();
@@ -1350,6 +1383,7 @@ CHAT_HTML = """<!doctype html>
   async function openRoadmapView(projectId, projectName) {
     currentProject = projectId;
     current = null;
+    roadmapChatLog = [];
     showRoadmapView();
     $('breadcrumb').innerHTML = '';
     $('breadcrumb').appendChild(document.createTextNode(projectName + ' / '));
@@ -1467,6 +1501,9 @@ CHAT_HTML = """<!doctype html>
 
     view.appendChild(top);
 
+    const body = document.createElement('div');
+    body.id = 'roadmap-body';
+
     const scroll = document.createElement('div');
     scroll.id = 'canvas-scroll';
     const canvas = document.createElement('div');
@@ -1475,7 +1512,7 @@ CHAT_HTML = """<!doctype html>
     const svg = document.createElementNS(svgNS, 'svg');
     canvas.appendChild(svg);
     scroll.appendChild(canvas);
-    view.appendChild(scroll);
+    body.appendChild(scroll);
 
     const byId = {};
     nodesList.forEach(n => { byId[n.id] = n; });
@@ -1661,6 +1698,146 @@ CHAT_HTML = """<!doctype html>
     });
 
     drawEdges();
+
+    view.appendChild(body);
+
+    // ---------- roadmap chat panel ----------
+    // The model only ever proposes actions here; nothing touches the
+    // roadmap until the user clicks Accept on a specific one, which
+    // then goes through the same node endpoints everything else on
+    // the canvas uses.
+
+    const chatPanel = document.createElement('div');
+    chatPanel.id = 'roadmap-chat';
+    const chatLog = document.createElement('div');
+    chatLog.id = 'roadmap-chat-log';
+    chatPanel.appendChild(chatLog);
+
+    function renderActionCard(action) {
+      const box = document.createElement('div');
+      box.className = 'rc-action' + (action.resolved ? ' resolved' : '');
+      const label = document.createElement('div');
+      label.className = 'rc-action-label';
+      label.textContent = action.label;
+      box.appendChild(label);
+
+      if (action.resolved) {
+        const note = document.createElement('div');
+        note.className = 'rc-action-resolved-note';
+        note.textContent = action.resolved === 'accepted' ? '\\u2713 Applied' : '\\u2717 Dismissed';
+        box.appendChild(note);
+        return box;
+      }
+
+      const buttons = document.createElement('div');
+      buttons.className = 'rc-action-buttons';
+      const accept = document.createElement('button');
+      accept.className = 'rc-accept';
+      accept.textContent = 'Accept';
+      accept.onclick = async () => {
+        accept.disabled = true;
+        const ok = await applyRoadmapChatAction(roadmap, nodesList, action);
+        if (!ok) { accept.disabled = false; return; }
+        action.resolved = 'accepted';
+        renderRoadmap(projectId, projectName, roadmap, nodesList);
+      };
+      buttons.appendChild(accept);
+      const reject = document.createElement('button');
+      reject.className = 'rc-reject';
+      reject.textContent = 'Dismiss';
+      reject.onclick = () => { action.resolved = 'rejected'; renderChatLog(); };
+      buttons.appendChild(reject);
+      box.appendChild(buttons);
+      return box;
+    }
+
+    function renderChatLog() {
+      chatLog.innerHTML = '';
+      if (!roadmapChatLog.length) {
+        const hint = document.createElement('div');
+        hint.className = 'muted';
+        hint.textContent = 'Ask about this roadmap, or tell it what changed \\u2014 ' +
+                           'it can propose steps, statuses, and notes for you to accept.';
+        chatLog.appendChild(hint);
+      }
+      roadmapChatLog.forEach(entry => {
+        const msg = document.createElement('div');
+        msg.className = 'rc-msg ' + entry.role;
+        msg.textContent = entry.content;
+        chatLog.appendChild(msg);
+        (entry.actions || []).forEach(action => chatLog.appendChild(renderActionCard(action)));
+      });
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+    renderChatLog();
+
+    const form = document.createElement('form');
+    form.id = 'roadmap-chat-form';
+    const chatInput = document.createElement('input');
+    chatInput.id = 'roadmap-chat-input';
+    chatInput.placeholder = 'Ask about this roadmap\\u2026';
+    form.appendChild(chatInput);
+    const sendBtn = document.createElement('button');
+    sendBtn.className = 'send';
+    sendBtn.type = 'submit';
+    sendBtn.textContent = 'Send';
+    form.appendChild(sendBtn);
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const message = chatInput.value.trim();
+      if (!message) return;
+      chatInput.value = '';
+      sendBtn.disabled = chatInput.disabled = true;
+
+      const historyForRequest = roadmapChatLog.map(m => ({role: m.role, content: m.content}));
+      roadmapChatLog.push({role: 'user', content: message});
+      renderChatLog();
+
+      const res = await jsonSend('/api/roadmap/' + roadmap.id + '/chat',
+                                 {message, history: historyForRequest});
+      sendBtn.disabled = chatInput.disabled = false;
+      chatInput.focus();
+      if (res.error) {
+        roadmapChatLog.push({role: 'assistant', content: 'Error: ' + res.error, actions: []});
+      } else {
+        roadmapChatLog.push({role: 'assistant', content: res.reply, actions: res.actions || []});
+      }
+      renderChatLog();
+    };
+    chatPanel.appendChild(form);
+
+    body.appendChild(chatPanel);
+  }
+
+  // Applies one accepted chat-proposed action through the same endpoints
+  // the rest of the canvas uses, so a chat-driven change and a
+  // hand-dragged one are indistinguishable to the server.
+  async function applyRoadmapChatAction(roadmap, nodesList, action) {
+    if (action.type === 'add_node') {
+      const offset = (nodesList.length % 6) * 40;
+      const node = await jsonSend('/api/roadmap-node/' + roadmap.id, {
+        title: action.title, detail: action.detail, x: 40 + offset, y: 40 + offset,
+      });
+      if (node.error) { toast(node.error, {error: true}); return false; }
+      nodesList.push(node);
+      return true;
+    }
+    const target = nodesList.find(n => n.id === action.node_id);
+    if (action.type === 'delete_node') {
+      if (!target) { toast('That step no longer exists', {error: true}); return false; }
+      const res = await api('/api/roadmap-node/' + action.node_id, {method: 'DELETE'});
+      if (res.error) { toast(res.error, {error: true}); return false; }
+      nodesList.splice(nodesList.indexOf(target), 1);
+      return true;
+    }
+    if (!target) { toast('That step no longer exists', {error: true}); return false; }
+    const patch = action.type === 'update_status'
+      ? {status: action.status}
+      : {note: action.note};
+    const res = await jsonSend('/api/roadmap-node/' + target.id, patch, 'PATCH');
+    if (res.error) { toast(res.error, {error: true}); return false; }
+    Object.assign(target, res);
+    return true;
   }
 
   // ---------- profile ----------

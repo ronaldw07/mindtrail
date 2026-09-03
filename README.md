@@ -71,7 +71,11 @@ its chats:
 - **Roadmap** — a goal broken into a draggable node canvas. Generating
   proposes steps with dependencies between them; accept, reject, note, or
   drag any node, and regenerating only ever touches the still-proposed
-  ones, planning around whatever you already decided.
+  ones, planning around whatever you already decided. A chat panel sits
+  alongside the canvas — ask about the plan or tell it what changed, and
+  it can propose adding a step, changing a status, or attaching a note.
+  It never applies anything itself; every proposal shows up as a card you
+  accept or dismiss.
 - **Files** — documents uploaded into that project.
 
 Follow-ups within a chat carry that conversation's earlier turns, so
@@ -284,6 +288,7 @@ mindtrail web
 | `mindtrail/advice/highlights.py` | Per-project "what's next", cached with staleness detection |
 | `mindtrail/advice/profile_draft.py` | Draft a starting profile from stored documents and notes |
 | `mindtrail/advice/roadmap_gen.py` | Propose roadmap steps toward a goal, preserving decided nodes |
+| `mindtrail/advice/roadmap_chat.py` | Conversational roadmap assistant - proposes actions, never applies them |
 | `mindtrail/predict/next_query.py` | Three ranked next-question candidates (not validated — see Results) |
 | `mindtrail/llm.py` | Groq client with rate-limit backoff |
 | `eval/` | Retrieval and prediction harness, plus the LLM judge |
@@ -391,7 +396,7 @@ whenever you want it current.
 
 ## Tests
 
-347 tests, no network and no API key required — search, fetch, and the model
+366 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.

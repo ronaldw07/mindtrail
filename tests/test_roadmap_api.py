@@ -267,6 +267,57 @@ def test_tidy_up_returns_the_updated_nodes(nodes, roadmaps, project):
     assert data["nodes"][0]["y"] == 0
 
 
+# --- roadmap chat -----------------------------------------------------
+
+
+def test_chat_reply_and_actions(roadmaps, nodes, profile, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    llm = StubLLM('{"reply": "Sure.", "actions": []}')
+
+    data = api.handle_roadmap_chat(
+        roadmaps, nodes, llm, profile, roadmap.id, "hi", []
+    )
+
+    assert data["reply"] == "Sure."
+    assert data["actions"] == []
+
+
+def test_chat_on_a_missing_roadmap_errors(roadmaps, nodes, profile):
+    llm = StubLLM('{"reply": "Sure.", "actions": []}')
+
+    data = api.handle_roadmap_chat(
+        roadmaps, nodes, llm, profile, "nope", "hi", []
+    )
+
+    assert "error" in data
+
+
+def test_chat_failure_is_surfaced(roadmaps, nodes, profile, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    llm = StubLLM("", error=LLMError("rate limited"))
+
+    data = api.handle_roadmap_chat(
+        roadmaps, nodes, llm, profile, roadmap.id, "hi", []
+    )
+
+    assert "error" in data
+
+
+def test_chat_action_is_returned_as_a_dict(roadmaps, nodes, profile, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    llm = StubLLM(
+        '{"reply": "I\'ll add that.", '
+        '"actions": [{"type": "add_node", "title": "Learn SQL", "detail": "d"}]}'
+    )
+
+    data = api.handle_roadmap_chat(
+        roadmaps, nodes, llm, profile, roadmap.id, "add a step for SQL", []
+    )
+
+    assert data["actions"][0]["type"] == "add_node"
+    assert data["actions"][0]["title"] == "Learn SQL"
+
+
 # --- node mutation --------------------------------------------------------
 
 
