@@ -25,7 +25,7 @@ CHAT_HTML = """<!doctype html>
                overflow: hidden; transition: width 0.16s ease, border-width 0.16s ease; }
     #sidebar.collapsed { width: 0; border-right-width: 0; }
     .brand { padding: 1rem 1rem 0.75rem; font-weight: 600; letter-spacing: 0.01em;
-             white-space: nowrap; }
+             white-space: nowrap; cursor: pointer; }
     .side-btn { display: block; width: calc(100% - 1rem); margin: 0 0.5rem 0.5rem;
                 text-align: left; padding: 0.45rem 0.6rem; border-radius: 6px; border: none;
                 background: transparent; color: #b8b8b8; font-size: 0.85rem; cursor: pointer; }
@@ -149,10 +149,21 @@ CHAT_HTML = """<!doctype html>
                    margin-top: 22vh; line-height: 1.7; }
 
     /* --- project detail --- */
-    #project-view, #profile-view { flex: 1; overflow-y: auto; display: none; padding: 1.75rem 2rem; }
-    #project-view.open, #profile-view.open { display: block; }
+    #project-view, #profile-view, #dashboard-view {
+      flex: 1; overflow-y: auto; display: none; padding: 1.75rem 2rem;
+    }
+    #project-view.open, #profile-view.open, #dashboard-view.open { display: block; }
     #roadmap-view { flex: 1; display: none; overflow: hidden; position: relative; }
     #roadmap-view.open { display: block; }
+
+    /* --- dashboard --- */
+    .dash-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem;
+                 max-width: 1180px; margin: 0 auto; align-items: start; }
+    .dash-item { padding: 0.6rem 0; border-bottom: 1px solid #292929; cursor: pointer; }
+    .dash-item:last-child { border-bottom: none; padding-bottom: 0; }
+    .dash-item:hover .dash-item-title { color: #fff; }
+    .dash-item-title { font-size: 0.88rem; font-weight: 600; color: #ececec; }
+    .dash-item-sub { font-size: 0.78rem; color: #868686; margin-top: 0.15rem; }
     .proj-layout { display: flex; gap: 1.75rem; max-width: 1180px; margin: 0 auto;
                    align-items: flex-start; }
     .proj-main { flex: 1; min-width: 0; }
@@ -278,7 +289,7 @@ CHAT_HTML = """<!doctype html>
 <body>
   <div id="app">
     <aside id="sidebar">
-      <div class="brand">mindtrail</div>
+      <div class="brand" id="brand" title="Today">mindtrail</div>
       <button class="side-btn" id="open-profile">&#128100; Profile</button>
       <div id="tree"></div>
     </aside>
@@ -296,6 +307,7 @@ CHAT_HTML = """<!doctype html>
       <div id="project-view"></div>
       <div id="roadmap-view"></div>
       <div id="profile-view"></div>
+      <div id="dashboard-view"></div>
       <div id="composer">
         <form id="form">
           <button type="button" class="icon-btn" id="attach" title="Upload a PDF"
@@ -1015,6 +1027,7 @@ CHAT_HTML = """<!doctype html>
     $('project-view').classList.toggle('open', name === 'project');
     $('roadmap-view').classList.toggle('open', name === 'roadmap');
     $('profile-view').classList.toggle('open', name === 'profile');
+    $('dashboard-view').classList.toggle('open', name === 'dashboard');
     log.style.display = name === 'chat' ? '' : 'none';
     $('composer').style.display = name === 'chat' ? '' : 'none';
   }
@@ -1023,6 +1036,7 @@ CHAT_HTML = """<!doctype html>
   function showProjectView() { setActiveView('project'); }
   function showRoadmapView() { setActiveView('roadmap'); }
   function showProfileView() { setActiveView('profile'); }
+  function showDashboardView() { setActiveView('dashboard'); }
 
   async function openProject(id, opts) {
     opts = opts || {};
@@ -1681,6 +1695,90 @@ CHAT_HTML = """<!doctype html>
 
   $('open-profile').onclick = () => openProfileView();
 
+  // ---------- dashboard ----------
+
+  function dashItem(titleText, subText, onClick) {
+    const item = document.createElement('div');
+    item.className = 'dash-item';
+    const t = document.createElement('div');
+    t.className = 'dash-item-title';
+    t.textContent = titleText;
+    item.appendChild(t);
+    if (subText) {
+      const s = document.createElement('div');
+      s.className = 'dash-item-sub';
+      s.textContent = subText;
+      item.appendChild(s);
+    }
+    item.onclick = onClick;
+    return item;
+  }
+
+  async function openDashboardView() {
+    currentProject = null;
+    current = null;
+    showDashboardView();
+    $('breadcrumb').textContent = 'Today';
+
+    const view = $('dashboard-view');
+    view.innerHTML = '<div class="muted">Loading\\u2026</div>';
+    const data = await api('/api/dashboard');
+    view.innerHTML = '';
+
+    const title = document.createElement('div');
+    title.className = 'proj-title';
+    title.textContent = 'Today';
+    view.appendChild(title);
+
+    const grid = document.createElement('div');
+    grid.className = 'dash-grid';
+
+    const hlCard = card('Across your projects', null, null);
+    if (!data.highlights.length) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'Nothing yet \\u2014 project highlights show up here.';
+      hlCard.appendChild(p);
+    }
+    data.highlights.forEach(h => {
+      hlCard.appendChild(dashItem(h.headline, h.project_name,
+                                  () => openProject(h.project_id)));
+    });
+    grid.appendChild(hlCard);
+
+    const nextCard = card('Next up', null, null);
+    if (!data.next_up.length) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'No accepted roadmap steps waiting yet.';
+      nextCard.appendChild(p);
+    }
+    data.next_up.forEach(n => {
+      const sub = n.project_name + (n.note ? ' \\u2014 ' + n.note : '');
+      nextCard.appendChild(dashItem(n.title, sub,
+                                    () => openRoadmapView(n.project_id, n.project_name)));
+    });
+    grid.appendChild(nextCard);
+
+    const recentCard = card('Recent', null, null);
+    if (!data.recent.length) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'Nothing yet \\u2014 start a chat to see it here.';
+      recentCard.appendChild(p);
+    }
+    data.recent.forEach(c => {
+      const sub = (c.project_name ? c.project_name + ' \\u00b7 ' : '') + relTime(c.updated_at);
+      recentCard.appendChild(dashItem(c.title, sub,
+                                      () => { showChatView(); openConversation(c.id); }));
+    });
+    grid.appendChild(recentCard);
+
+    view.appendChild(grid);
+  }
+
+  $('brand').onclick = () => openDashboardView();
+
   // ---------- asking ----------
 
   $('form').addEventListener('submit', async e => {
@@ -1807,7 +1905,7 @@ CHAT_HTML = """<!doctype html>
     }
   };
 
-  showEmptyState();
+  openDashboardView();
   updateNav();
   loadSidebar();
   </script>
