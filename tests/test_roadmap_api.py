@@ -267,6 +267,30 @@ def test_tidy_up_returns_the_updated_nodes(nodes, roadmaps, project):
     assert data["nodes"][0]["y"] == 0
 
 
+def test_tidy_up_rows_accepted_work_before_proposed_and_done_before_rejected(
+    nodes, roadmaps, project
+):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    # Added in an order that would leave the wrong thing on top if row
+    # placement just followed creation order.
+    rejected = nodes.add(roadmap.id, "Rejected", status="rejected")
+    done = nodes.add(roadmap.id, "Done", status="done")
+    proposed = nodes.add(roadmap.id, "Proposed", status="proposed")
+    accepted = nodes.add(roadmap.id, "Accepted", status="accepted")
+
+    api.handle_tidy_roadmap(nodes, roadmap.id)
+
+    by_status = {
+        "accepted": nodes.get(accepted.id).y,
+        "proposed": nodes.get(proposed.id).y,
+        "done": nodes.get(done.id).y,
+        "rejected": nodes.get(rejected.id).y,
+    }
+    assert by_status["accepted"] < by_status["proposed"]
+    assert by_status["proposed"] < by_status["done"]
+    assert by_status["done"] < by_status["rejected"]
+
+
 # --- roadmap chat -----------------------------------------------------
 
 

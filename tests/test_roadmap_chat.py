@@ -105,6 +105,15 @@ def test_unknown_action_type_is_dropped():
     assert result.actions == ()
 
 
+def test_tidy_action_needs_no_node_id():
+    text = '{"reply": "I can clean that up.", "actions": [{"type": "tidy"}]}'
+
+    result = parse_chat_response(text, {})
+
+    assert result.actions[0].type == "tidy"
+    assert "Tidy" in result.actions[0].label
+
+
 def test_actions_are_capped():
     many = ",".join(
         '{"type": "add_node", "title": "t%d"}' % i for i in range(10)

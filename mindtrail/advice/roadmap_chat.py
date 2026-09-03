@@ -18,7 +18,7 @@ from mindtrail.organize.roadmaps import STATUSES, RoadmapNode
 MAX_ACTIONS = 5
 CHAT_MAX_TOKENS = 900
 
-ACTION_TYPES = ("add_node", "update_status", "update_note", "delete_node")
+ACTION_TYPES = ("add_node", "update_status", "update_note", "delete_node", "tidy")
 
 SYSTEM_PROMPT = (
     "You are a collaborator discussing one specific roadmap with its owner. "
@@ -29,17 +29,23 @@ SYSTEM_PROMPT = (
     "cannot change the roadmap yourself - only the user can, by clicking "
     "Accept on a proposed action you send. When a change would help (adding "
     "a step, marking one done, rejecting one, attaching a note, deleting "
-    "one), propose it as a structured action instead of just describing it "
-    "in text. In your reply, phrase it as something you're suggesting they "
-    "confirm ('I've proposed marking it done below'), never as something "
-    "already done ('I've marked it done') - it is not done until they "
-    "accept it, and saying otherwise would be lying to them.\n\n"
+    "one, re-spacing the whole layout), propose it as a structured action "
+    "instead of just describing it in text. In your reply, phrase it as "
+    "something you're suggesting they confirm ('I've proposed marking it "
+    "done below'), never as something already done ('I've marked it "
+    "done') - it is not done until they accept it, and saying otherwise "
+    "would be lying to them.\n\n"
     "Action types:\n"
     '- add_node: {"type": "add_node", "title": "...", "detail": "..."}\n'
     '- update_status: {"type": "update_status", "node_id": "...", '
     '"status": "accepted"|"rejected"|"done"|"proposed"}\n'
     '- update_note: {"type": "update_note", "node_id": "...", "note": "..."}\n'
-    '- delete_node: {"type": "delete_node", "node_id": "..."}\n\n'
+    '- delete_node: {"type": "delete_node", "node_id": "..."}\n'
+    '- tidy: {"type": "tidy"} - re-spaces every step into a clean, '
+    "non-overlapping grid (accepted work first, then proposed, then done, "
+    "then rejected). Propose this when they ask to clean up, sort, "
+    "reorganize, or de-clutter the layout - it does not change any step's "
+    "content or status, only where it sits on the canvas.\n\n"
     "Only use a node_id that appears in the current steps you were given. "
     "Propose at most a few actions per turn - most turns need zero.\n\n"
     'Respond with JSON only: {"reply": "...", "actions": [...]}, actions can '
@@ -74,6 +80,8 @@ def _label_for(action: RoadmapAction, titles_by_id: dict[str, str]) -> str:
         return f'Note on "{node_title}": {action.note}'
     if action.type == "delete_node":
         return f'Delete "{node_title}"'
+    if action.type == "tidy":
+        return "Tidy up: re-space every step into a clean grid"
     return action.type
 
 
