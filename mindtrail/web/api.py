@@ -218,7 +218,10 @@ def handle_project_detail(
         ],
         "highlights_generated_at": project.advice_generated_at,
         "highlights_error": error,
-        "highlights_stale": stale and bool(usable),
+        # Recomputed against the (possibly just-refreshed) project, not
+        # the `stale` captured before generation ran - otherwise a
+        # successful refresh still reported itself as stale.
+        "highlights_stale": len(usable) != project.advice_basis_count and bool(usable),
         "entry_count": len(usable),
     }
 

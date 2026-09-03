@@ -344,6 +344,19 @@ def test_new_activity_makes_highlights_regenerate(store, chats, projects):
     assert llm.calls == 2
 
 
+def test_a_successful_generation_is_not_reported_as_stale(store, chats, projects):
+    # highlights_stale is computed once before generation runs; it must
+    # be re-derived afterward or a page that just regenerated still
+    # tells the user their suggestions are out of date.
+    project = projects.create("Career")
+    chat = chats.create("c", project_id=project.id)
+    store.add("q", "a", [], conversation_id=chat.id)
+
+    data = api.handle_project_detail(store, chats, projects, HighlightLLM(), project.id)
+
+    assert data["highlights_stale"] is False
+
+
 def test_refresh_forces_regeneration(store, chats, projects):
     project = projects.create("Career")
     chat = chats.create("c", project_id=project.id)

@@ -1092,9 +1092,13 @@ CHAT_HTML = """<!doctype html>
       $('breadcrumb').textContent = 'Projects';
     }
 
-    const params = [];
+    // Opening a project must never block on a model call - background=1
+    // always skips highlight generation here, regardless of opts.background
+    // (which only controls the loading placeholder below). Stale or
+    // missing highlights show as-is with a note; the Refresh button, not
+    // navigation, is what pays the LLM round trip.
+    const params = ['background=1'];
     if (opts.refresh) params.push('refresh=1');
-    if (opts.background) params.push('background=1');
     // Both requests are independent, so they're fired together instead of
     // one after the other — the roadmap fetch below just reads a promise
     // that has usually already resolved by the time it's needed.
@@ -1286,15 +1290,18 @@ CHAT_HTML = """<!doctype html>
                       '. Showing the previous suggestions.';
       cardEl.appendChild(e);
     }
+    // Loading a project never generates automatically now, so an
+    // entry_count > 0 project with zero highlights just hasn't had
+    // Refresh clicked yet - distinct from one with nothing to work from.
     if (!data.highlights.length && !data.highlights_error) {
       const p = document.createElement('div');
       p.className = 'muted';
       p.textContent = data.entry_count
-        ? 'Nothing to suggest yet.'
+        ? 'Not generated yet \\u2014 hit Refresh to see suggestions.'
         : 'Add chats or a document, and suggestions appear here.';
       cardEl.appendChild(p);
     }
-    if (data.highlights_stale && !data.highlights_error) {
+    if (data.highlights_stale && data.highlights.length && !data.highlights_error) {
       const note = document.createElement('div');
       note.className = 'stale-note';
       note.textContent = 'New activity since these \\u2014 hit Refresh to update.';
