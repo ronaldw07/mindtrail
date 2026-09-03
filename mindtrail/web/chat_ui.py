@@ -238,6 +238,14 @@ CHAT_HTML = """<!doctype html>
                           border-radius: 8px; color: #ececec; padding: 0.5rem 0.65rem;
                           font-size: 0.85rem; outline: none; }
     #roadmap-chat-input:focus { border-color: #4f46e5; }
+
+    /* --- compact assistant card (project, profile) --- */
+    .rc-log { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column;
+              gap: 0.7rem; margin-bottom: 0.6rem; }
+    .rc-form { display: flex; gap: 0.4rem; }
+    .rc-input { flex: 1; background: #191919; border: 1px solid #333; border-radius: 8px;
+                color: #ececec; padding: 0.45rem 0.6rem; font-size: 0.82rem; outline: none; }
+    .rc-input:focus { border-color: #4f46e5; }
     .node { position: absolute; width: 220px; background: #212121; border: 1px solid #3a3a3a;
             border-radius: 10px; padding: 0.7rem 0.85rem 2rem; cursor: grab; font-size: 0.85rem;
             box-shadow: 0 4px 14px rgba(0,0,0,0.3); user-select: none; }
@@ -375,9 +383,12 @@ CHAT_HTML = """<!doctype html>
   let sidebar = {projects: [], unfiled: []};
   let projectsOpen = false;
   let chatsOpen = true;
-  // {role: 'user'|'assistant', content, actions?}[] for the roadmap chat
-  // panel - reset whenever a roadmap view is (re)opened, not persisted.
+  // {role: 'user'|'assistant', content, actions?}[] for the roadmap,
+  // project, and profile chat panels - reset when their screen is
+  // freshly opened (not on a background refresh), never persisted.
   let roadmapChatLog = [];
+  let projectChatLog = [];
+  let profileChatLog = [];
   const openProjects = new Set();
 
   const api = async (path, opts) => (await fetch(path, opts)).json();
@@ -1065,6 +1076,114 @@ CHAT_HTML = """<!doctype html>
     return c;
   }
 
+  // A compact propose/accept chat card - same safety property as the
+  // roadmap's larger canvas-side panel (the model only ever proposes;
+  // nothing changes until Accept is clicked), packaged for the project
+  // and profile screens where a full side panel doesn't fit. `chatLog`
+  // is the caller's persistent array (survives a parent re-render since
+  // it lives outside this card); `applyAction` performs one accepted
+  // action's real mutation and returns whether it succeeded;
+  // `afterApply` runs after a successful accept to refresh whatever the
+  // action changed.
+  function buildAssistantCard(title, hint, chatLog, sendMessage, applyAction, afterApply) {
+    const c = card(title, null, null);
+    const log = document.createElement('div');
+    log.className = 'rc-log';
+    c.appendChild(log);
+
+    function renderActionCard(action) {
+      const box = document.createElement('div');
+      box.className = 'rc-action' + (action.resolved ? ' resolved' : '');
+      const label = document.createElement('div');
+      label.className = 'rc-action-label';
+      label.textContent = action.label;
+      box.appendChild(label);
+
+      if (action.resolved) {
+        const note = document.createElement('div');
+        note.className = 'rc-action-resolved-note';
+        note.textContent = action.resolved === 'accepted' ? '\\u2713 Applied' : '\\u2717 Dismissed';
+        box.appendChild(note);
+        return box;
+      }
+
+      const buttons = document.createElement('div');
+      buttons.className = 'rc-action-buttons';
+      const accept = document.createElement('button');
+      accept.className = 'rc-accept';
+      accept.textContent = 'Accept';
+      accept.onclick = async () => {
+        accept.disabled = true;
+        const ok = await applyAction(action);
+        if (!ok) { accept.disabled = false; return; }
+        action.resolved = 'accepted';
+        await afterApply();
+      };
+      buttons.appendChild(accept);
+      const reject = document.createElement('button');
+      reject.className = 'rc-reject';
+      reject.textContent = 'Dismiss';
+      reject.onclick = () => { action.resolved = 'rejected'; renderLog(); };
+      buttons.appendChild(reject);
+      box.appendChild(buttons);
+      return box;
+    }
+
+    function renderLog() {
+      log.innerHTML = '';
+      if (!chatLog.length) {
+        const hintEl = document.createElement('div');
+        hintEl.className = 'muted';
+        hintEl.textContent = hint;
+        log.appendChild(hintEl);
+      }
+      chatLog.forEach(entry => {
+        const msg = document.createElement('div');
+        msg.className = 'rc-msg ' + entry.role;
+        msg.textContent = entry.content;
+        log.appendChild(msg);
+        (entry.actions || []).forEach(a => log.appendChild(renderActionCard(a)));
+      });
+      log.scrollTop = log.scrollHeight;
+    }
+    renderLog();
+
+    const form = document.createElement('form');
+    form.className = 'rc-form';
+    const input = document.createElement('input');
+    input.className = 'rc-input';
+    input.placeholder = 'Ask\\u2026';
+    form.appendChild(input);
+    const sendBtn = document.createElement('button');
+    sendBtn.className = 'send';
+    sendBtn.type = 'submit';
+    sendBtn.textContent = 'Send';
+    form.appendChild(sendBtn);
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const message = input.value.trim();
+      if (!message) return;
+      input.value = '';
+      sendBtn.disabled = input.disabled = true;
+
+      const historyForRequest = chatLog.map(m => ({role: m.role, content: m.content}));
+      chatLog.push({role: 'user', content: message});
+      renderLog();
+
+      const res = await sendMessage(message, historyForRequest);
+      sendBtn.disabled = input.disabled = false;
+      input.focus();
+      if (res.error) {
+        chatLog.push({role: 'assistant', content: 'Error: ' + res.error, actions: []});
+      } else {
+        chatLog.push({role: 'assistant', content: res.reply, actions: res.actions || []});
+      }
+      renderLog();
+    };
+    c.appendChild(form);
+    return c;
+  }
+
   function setActiveView(name) {
     $('project-view').classList.toggle('open', name === 'project');
     $('roadmap-view').classList.toggle('open', name === 'roadmap');
@@ -1090,6 +1209,9 @@ CHAT_HTML = """<!doctype html>
     if (!opts.background) {
       view.innerHTML = '<div class="muted">Loading project\\u2026</div>';
       $('breadcrumb').textContent = 'Projects';
+      // A background refresh (e.g. after the chat assistant renames the
+      // project) must not wipe the chat history it's about to redraw.
+      projectChatLog = [];
     }
 
     // Opening a project must never block on a model call - background=1
@@ -1273,6 +1395,24 @@ CHAT_HTML = """<!doctype html>
       filesCard.appendChild(chip);
     });
     rail.appendChild(filesCard);
+
+    const assistantCard = buildAssistantCard(
+      'Project Assistant',
+      'Ask about this project, or tell it what to change \\u2014 it can ' +
+      'propose renaming it or updating its instructions.',
+      projectChatLog,
+      (message, history) => jsonSend('/api/projects/' + id + '/chat', {message, history}),
+      async action => {
+        const patch = {};
+        if (action.name !== null) patch.name = action.name;
+        if (action.instructions !== null) patch.instructions = action.instructions;
+        const res = await jsonSend('/api/projects/' + id, patch, 'PATCH');
+        if (res.error) { toast(res.error, {error: true}); return false; }
+        return true;
+      },
+      () => refreshViews()
+    );
+    rail.appendChild(assistantCard);
 
     layout.appendChild(rail);
     view.appendChild(layout);
@@ -1889,11 +2029,15 @@ CHAT_HTML = """<!doctype html>
 
   // ---------- profile ----------
 
-  async function openProfileView() {
+  async function openProfileView(opts) {
+    opts = opts || {};
     currentProject = null;
     current = null;
     showProfileView();
     $('breadcrumb').textContent = 'Profile';
+    // A background refresh (after the assistant saves a proposed
+    // profile) must not wipe the chat history it's about to redraw.
+    if (!opts.background) profileChatLog = [];
 
     const view = $('profile-view');
     view.innerHTML = '<div class="muted">Loading profile\\u2026</div>';
@@ -1958,6 +2102,25 @@ CHAT_HTML = """<!doctype html>
 
     main.appendChild(aboutCard);
     layout.appendChild(main);
+
+    const rail = document.createElement('div');
+    rail.className = 'proj-rail';
+    const assistantCard = buildAssistantCard(
+      'Profile Assistant',
+      'Talk through what to put in your profile \\u2014 it can propose ' +
+      'the full replacement text for you to accept.',
+      profileChatLog,
+      (message, history) => jsonSend('/api/profile/chat', {message, history}),
+      async action => {
+        const res = await jsonSend('/api/profile', {content: action.content});
+        if (res.error) { toast(res.error, {error: true}); return false; }
+        return true;
+      },
+      () => openProfileView({background: true})
+    );
+    rail.appendChild(assistantCard);
+    layout.appendChild(rail);
+
     view.appendChild(layout);
   }
 

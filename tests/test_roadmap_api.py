@@ -438,3 +438,71 @@ def test_draft_profile_with_nothing_to_draft_from_errors(store):
     data = api.handle_draft_profile(store, StubLLM("x"))
 
     assert "error" in data
+
+
+def test_profile_chat_reply_and_actions(profile):
+    llm = StubLLM('{"reply": "Sure.", "actions": []}')
+
+    data = api.handle_profile_chat(profile, llm, "hi", [])
+
+    assert data["reply"] == "Sure."
+    assert data["actions"] == []
+
+
+def test_profile_chat_failure_is_surfaced(profile):
+    llm = StubLLM("", error=LLMError("rate limited"))
+
+    data = api.handle_profile_chat(profile, llm, "hi", [])
+
+    assert "error" in data
+
+
+def test_profile_chat_action_is_returned_as_a_dict(profile):
+    llm = StubLLM(
+        '{"reply": "Here.", "actions": [{"type": "update_profile", "content": "CS student"}]}'
+    )
+
+    data = api.handle_profile_chat(profile, llm, "draft something", [])
+
+    assert data["actions"][0]["type"] == "update_profile"
+    assert data["actions"][0]["content"] == "CS student"
+
+
+# --- project chat -------------------------------------------------------
+
+
+def test_project_chat_reply_and_actions(projects, profile, project):
+    llm = StubLLM('{"reply": "Sure.", "actions": []}')
+
+    data = api.handle_project_chat(projects, llm, profile, project.id, "hi", [])
+
+    assert data["reply"] == "Sure."
+    assert data["actions"] == []
+
+
+def test_project_chat_on_a_missing_project_errors(projects, profile):
+    llm = StubLLM('{"reply": "Sure.", "actions": []}')
+
+    data = api.handle_project_chat(projects, llm, profile, "nope", "hi", [])
+
+    assert "error" in data
+
+
+def test_project_chat_failure_is_surfaced(projects, profile, project):
+    llm = StubLLM("", error=LLMError("rate limited"))
+
+    data = api.handle_project_chat(projects, llm, profile, project.id, "hi", [])
+
+    assert "error" in data
+
+
+def test_project_chat_action_is_returned_as_a_dict(projects, profile, project):
+    llm = StubLLM(
+        '{"reply": "Renaming.", "actions": [{"type": "update_project", "name": "New Name"}]}'
+    )
+
+    data = api.handle_project_chat(projects, llm, profile, project.id, "rename this", [])
+
+    assert data["actions"][0]["type"] == "update_project"
+    assert data["actions"][0]["name"] == "New Name"
+    assert data["actions"][0]["instructions"] is None
