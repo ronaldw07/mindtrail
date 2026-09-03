@@ -77,6 +77,9 @@ its chats:
   It never applies anything itself; every proposal shows up as a card you
   accept or dismiss.
 - **Files** — documents uploaded into that project.
+- **Project Assistant** — the same propose/accept pattern as the roadmap
+  chat, scoped to this project: ask it to rename the project or change its
+  instructions, and it proposes the change as a card rather than doing it.
 
 Follow-ups within a chat carry that conversation's earlier turns, so
 "what are its drawbacks?" resolves against what you were just discussing
@@ -84,8 +87,16 @@ rather than being searched literally.
 
 **👤 Profile**, in the sidebar, is a short freeform description of you —
 role, goals, background — used to personalize every answer, highlight, and
-roadmap. Write it by hand or generate a starting draft from whatever
-documents are already stored.
+roadmap. Write it by hand, generate a starting draft from whatever
+documents are already stored, or talk it through with the **Profile
+Assistant**, which proposes a full replacement text for you to accept.
+
+Every chat assistant in the app (roadmap, project, profile) shares the
+same safety property: the model only ever proposes a structured action,
+shown as a card with Accept/Dismiss. Nothing is written until you click
+Accept, and accepting always goes through the exact same endpoint a
+manual edit would use — a chat-driven change and a hand-typed one are
+indistinguishable to the server.
 
 Existing research from before projects existed is migrated automatically
 on first run: one conversation per topic, nothing orphaned.
@@ -289,6 +300,8 @@ mindtrail web
 | `mindtrail/advice/profile_draft.py` | Draft a starting profile from stored documents and notes |
 | `mindtrail/advice/roadmap_gen.py` | Propose roadmap steps toward a goal, preserving decided nodes |
 | `mindtrail/advice/roadmap_chat.py` | Conversational roadmap assistant - proposes actions, never applies them |
+| `mindtrail/advice/project_chat.py` | Conversational project assistant - proposes rename/instructions changes |
+| `mindtrail/advice/profile_chat.py` | Conversational profile assistant - proposes a full replacement to accept |
 | `mindtrail/predict/next_query.py` | Three ranked next-question candidates (not validated — see Results) |
 | `mindtrail/llm.py` | Groq client with rate-limit backoff |
 | `eval/` | Retrieval and prediction harness, plus the LLM judge |
@@ -396,7 +409,7 @@ whenever you want it current.
 
 ## Tests
 
-369 tests, no network and no API key required — search, fetch, and the model
+398 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.

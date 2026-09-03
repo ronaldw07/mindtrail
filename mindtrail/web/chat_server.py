@@ -211,6 +211,23 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                 self._json(api.handle_save_profile(deps.profile, str(body.get("content", ""))))
             elif path == "/api/profile/draft":
                 self._json(api.handle_draft_profile(deps.store, deps.llm))
+            elif path == "/api/profile/chat":
+                body = self._json_body() or {}
+                self._json(
+                    api.handle_profile_chat(
+                        deps.profile, deps.llm,
+                        str(body.get("message", "")), body.get("history") or [],
+                    )
+                )
+            elif path.startswith("/api/projects/") and path.endswith("/chat"):
+                body = self._json_body() or {}
+                project_id = path[len("/api/projects/") : -len("/chat")]
+                self._json(
+                    api.handle_project_chat(
+                        deps.projects, deps.llm, deps.profile, project_id,
+                        str(body.get("message", "")), body.get("history") or [],
+                    )
+                )
             elif path == "/api/projects":
                 body = self._json_body()
                 if body is None:

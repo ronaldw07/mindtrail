@@ -14,7 +14,9 @@ from mindtrail.advice.highlights import (
     highlights_from_json,
     highlights_to_json,
 )
+from mindtrail.advice.profile_chat import chat_about_profile
 from mindtrail.advice.profile_draft import draft_profile
+from mindtrail.advice.project_chat import chat_about_project
 from mindtrail.advice.roadmap_chat import chat_about_roadmap
 from mindtrail.advice.roadmap_gen import generate_roadmap
 from mindtrail.ingest.documents import DocumentError, extract_pdf_text
@@ -244,6 +246,40 @@ def handle_update_project(projects: ProjectStore, project_id: str, body: dict) -
     except ValueError as exc:
         return {"error": str(exc)}
     return {"ok": True}
+
+
+def handle_project_chat(
+    projects: ProjectStore,
+    llm: LLMClient,
+    profile: ProfileStore,
+    project_id: str,
+    message: str,
+    history: list[dict],
+) -> dict:
+    """A conversational turn about one project. Never writes to it - the
+    model can only propose a rename and/or instructions change, which the
+    caller applies through the existing update-project endpoint once the
+    user accepts.
+    """
+    project = projects.get(project_id)
+    if project is None:
+        return {"error": "no such project"}
+
+    try:
+        result = chat_about_project(
+            llm, project.name, project.instructions,
+            profile.get().content, history, message,
+        )
+    except (LLMError, ValueError) as exc:
+        return {"error": str(exc)}
+
+    return {
+        "reply": result.reply,
+        "actions": [
+            {"type": a.type, "name": a.name, "instructions": a.instructions, "label": a.label}
+            for a in result.actions
+        ],
+    }
 
 
 def handle_delete_project(projects: ProjectStore, project_id: str) -> dict:
@@ -517,6 +553,26 @@ def handle_draft_profile(store: MemoryStore, llm: LLMClient) -> dict:
     except (LLMError, ValueError) as exc:
         return {"error": str(exc)}
     return {"draft": draft}
+
+
+def handle_profile_chat(
+    profile: ProfileStore, llm: LLMClient, message: str, history: list[dict]
+) -> dict:
+    """A conversational turn about the profile. Never writes to it - the
+    model can only propose a full replacement, which the caller saves
+    through the existing save-profile endpoint once the user accepts.
+    """
+    try:
+        result = chat_about_profile(llm, profile.get().content, history, message)
+    except (LLMError, ValueError) as exc:
+        return {"error": str(exc)}
+
+    return {
+        "reply": result.reply,
+        "actions": [
+            {"type": a.type, "content": a.content, "label": a.label} for a in result.actions
+        ],
+    }
 
 
 # --- roadmaps -------------------------------------------------------------
