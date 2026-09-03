@@ -59,6 +59,73 @@ def handle_sidebar(projects: ProjectStore, chats: ConversationStore) -> dict:
     }
 
 
+NEXT_UP_STATUS = "accepted"
+DASHBOARD_ITEMS_PER_PROJECT = 2
+DASHBOARD_RECENT_LIMIT = 8
+
+
+def handle_dashboard(
+    projects: ProjectStore,
+    chats: ConversationStore,
+    roadmaps: RoadmapStore,
+    nodes: RoadmapNodeStore,
+) -> dict:
+    """The landing overview: cached highlights, accepted-but-not-done
+    roadmap steps, and recent activity, across every project.
+
+    Everything here is already stored or cached - no LLM call is ever
+    made, so opening the dashboard costs nothing and is never stale in
+    a way that needs a spinner.
+    """
+    all_projects = projects.all()
+    project_names = {p.id: p.name for p in all_projects}
+
+    highlights = []
+    for project in all_projects:
+        for h in highlights_from_json(project.advice)[:DASHBOARD_ITEMS_PER_PROJECT]:
+            highlights.append(
+                {
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "headline": h.headline,
+                    "priority": h.priority,
+                }
+            )
+
+    next_up = []
+    for project in all_projects:
+        roadmap = roadmaps.for_project(project.id)
+        if roadmap is None:
+            continue
+        accepted = [n for n in nodes.for_roadmap(roadmap.id) if n.status == NEXT_UP_STATUS]
+        # x position roughly tracks dependency order from the generated
+        # layout, so it doubles as "what's next" without a due-date field.
+        accepted.sort(key=lambda n: n.x)
+        for n in accepted[:DASHBOARD_ITEMS_PER_PROJECT]:
+            next_up.append(
+                {
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "node_id": n.id,
+                    "title": n.title,
+                    "note": n.note,
+                }
+            )
+
+    recent = [
+        {
+            "id": c.id,
+            "title": c.title,
+            "project_id": c.project_id,
+            "project_name": project_names.get(c.project_id) if c.project_id else None,
+            "updated_at": c.updated_at,
+        }
+        for c in chats.all()[:DASHBOARD_RECENT_LIMIT]
+    ]
+
+    return {"highlights": highlights, "next_up": next_up, "recent": recent}
+
+
 def _friendly_highlight_error(exc: Exception) -> str:
     """A short reason, never the model's raw output.
 

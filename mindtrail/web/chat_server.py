@@ -108,6 +108,12 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                 self.wfile.write(body)
             elif path == "/api/sidebar":
                 self._json(api.handle_sidebar(deps.projects, deps.chats))
+            elif path == "/api/dashboard":
+                self._json(
+                    api.handle_dashboard(
+                        deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes
+                    )
+                )
             elif path.startswith("/api/conversations/"):
                 self._json(
                     api.handle_conversation_entries(

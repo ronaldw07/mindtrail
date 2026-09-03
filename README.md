@@ -39,8 +39,15 @@ running — the command regenerates the file and opens it.
 $ mindtrail chat
 ```
 
-Opens a browser chat window at `localhost:8765`. The sidebar holds
-**projects** you create by hand, with chats nested under them:
+Opens a browser chat window at `localhost:8765`, landing on **Today** — a
+dashboard pulling together each project's cached highlights, the roadmap
+steps you've accepted but haven't finished, and your most recently touched
+chats and documents. Nothing on it triggers a model call; it only reads
+what's already stored, so opening it costs nothing. Click the mindtrail
+logo any time to come back to it.
+
+The sidebar holds **projects** you create by hand, with chats nested under
+them:
 
 - **Rename, delete, pin, and mark unread** any chat from its `⋯` menu.
   Pinned sorts to the top; unread shows bold with a dot.
@@ -384,7 +391,7 @@ whenever you want it current.
 
 ## Tests
 
-335 tests, no network and no API key required — search, fetch, and the model
+342 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.
