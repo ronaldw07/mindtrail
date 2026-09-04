@@ -1,6 +1,8 @@
 """The dashboard handler: cached highlights, next roadmap steps, and
 recent activity, all read without touching the model."""
 
+from datetime import date, timedelta
+
 import pytest
 
 from mindtrail.advice.highlights import Highlight, highlights_to_json
@@ -41,7 +43,10 @@ def nodes(db):
 def test_empty_state_returns_empty_lists(projects, chats, roadmaps, nodes):
     data = api.handle_dashboard(projects, chats, roadmaps, nodes)
 
-    assert data == {"highlights": [], "next_up": [], "recent": []}
+    assert data == {
+        "highlights": [], "next_up": [], "recent": [],
+        "agenda": {"overdue": [], "today": [], "this_week": [], "later": []},
+    }
 
 
 def test_highlights_come_from_cached_advice_only(projects, chats, roadmaps, nodes):
@@ -187,3 +192,88 @@ def test_recent_is_capped(projects, chats, roadmaps, nodes):
     data = api.handle_dashboard(projects, chats, roadmaps, nodes)
 
     assert len(data["recent"]) == 8
+
+
+# --- agenda: "this week" across every project (G5) ------------------------
+
+
+def _iso(offset_days):
+    return (date.today() + timedelta(days=offset_days)).isoformat()
+
+
+def test_agenda_buckets_nodes_across_the_overdue_today_week_later_boundaries(
+    projects, chats, roadmaps, nodes
+):
+    project = projects.create("Career")
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    yesterday = nodes.add(roadmap.id, "Yesterday", status="accepted", due_date=_iso(-1))
+    today = nodes.add(roadmap.id, "Today", status="accepted", due_date=_iso(0))
+    tomorrow = nodes.add(roadmap.id, "Tomorrow", status="accepted", due_date=_iso(1))
+    six_out = nodes.add(roadmap.id, "SixOut", status="accepted", due_date=_iso(6))
+    eight_out = nodes.add(roadmap.id, "EightOut", status="accepted", due_date=_iso(8))
+
+    data = api.handle_dashboard(projects, chats, roadmaps, nodes)
+    agenda = data["agenda"]
+
+    assert [n["title"] for n in agenda["overdue"]] == [yesterday.title]
+    assert [n["title"] for n in agenda["today"]] == [today.title]
+    assert {n["title"] for n in agenda["this_week"]} == {tomorrow.title, six_out.title}
+    assert [n["title"] for n in agenda["later"]] == [eight_out.title]
+
+
+def test_agenda_excludes_done_and_rejected_nodes(projects, chats, roadmaps, nodes):
+    project = projects.create("Career")
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    nodes.add(roadmap.id, "Finished", status="done", due_date=_iso(0))
+    nodes.add(roadmap.id, "Skipped", status="rejected", due_date=_iso(0))
+
+    data = api.handle_dashboard(projects, chats, roadmaps, nodes)
+
+    assert data["agenda"]["today"] == []
+
+
+def test_agenda_includes_proposed_nodes_not_just_accepted(projects, chats, roadmaps, nodes):
+    project = projects.create("Career")
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    proposed = nodes.add(roadmap.id, "Maybe", status="proposed", due_date=_iso(0))
+
+    data = api.handle_dashboard(projects, chats, roadmaps, nodes)
+
+    assert [n["title"] for n in data["agenda"]["today"]] == [proposed.title]
+
+
+def test_agenda_excludes_nodes_with_no_due_date(projects, chats, roadmaps, nodes):
+    project = projects.create("Career")
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    nodes.add(roadmap.id, "Undated", status="accepted")
+
+    data = api.handle_dashboard(projects, chats, roadmaps, nodes)
+
+    assert all(
+        len(bucket) == 0 for bucket in data["agenda"].values()
+    )
+
+
+def test_agenda_is_empty_when_nothing_is_due(projects, chats, roadmaps, nodes):
+    project = projects.create("Career")
+    roadmaps.create("Goal", project_id=project.id)
+
+    data = api.handle_dashboard(projects, chats, roadmaps, nodes)
+
+    assert data["agenda"] == {"overdue": [], "today": [], "this_week": [], "later": []}
+
+
+def test_agenda_joins_nodes_to_their_project_across_multiple_projects(
+    projects, chats, roadmaps, nodes
+):
+    career = projects.create("Career")
+    fitness = projects.create("Fitness")
+    career_roadmap = roadmaps.create("Goal", project_id=career.id)
+    fitness_roadmap = roadmaps.create("Goal", project_id=fitness.id)
+    nodes.add(career_roadmap.id, "Apply", status="accepted", due_date=_iso(0))
+    nodes.add(fitness_roadmap.id, "Run", status="accepted", due_date=_iso(0))
+
+    data = api.handle_dashboard(projects, chats, roadmaps, nodes)
+
+    project_names = {n["project_name"] for n in data["agenda"]["today"]}
+    assert project_names == {"Career", "Fitness"}
