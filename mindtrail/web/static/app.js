@@ -78,6 +78,32 @@
   const isTypingTarget = el =>
     !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
 
+  // ---------- topmost layer stack ----------
+  // Before this, Escape was handled by N independent document-level
+  // keydown listeners (the modal, the sidebar search dropdown) with a
+  // third (the palette, below) about to join them - none stopped
+  // propagation, so one Escape press closed every open layer at once
+  // instead of just the top one. A layer registers here when it opens
+  // and unregisters when it closes; the single document listener below
+  // dismisses only whatever is currently on top.
+  const layerStack = [];
+
+  function pushLayer(onEscape) {
+    const layer = {onEscape};
+    layerStack.push(layer);
+    return function popLayer() {
+      const idx = layerStack.indexOf(layer);
+      if (idx !== -1) layerStack.splice(idx, 1);
+    };
+  }
+
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'Escape' || !layerStack.length) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    layerStack[layerStack.length - 1].onEscape();
+  });
+
   let spaceHeld = false;
   document.addEventListener('keydown', ev => {
     if (ev.code === 'Space' && !spaceHeld && !isTypingTarget(ev.target) && isRoadmapViewOpen()) {
@@ -95,8 +121,12 @@
 
   // Escape clears the canvas selection; Delete/Backspace removes a
   // selected edge. Both are no-ops outside the roadmap view or while
-  // typing, so they can never hijack an unrelated field.
+  // typing, so they can never hijack an unrelated field. Also a no-op
+  // whenever a layer (modal, search dropdown, palette) is on top - that
+  // Escape belongs to the layer stack above, not to the canvas
+  // underneath it.
   document.addEventListener('keydown', ev => {
+    if (layerStack.length) return;
     if (!isRoadmapViewOpen() || !activeRoadmapCtx || isTypingTarget(ev.target)) return;
     if (ev.key === 'Escape') {
       if (selectedNodeIds.size || selectedEdge) {
@@ -201,17 +231,42 @@
       overlay.appendChild(box);
       overlay.classList.add('open');
 
-      const close = result => {
+      // Focus trap + focus restoration: previously Tab could walk out of
+      // the modal into the sidebar behind it, and closing never gave
+      // focus back to whatever opened it - a keyboard user was stranded
+      // wherever the browser's default focus landed. trigger is captured
+      // before anything else steals focus (the field.focus() call below).
+      const trigger = document.activeElement;
+      let close; // assigned below; pushLayer needs the reference first
+      const popLayer = pushLayer(() => close(null));
+
+      close = result => {
         overlay.classList.remove('open');
         overlay.innerHTML = '';
         document.removeEventListener('keydown', onKey);
+        popLayer();
+        if (trigger && typeof trigger.focus === 'function') trigger.focus();
         resolve(result);
       };
       const submit = () => close(
         opts.select ? field.value : (opts.input ? (field.value.trim() || null) : true)
       );
+      const focusable = () => Array.from(
+        box.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')
+      ).filter(el => !el.disabled);
       const onKey = e => {
-        if (e.key === 'Escape') { e.preventDefault(); close(null); }
+        // Escape is deliberately not handled here - the layer stack
+        // above owns dismissal so only the topmost open layer closes.
+        if (e.key === 'Tab') {
+          const items = focusable();
+          if (!items.length) return;
+          const first = items[0], last = items[items.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault(); last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault(); first.focus();
+          }
+        }
         // Enter submits a single-line field; a textarea needs it to
         // insert a newline instead, so only Cmd/Ctrl+Enter submits.
         else if (e.key === 'Enter' && (!opts.multiline || e.metaKey || e.ctrlKey)) {
@@ -1616,6 +1671,11 @@
     top.appendChild(addBtn);
 
     const tidyBtn = document.createElement('button');
+    // Ids, not just a class, so the palette's context-aware "Tidy
+    // roadmap" / "Regenerate roadmap" actions (below) can trigger the
+    // exact same button rather than duplicating its logic - the canvas
+    // code itself is untouched otherwise.
+    tidyBtn.id = 'roadmap-tidy-btn';
     tidyBtn.className = 'card-btn';
     tidyBtn.textContent = 'Tidy up';
     tidyBtn.title = 'Re-space every step into a clean grid';
@@ -1629,6 +1689,7 @@
     top.appendChild(tidyBtn);
 
     const regenBtn = document.createElement('button');
+    regenBtn.id = 'roadmap-regenerate-btn';
     regenBtn.className = 'card-btn';
     regenBtn.textContent = '\u21bb Regenerate';
     regenBtn.onclick = async () => {
@@ -2739,7 +2800,11 @@
   // no conversation attached - unreachable from the browser even after
   // the fact. This always creates one, so a note shows up in the
   // sidebar exactly like a chat or a document would.
-  $('add-note').onclick = async () => {
+  //
+  // A named function rather than an inline handler so the command
+  // palette's "New note" action (below) can call the exact same flow
+  // instead of simulating a click on the sidebar button.
+  async function addNote() {
     const text = await modal({
       title: 'New note', input: true, multiline: true,
       placeholder: 'Jot something down\u2026', confirmLabel: 'Save',
@@ -2751,7 +2816,8 @@
     showChatView();
     await openConversation(res.conversation_id);
     toast('Note saved');
-  };
+  }
+  $('add-note').onclick = addNote;
 
   // ---------- search ----------
   // Semantic search over everything stored - the app's core retrieval,
@@ -2762,10 +2828,23 @@
     const results = $('search-results');
     let debounceTimer = null;
     let latestQuery = '';
+    // Registered with the shared layer stack only while results are
+    // actually showing, so Escape closes this dropdown - and only this
+    // dropdown, not whatever else happens to be open underneath it -
+    // exactly when there's something here to close.
+    let popSearchLayer = null;
 
     function closeResults() {
       results.classList.remove('open');
       results.innerHTML = '';
+      if (popSearchLayer) { popSearchLayer(); popSearchLayer = null; }
+    }
+
+    function openResults() {
+      results.classList.add('open');
+      if (!popSearchLayer) {
+        popSearchLayer = pushLayer(() => { input.blur(); closeResults(); });
+      }
     }
 
     function renderResults(items, query) {
@@ -2776,7 +2855,7 @@
         empty.style.padding = '0.5rem 0.6rem';
         empty.textContent = 'No matches for "' + query + '".';
         results.appendChild(empty);
-        results.classList.add('open');
+        openResults();
         return;
       }
       items.forEach(r => {
@@ -2826,7 +2905,7 @@
         });
         results.appendChild(item);
       });
-      results.classList.add('open');
+      openResults();
     }
 
     input.addEventListener('input', () => {
@@ -2843,9 +2922,9 @@
       }, 250);
     });
 
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { input.blur(); closeResults(); }
-    });
+    // Escape is handled by the layer stack (see openResults/closeResults
+    // above), not here - a local element-level listener would fire
+    // regardless of whether this dropdown is the topmost open thing.
 
     document.addEventListener('click', e => {
       if (!e.target.closest('#search-box')) closeResults();
@@ -3136,6 +3215,345 @@
       'width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/>' +
       '<line x1="12" y1="19" x2="12" y2="22"/></svg>';
     return btn;
+  }
+
+  // ---------- command palette (Cmd+K) ----------
+  // /api/search is semantic vector search over memory entries only - it
+  // cannot find a project, a chat, or a roadmap step, and semantic
+  // matching is not fuzzy matching (typing "roadm" would match nothing
+  // there). So the palette fuzzy-matches client-side over a fresh
+  // /api/palette-index fetch on every open (projects, chats, roadmap
+  // step titles - cheap, local, no LLM), and queries /api/search
+  // separately, debounced, for the memory-entries group. No open/close
+  // animation anywhere in here - deliberate, see PLAN.md: this is a
+  // keyboard action used constantly, and animating it makes the whole
+  // app feel slow.
+
+  const PALETTE_MEMORY_DEBOUNCE_MS = 200;
+  const PALETTE_MAX_PER_GROUP = 6;
+
+  // Cheap subsequence fuzzy match, not a full fuzzy-ranking algorithm:
+  // every character of the query must appear in order in the text.
+  // Rewards an early, consecutive run so "roadm" ranks "Roadmap" above
+  // a title that merely happens to contain the same letters scattered
+  // apart. Returns -1 for no match, so callers can filter with >= 0.
+  function fuzzyScore(query, text) {
+    const q = query.toLowerCase(), t = text.toLowerCase();
+    if (!q) return 0;
+    let ti = 0, score = 0, streak = 0;
+    for (let qi = 0; qi < q.length; qi++) {
+      const idx = t.indexOf(q[qi], ti);
+      if (idx === -1) return -1;
+      streak = (idx === ti) ? streak + 1 : 1;
+      score += (10 - Math.min(idx - ti, 9)) + streak;
+      ti = idx + 1;
+    }
+    return score;
+  }
+
+  // Context-aware: "Tidy roadmap" / "Regenerate roadmap" only make sense
+  // with a roadmap open, so they're omitted otherwise rather than shown
+  // disabled. Both trigger the exact toolbar buttons the canvas already
+  // has (see the ids added alongside tidyBtn/regenBtn in renderRoadmap)
+  // instead of duplicating their logic here.
+  function paletteActions() {
+    const actions = [
+      {label: 'New chat', run: () => { closePalette(); newChat(); }},
+      {label: 'New note', run: () => { closePalette(); addNote(); }},
+      {label: 'New project', run: () => { closePalette(); createProject(); }},
+      {label: 'Go to Today', run: () => { closePalette(); openDashboardView(); }},
+      {label: 'Go to Profile', run: () => { closePalette(); openProfileView(); }},
+    ];
+    if (isRoadmapViewOpen()) {
+      actions.push({label: 'Tidy roadmap', run: () => {
+        closePalette();
+        const btn = $('roadmap-tidy-btn');
+        if (btn) btn.click();
+      }});
+      actions.push({label: 'Regenerate roadmap', run: () => {
+        closePalette();
+        const btn = $('roadmap-regenerate-btn');
+        if (btn) btn.click();
+      }});
+    }
+    return actions;
+  }
+
+  let paletteTrigger = null;
+  let popPaletteLayer = null;
+
+  function closePalette() {
+    const el = $('palette');
+    if (el.style.display !== 'block') return;
+    el.style.display = 'none';
+    el.innerHTML = '';
+    if (popPaletteLayer) { popPaletteLayer(); popPaletteLayer = null; }
+    const trigger = paletteTrigger;
+    paletteTrigger = null;
+    if (trigger && typeof trigger.focus === 'function') trigger.focus();
+  }
+
+  async function openPalette() {
+    const el = $('palette');
+    if (el.style.display === 'block') {
+      const existing = el.querySelector('input');
+      if (existing) existing.focus();
+      return;
+    }
+    paletteTrigger = document.activeElement;
+    el.innerHTML = '';
+    // Every rule here is inline, referencing the same :root tokens the
+    // rest of the app uses, rather than adding anything to app.css -
+    // the design pass owns that file next and this is a new element
+    // that doesn't need a rule beyond what the tokens already give it.
+    el.style.cssText =
+      'display:block;position:fixed;inset:0;z-index:150;background:rgba(0,0,0,0.55);';
+    const box = document.createElement('div');
+    box.style.cssText =
+      'position:absolute;top:14vh;left:50%;transform:translateX(-50%);' +
+      'width:560px;max-width:calc(100vw - 2rem);max-height:65vh;display:flex;' +
+      'flex-direction:column;overflow:hidden;background:var(--surface);' +
+      'border:1px solid var(--border-strong);border-radius:var(--r-xl);' +
+      'box-shadow:0 18px 50px rgba(0,0,0,0.55);';
+    el.appendChild(box);
+
+    const input = document.createElement('input');
+    input.placeholder = 'Search projects, chats, roadmap steps, memory…';
+    input.setAttribute('aria-label', 'Command palette');
+    input.name = 'palette-query';
+    input.style.cssText =
+      'border:none;border-bottom:1px solid var(--border-subtle);background:transparent;' +
+      'color:var(--text);font-size:var(--fs-lg);padding:0.9rem 1rem;outline:none;';
+    box.appendChild(input);
+
+    const list = document.createElement('div');
+    list.style.cssText = 'overflow-y:auto;padding:0.4rem;';
+    box.appendChild(list);
+
+    el.onclick = ev => { if (ev.target === el) closePalette(); };
+    popPaletteLayer = pushLayer(() => closePalette());
+
+    const index = await api('/api/palette-index');
+    let flatItems = [];
+    let selected = 0;
+    let memoryResults = [];
+    let memoryDebounce = null;
+
+    function group(label, items) {
+      if (!items.length) return;
+      const heading = document.createElement('div');
+      heading.textContent = label;
+      heading.style.cssText =
+        'font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:0.05em;' +
+        'color:var(--text-muted);padding:0.5rem 0.6rem 0.25rem;';
+      list.appendChild(heading);
+      items.forEach(item => {
+        const idx = flatItems.length;
+        flatItems.push(item);
+        const row = document.createElement('div');
+        row.dataset.idx = String(idx);
+        row.textContent = item.label;
+        row.style.cssText =
+          'padding:0.5rem 0.6rem;border-radius:var(--r);cursor:pointer;' +
+          'font-size:var(--fs-base);color:var(--text-3);';
+        row.onclick = () => item.run();
+        list.appendChild(row);
+      });
+    }
+
+    function highlight() {
+      list.querySelectorAll('[data-idx]').forEach(row => {
+        const isSelected = Number(row.dataset.idx) === selected;
+        row.style.background = isSelected ? 'var(--surface-hover)' : '';
+        row.style.color = isSelected ? 'var(--text-bright)' : 'var(--text-3)';
+        if (isSelected) row.scrollIntoView({block: 'nearest'});
+      });
+    }
+
+    function paint() {
+      list.innerHTML = '';
+      flatItems = [];
+      const query = input.value.trim();
+
+      const rank = (items, textOf) => (!query ? [] : items
+        .map(it => ({item: it, score: fuzzyScore(query, textOf(it))}))
+        .filter(r => r.score >= 0)
+        .sort((a, b) => b.score - a.score)
+        .map(r => r.item));
+
+      const projects = rank(index.projects, p => p.name);
+      const chats = rank(index.chats, c => c.title);
+      const nodes = rank(index.roadmap_nodes, n => n.title);
+      const actions = paletteActions()
+        .filter(a => !query || fuzzyScore(query, a.label) >= 0);
+
+      group('Projects', projects.slice(0, PALETTE_MAX_PER_GROUP).map(p => ({
+        label: p.name,
+        run: () => { closePalette(); openProject(p.id); },
+      })));
+      group('Chats', chats.slice(0, PALETTE_MAX_PER_GROUP).map(c => ({
+        label: c.title + (c.project_name ? '  —  ' + c.project_name : ''),
+        run: () => { closePalette(); showChatView(); openConversation(c.id); },
+      })));
+      group('Roadmap steps', nodes.slice(0, PALETTE_MAX_PER_GROUP).map(n => ({
+        label: n.title + '  —  ' + n.project_name,
+        run: () => { closePalette(); openRoadmapView(n.project_id, n.project_name); },
+      })));
+      group('Memory entries', memoryResults.slice(0, PALETTE_MAX_PER_GROUP).map(r => ({
+        label: r.query,
+        run: () => { closePalette(); showChatView(); openConversation(r.conversation_id); },
+      })));
+      group('Actions', actions);
+
+      if (!flatItems.length) {
+        const empty = document.createElement('div');
+        empty.textContent = query ? 'No matches.' : 'Type to search, or pick an action below.';
+        empty.style.cssText =
+          'padding:0.6rem;color:var(--text-muted);font-size:var(--fs-base);';
+        list.appendChild(empty);
+      }
+      selected = Math.min(selected, Math.max(flatItems.length - 1, 0));
+      highlight();
+    }
+
+    input.addEventListener('input', () => {
+      const query = input.value.trim();
+      clearTimeout(memoryDebounce);
+      selected = 0;
+      if (!query) { memoryResults = []; paint(); return; }
+      // Paint immediately with whatever's already known (fuzzy groups and
+      // actions cost nothing) - the memory-entries group fills in once
+      // the debounced /api/search call actually resolves.
+      paint();
+      memoryDebounce = setTimeout(async () => {
+        const data = await api('/api/search?q=' + encodeURIComponent(query));
+        if (input.value.trim() !== query) return; // a newer keystroke already won
+        memoryResults = data.results || [];
+        paint();
+      }, PALETTE_MEMORY_DEBOUNCE_MS);
+    });
+
+    input.addEventListener('keydown', ev => {
+      if (ev.key === 'ArrowDown') {
+        ev.preventDefault();
+        if (flatItems.length) { selected = (selected + 1) % flatItems.length; highlight(); }
+      } else if (ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        if (flatItems.length) {
+          selected = (selected - 1 + flatItems.length) % flatItems.length;
+          highlight();
+        }
+      } else if (ev.key === 'Enter') {
+        ev.preventDefault();
+        const item = flatItems[selected];
+        if (item) item.run();
+      }
+      // Escape is deliberately not handled here - the layer stack owns
+      // dismissal so only the topmost open layer (this palette) closes.
+    });
+
+    paint();
+    input.focus();
+  }
+
+  // ---------- keyboard bindings (single source of truth) ----------
+  // Every bare-key or modifier shortcut in the app is declared exactly
+  // once here. Two things fall out of that: the '?' overlay below is
+  // *generated* from this table instead of hand-typed, so it can never
+  // drift from what actually fires, and the "don't fire while typing"
+  // guard lives in one place rather than being copy-pasted at every call
+  // site that happens to bind a bare key - get it right here once, and
+  // typing "?" into the composer or any other field can never open the
+  // overlay by accident.
+  const KEY_BINDINGS = [
+    {
+      keys: 'Cmd/Ctrl+K',
+      label: 'Open command palette',
+      allowWhileTyping: true, // a global open shortcut works from anywhere, Raycast-style
+      test: ev => (ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'k',
+      run: () => openPalette(),
+    },
+    {
+      keys: '?',
+      label: 'Show keyboard shortcuts',
+      allowWhileTyping: false, // a bare key must not hijack typing a literal "?"
+      test: ev => ev.key === '?' && !ev.metaKey && !ev.ctrlKey && !ev.altKey,
+      run: () => openShortcutsOverlay(),
+    },
+  ];
+
+  document.addEventListener('keydown', ev => {
+    for (const binding of KEY_BINDINGS) {
+      if (!binding.test(ev)) continue;
+      if (!binding.allowWhileTyping && isTypingTarget(ev.target)) continue;
+      ev.preventDefault();
+      binding.run();
+      return;
+    }
+  });
+
+  let shortcutsTrigger = null;
+  let popShortcutsLayer = null;
+
+  function closeShortcutsOverlay() {
+    const el = $('shortcuts');
+    if (el.style.display !== 'block') return;
+    el.style.display = 'none';
+    el.innerHTML = '';
+    if (popShortcutsLayer) { popShortcutsLayer(); popShortcutsLayer = null; }
+    const trigger = shortcutsTrigger;
+    shortcutsTrigger = null;
+    if (trigger && typeof trigger.focus === 'function') trigger.focus();
+  }
+
+  function openShortcutsOverlay() {
+    const el = $('shortcuts');
+    if (el.style.display === 'block') return;
+    shortcutsTrigger = document.activeElement;
+    el.innerHTML = '';
+    el.style.cssText =
+      'display:block;position:fixed;inset:0;z-index:150;background:rgba(0,0,0,0.55);';
+    const box = document.createElement('div');
+    box.style.cssText =
+      'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);' +
+      'width:360px;max-width:calc(100vw - 2rem);padding:1.25rem;background:var(--surface);' +
+      'border:1px solid var(--border-strong);border-radius:var(--r-xl);' +
+      'box-shadow:0 18px 50px rgba(0,0,0,0.55);';
+    el.appendChild(box);
+
+    const h = document.createElement('h3');
+    h.textContent = 'Keyboard shortcuts';
+    h.style.cssText =
+      'margin:0 0 0.75rem;font-size:var(--fs-lg);font-weight:600;color:var(--text-heading);';
+    box.appendChild(h);
+
+    // Generated straight from KEY_BINDINGS, not retyped - see the banner
+    // comment above the table for why that's the whole point.
+    KEY_BINDINGS.forEach(b => {
+      const row = document.createElement('div');
+      row.style.cssText =
+        'display:flex;justify-content:space-between;gap:1rem;padding:0.3rem 0;' +
+        'font-size:var(--fs-base);color:var(--text-2);';
+      const label = document.createElement('span');
+      label.textContent = b.label;
+      const key = document.createElement('span');
+      key.textContent = b.keys;
+      key.style.color = 'var(--text-muted)';
+      row.appendChild(label);
+      row.appendChild(key);
+      box.appendChild(row);
+    });
+
+    // Not table-driven: these belong to the palette's own listbox
+    // interaction, not to a global bare-key binding that could drift.
+    const hint = document.createElement('div');
+    hint.textContent =
+      'While the palette is open: ↑↓ to navigate, Enter to run, Esc to close.';
+    hint.style.cssText = 'margin-top:0.75rem;font-size:var(--fs-sm);color:var(--text-muted);';
+    box.appendChild(hint);
+
+    el.onclick = ev => { if (ev.target === el) closeShortcutsOverlay(); };
+    popShortcutsLayer = pushLayer(() => closeShortcutsOverlay());
   }
 
   // ---------- boot ----------

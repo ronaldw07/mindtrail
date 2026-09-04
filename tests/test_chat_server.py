@@ -11,6 +11,7 @@ from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import ConversationStore
 from mindtrail.organize.db import initialize
 from mindtrail.organize.projects import ProjectStore
+from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.web import api
 from mindtrail.web.chat_server import STATIC_DIR
 from mindtrail.web.chat_ui import CHAT_HTML
@@ -80,6 +81,16 @@ def projects(db):
     return ProjectStore(db)
 
 
+@pytest.fixture
+def roadmaps(db):
+    return RoadmapStore(db)
+
+
+@pytest.fixture
+def nodes(db):
+    return RoadmapNodeStore(db)
+
+
 # --- sidebar ----------------------------------------------------------
 
 
@@ -107,6 +118,55 @@ def test_empty_project_still_appears(projects, chats):
     data = api.handle_sidebar(projects, chats)
 
     assert data["projects"][0]["conversations"] == []
+
+
+# --- palette index (F2) -------------------------------------------------
+
+
+def test_palette_index_lists_projects(projects, chats, roadmaps, nodes):
+    projects.create("Career")
+
+    data = api.handle_palette_index(projects, chats, roadmaps, nodes)
+
+    assert [p["name"] for p in data["projects"]] == ["Career"]
+
+
+def test_palette_index_lists_chats_with_their_project_name(projects, chats, roadmaps, nodes):
+    project = projects.create("Career")
+    chats.create("filed chat", project_id=project.id)
+    chats.create("loose chat")
+
+    data = api.handle_palette_index(projects, chats, roadmaps, nodes)
+
+    by_title = {c["title"]: c for c in data["chats"]}
+    assert by_title["filed chat"]["project_name"] == "Career"
+    assert by_title["loose chat"]["project_name"] is None
+
+
+def test_palette_index_lists_roadmap_node_titles_with_project_context(
+    projects, chats, roadmaps, nodes
+):
+    project = projects.create("Career")
+    roadmap = roadmaps.create("Get a job", project_id=project.id)
+    nodes.add(roadmap.id, "Update resume")
+
+    data = api.handle_palette_index(projects, chats, roadmaps, nodes)
+
+    assert len(data["roadmap_nodes"]) == 1
+    node = data["roadmap_nodes"][0]
+    assert node["title"] == "Update resume"
+    assert node["project_id"] == project.id
+    assert node["project_name"] == "Career"
+
+
+def test_palette_index_omits_roadmap_nodes_for_projects_with_no_roadmap(
+    projects, chats, roadmaps, nodes
+):
+    projects.create("No roadmap yet")
+
+    data = api.handle_palette_index(projects, chats, roadmaps, nodes)
+
+    assert data["roadmap_nodes"] == []
 
 
 # --- asking -----------------------------------------------------------
