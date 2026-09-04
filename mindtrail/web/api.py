@@ -110,13 +110,15 @@ def handle_dashboard(
                 for dep_id in n.depends_on
             )
 
-        # Genuinely unblocked steps (every dependency already done) lead;
-        # x position is only a tiebreaker within that, not the primary
-        # signal it used to be. A step still waiting on a dependency
+        # Genuinely unblocked steps (every dependency already done) lead.
+        # Within that, a real due date beats the x-position guess - sorts
+        # soonest first, with undated steps pushed to the end of their
+        # bucket rather than competing on a coordinate that was never
+        # meant to encode urgency. A step still waiting on a dependency
         # sorts after rather than being hidden, so a project with a real
         # plan doesn't look empty just because its next actionable step
         # hasn't been reached yet.
-        accepted.sort(key=lambda n: (not is_unblocked(n), n.x))
+        accepted.sort(key=lambda n: (not is_unblocked(n), n.due_date or "9999-99-99", n.x))
         for n in accepted[:DASHBOARD_ITEMS_PER_PROJECT]:
             next_up.append(
                 {
@@ -125,6 +127,7 @@ def handle_dashboard(
                     "node_id": n.id,
                     "title": n.title,
                     "note": n.note,
+                    "due_date": n.due_date,
                     "unblocked": is_unblocked(n),
                 }
             )
@@ -705,6 +708,7 @@ def _node_json(node) -> dict:
         "x": node.x,
         "y": node.y,
         "depends_on": list(node.depends_on),
+        "due_date": node.due_date,
     }
 
 
@@ -930,6 +934,8 @@ def handle_update_node(nodes: RoadmapNodeStore, node_id: str, body: dict) -> dic
             nodes.move(node_id, float(body["x"]), float(body["y"]))
         if "title" in body:
             nodes.rename(node_id, str(body["title"]), str(body.get("detail", "")))
+        if "due_date" in body:
+            nodes.set_due_date(node_id, str(body["due_date"]))
     except ValueError as exc:
         return {"error": str(exc)}
     updated = nodes.get(node_id)
@@ -947,6 +953,7 @@ def handle_add_node(nodes: RoadmapNodeStore, roadmap_id: str, body: dict) -> dic
         status="accepted",  # a node the user adds by hand is already decided
         x=float(body.get("x", 0)),
         y=float(body.get("y", 0)),
+        due_date=str(body.get("due_date", "")),
     )
     return _node_json(node)
 

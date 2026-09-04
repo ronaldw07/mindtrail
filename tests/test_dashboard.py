@@ -127,6 +127,30 @@ def test_next_up_reports_whether_each_step_is_unblocked(projects, chats, roadmap
     assert data["next_up"][0]["unblocked"] is True
 
 
+def test_next_up_sorts_unblocked_steps_by_soonest_due_date(projects, chats, roadmaps, nodes):
+    project = projects.create("Career")
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    later = nodes.add(roadmap.id, "Later", status="accepted", x=0, due_date="2026-12-01")
+    sooner = nodes.add(roadmap.id, "Sooner", status="accepted", x=99, due_date="2026-09-15")
+
+    data = api.handle_dashboard(projects, chats, roadmaps, nodes)
+
+    titles = [n["title"] for n in data["next_up"]]
+    assert titles == [sooner.title, later.title]
+
+
+def test_next_up_pushes_undated_steps_after_dated_ones(projects, chats, roadmaps, nodes):
+    project = projects.create("Career")
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    dated = nodes.add(roadmap.id, "Dated", status="accepted", x=99, due_date="2026-12-01")
+    undated = nodes.add(roadmap.id, "Undated", status="accepted", x=0)
+
+    data = api.handle_dashboard(projects, chats, roadmaps, nodes)
+
+    titles = [n["title"] for n in data["next_up"]]
+    assert titles == [dated.title, undated.title]
+
+
 def test_next_up_marks_a_step_with_an_unfinished_dependency_as_blocked(
     projects, chats, roadmaps, nodes
 ):
