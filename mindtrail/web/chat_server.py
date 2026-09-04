@@ -317,6 +317,20 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         deps.topic_extractor,
                     )
                 )
+            elif path == "/api/export":
+                body = self._json_body() or {}
+                self._json(
+                    api.handle_export(
+                        deps.store,
+                        deps.chats,
+                        deps.projects,
+                        deps.roadmaps,
+                        deps.roadmap_nodes,
+                        deps.profile,
+                        str(body.get("out", "") or ""),
+                        body.get("project_id") or None,
+                    )
+                )
             else:
                 self._not_found()
 

@@ -16,8 +16,11 @@ from mindtrail.llm import LLMClient, LLMError
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import ConversationStore
 from mindtrail.organize.db import initialize
+from mindtrail.organize.export import export_to_directory
 from mindtrail.organize.migrate import backfill_conversations
+from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import ProjectStore
+from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.predict.next_query import predict_from_store
 from mindtrail.web.chat_server import Deps, run_chat_server
 from mindtrail.web.generate import build_html
@@ -191,6 +194,23 @@ def cmd_web(args) -> int:
     return 0
 
 
+def cmd_export(args) -> int:
+    initialize()
+    count = export_to_directory(
+        MemoryStore(),
+        ConversationStore(),
+        ProjectStore(),
+        RoadmapStore(),
+        RoadmapNodeStore(),
+        ProfileStore(),
+        args.out,
+        args.project,
+    )
+    path = Path(args.out).resolve()
+    print(f"exported {count} file(s) to {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mindtrail",
@@ -232,6 +252,11 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument("--out", default="mindtrail_site.html")
     web.add_argument("--no-open", action="store_true")
     web.set_defaults(func=cmd_web)
+
+    export = sub.add_parser("export", help="export everything to markdown")
+    export.add_argument("--out", required=True)
+    export.add_argument("--project", default=None, help="limit to one project's id")
+    export.set_defaults(func=cmd_export)
 
     chat = sub.add_parser("chat", help="chatbot interface in the browser")
     chat.add_argument("--port", type=int, default=8765)
