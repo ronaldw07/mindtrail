@@ -4,6 +4,7 @@ import pytest
 
 from mindtrail.advice.roadmap_chat import chat_about_roadmap, parse_chat_response
 from mindtrail.llm import Completion
+from mindtrail.memory.store import Entry
 from mindtrail.organize.roadmaps import RoadmapNode
 
 
@@ -165,3 +166,25 @@ def test_current_message_is_included_in_the_prompt():
     chat_about_roadmap(llm, "Goal", [], "", [], "what should I do next")
 
     assert "what should I do next" in llm.last_user_prompt
+
+
+def test_linked_entries_are_included_in_the_prompt():
+    llm = StubLLM(PLAIN_REPLY)
+    node = a_node(node_id="n1", title="Learn Agile")
+    entry = Entry(
+        id="e1", query="What is Agile?", summary="Agile is an iterative approach.",
+        sources=(), created_at="t",
+    )
+
+    chat_about_roadmap(llm, "Goal", [node], "", [], "hi", linked_entries={"n1": [entry]})
+
+    assert "Agile is an iterative approach." in llm.last_user_prompt
+
+
+def test_linked_entries_are_omitted_when_none_given():
+    llm = StubLLM(PLAIN_REPLY)
+    node = a_node(node_id="n1", title="Learn Agile")
+
+    chat_about_roadmap(llm, "Goal", [node], "", [], "hi")
+
+    assert "linked memory" not in llm.last_user_prompt

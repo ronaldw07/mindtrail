@@ -186,6 +186,43 @@ def test_depends_on_can_be_replaced(nodes, roadmap_id):
     assert nodes.get(b.id).depends_on == (a.id,)
 
 
+def test_new_node_has_no_linked_entries_by_default(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X")
+
+    assert node.linked_entries == ()
+
+
+def test_linked_entries_round_trip(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X", linked_entries=["e1", "e2"])
+
+    assert nodes.get(node.id).linked_entries == ("e1", "e2")
+
+
+def test_set_linked_entries_replaces_the_list(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X", linked_entries=["e1"])
+
+    nodes.set_linked_entries(node.id, ["e2", "e3"])
+
+    assert nodes.get(node.id).linked_entries == ("e2", "e3")
+
+
+def test_set_linked_entries_can_clear_it(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X", linked_entries=["e1"])
+
+    nodes.set_linked_entries(node.id, [])
+
+    assert nodes.get(node.id).linked_entries == ()
+
+
+def test_restoring_a_node_preserves_linked_entries(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X", linked_entries=["e1"])
+    nodes.delete(node.id)
+
+    nodes.restore(node)
+
+    assert nodes.get(node.id).linked_entries == ("e1",)
+
+
 def test_deleting_a_node_removes_it(nodes, roadmap_id):
     node = nodes.add(roadmap_id, "X")
 

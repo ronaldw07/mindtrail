@@ -141,6 +141,7 @@ ADDED_COLUMNS = [
     ("projects", "advice_generated_at", "TEXT NOT NULL DEFAULT ''"),
     ("projects", "advice_basis_count", "INTEGER NOT NULL DEFAULT 0"),
     ("roadmap_nodes", "due_date", "TEXT NOT NULL DEFAULT ''"),
+    ("roadmap_nodes", "linked_entries", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

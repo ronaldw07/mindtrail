@@ -1979,6 +1979,22 @@
       updateNode(target, {depends_on: (target.depends_on || []).filter(d => d !== depId)});
     }
 
+    // Not routed through updateNode's optimistic patch-and-render: that
+    // helper assigns the patch straight onto the node and re-renders
+    // immediately, which works for every other field because the wire
+    // shape and the display shape are the same value. linked_entries
+    // is the one field where they differ - the wire payload is a bare
+    // list of entry ids, but the card renders {id, query, ...} objects
+    // so a chip has text to show. Applying the raw-id patch optimistically
+    // would flash ids where chip labels belong, so this waits for the
+    // server's resolved shape instead.
+    async function setLinkedEntries(n, nextIds) {
+      const res = await jsonSend('/api/roadmap-node/' + n.id, {linked_entries: nextIds}, 'PATCH');
+      if (res.error) { toast(res.error, {error: true}); return; }
+      Object.assign(n, res);
+      renderRoadmap(projectId, projectName, roadmap, nodesList);
+    }
+
     // Paints selectedNodeIds/selectedEdge onto whatever elements exist
     // right now - called after every render (see pruneSelection below)
     // and after every selection change that doesn't otherwise re-render.
@@ -2165,6 +2181,36 @@
           run: () => removeDependency(n.id, depId)});
       });
       items.push({divider: true});
+      // F6: closes the loop between recall and planning - a step can point
+      // at the memory entries it's actually built on. /api/search is
+      // semantic, not fuzzy, so this is a real search box, not a filter;
+      // the two-step modal (search, then pick from results) reuses modal()
+      // for both steps rather than inventing a combined search-and-pick
+      // component.
+      items.push({label: 'Link a memory…', run: async () => {
+        const query = await askText('Link a memory', '', 'Search your memory…');
+        if (!query) return;
+        const data = await api('/api/search?q=' + encodeURIComponent(query));
+        const already = new Set((n.linked_entries || []).map(le => le.id));
+        const results = (data.results || []).filter(r => !already.has(r.id));
+        if (!results.length) {
+          toast('No new matches for "' + query + '"', {error: true});
+          return;
+        }
+        const chosen = await modal({
+          title: 'Link a memory', confirmLabel: 'Link',
+          select: results.map(r => ({value: r.id, label: r.query})),
+        });
+        if (!chosen) return;
+        setLinkedEntries(n, Array.from(already).concat([chosen]));
+      }});
+      (n.linked_entries || []).forEach(le => {
+        items.push({label: 'Unlink memory: ' + le.query, run: () => {
+          const nextIds = (n.linked_entries || []).map(x => x.id).filter(id => id !== le.id);
+          setLinkedEntries(n, nextIds);
+        }});
+      });
+      items.push({divider: true});
       items.push({label: 'Delete', danger: true, run: async () => {
         const ok = await askConfirm('Delete step', '"' + n.title + '" will be removed.', 'Delete');
         if (!ok) return;
@@ -2217,6 +2263,25 @@
         due.className = 'node-due' + (overdue ? ' overdue' : '');
         due.textContent = (overdue ? '\u26a0 Overdue: ' : '\u23f1 Due ') + n.due_date;
         el.appendChild(due);
+      }
+      if ((n.linked_entries || []).length) {
+        // Reuses .file-chip (already generic, not scoped to the Files
+        // card) rather than inventing a node-specific chip style.
+        const links = document.createElement('div');
+        links.className = 'node-links';
+        n.linked_entries.forEach(le => {
+          const chip = document.createElement('span');
+          chip.className = 'file-chip';
+          chip.textContent = le.query;
+          chip.title = 'Open this chat';
+          makeClickable(chip, ev => {
+            ev.stopPropagation();
+            showChatView();
+            openConversation(le.conversation_id);
+          });
+          links.appendChild(chip);
+        });
+        el.appendChild(links);
       }
 
       const actions = document.createElement('div');
@@ -2338,7 +2403,7 @@
         // start a drag before there was any right-click menu to
         // conflict with. Space-held defers to canvas panning instead.
         if (ev.button !== 0 || spaceHeld) return;
-        if (ev.target.closest('button, input, label, .node-edge-handle')) return;
+        if (ev.target.closest('button, input, label, .node-edge-handle, .node-links')) return;
         const groupIds = (selectedNodeIds.has(n.id) && selectedNodeIds.size > 1)
           ? Array.from(selectedNodeIds) : [n.id];
         const origins = {};

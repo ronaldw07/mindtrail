@@ -2,6 +2,7 @@
 
 import pytest
 
+from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.db import initialize
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.roadmap_templates import TEMPLATES
@@ -14,6 +15,11 @@ def db(tmp_path):
     path = str(tmp_path / "t.db")
     initialize(path)
     return path
+
+
+@pytest.fixture
+def store(tmp_path):
+    return MemoryStore(path=str(tmp_path / "chroma"), collection="testcol")
 
 
 @pytest.fixture
@@ -118,34 +124,39 @@ TEMPLATE = TEMPLATES[0]
 
 
 def test_applying_to_a_project_with_no_roadmap_creates_one_with_the_goal(
-    roadmaps, nodes, projects, project
+    roadmaps, nodes, store, projects, project
 ):
     data = api.handle_apply_template(
-        roadmaps, nodes, projects, project.id, TEMPLATE_ID, goal="My goal"
+        roadmaps, nodes, store, projects, project.id, TEMPLATE_ID, goal="My goal"
     )
 
     assert data["roadmap"]["goal"] == "My goal"
 
 
 def test_applying_without_a_goal_falls_back_to_the_template_name(
-    roadmaps, nodes, projects, project
+    roadmaps, nodes, store, projects, project
 ):
-    data = api.handle_apply_template(roadmaps, nodes, projects, project.id, TEMPLATE_ID)
+    data = api.handle_apply_template(
+        roadmaps, nodes, store, projects, project.id, TEMPLATE_ID)
 
     assert data["roadmap"]["goal"] == TEMPLATE.name
 
 
-def test_every_created_node_is_proposed(roadmaps, nodes, projects, project):
-    data = api.handle_apply_template(roadmaps, nodes, projects, project.id, TEMPLATE_ID)
+def test_every_created_node_is_proposed(
+    roadmaps, nodes, store, projects, project
+):
+    data = api.handle_apply_template(
+        roadmaps, nodes, store, projects, project.id, TEMPLATE_ID)
 
     assert len(data["nodes"]) == len(TEMPLATE.steps)
     assert all(n["status"] == "proposed" for n in data["nodes"])
 
 
 def test_depends_on_is_resolved_to_real_node_ids_matching_the_template_graph(
-    roadmaps, nodes, projects, project
+    roadmaps, nodes, store, projects, project
 ):
-    data = api.handle_apply_template(roadmaps, nodes, projects, project.id, TEMPLATE_ID)
+    data = api.handle_apply_template(
+        roadmaps, nodes, store, projects, project.id, TEMPLATE_ID)
 
     by_title = {n["title"]: n for n in data["nodes"]}
     for step in TEMPLATE.steps:
@@ -153,20 +164,25 @@ def test_depends_on_is_resolved_to_real_node_ids_matching_the_template_graph(
         assert set(by_title[step.title]["depends_on"]) == expected_ids
 
 
-def test_applying_twice_appends_rather_than_replaces(roadmaps, nodes, projects, project):
-    api.handle_apply_template(roadmaps, nodes, projects, project.id, TEMPLATE_ID)
-    data = api.handle_apply_template(roadmaps, nodes, projects, project.id, TEMPLATE_ID)
+def test_applying_twice_appends_rather_than_replaces(
+    roadmaps, nodes, store, projects, project
+):
+    api.handle_apply_template(
+        roadmaps, nodes, store, projects, project.id, TEMPLATE_ID)
+    data = api.handle_apply_template(
+        roadmaps, nodes, store, projects, project.id, TEMPLATE_ID)
 
     assert len(data["nodes"]) == len(TEMPLATE.steps) * 2
 
 
 def test_applying_to_a_roadmap_with_existing_nodes_leaves_them_untouched(
-    roadmaps, nodes, projects, project
+    roadmaps, nodes, store, projects, project
 ):
     roadmap = roadmaps.create("Existing goal", project_id=project.id)
     pre_existing = nodes.add(roadmap.id, "Hand written step", status="accepted")
 
-    data = api.handle_apply_template(roadmaps, nodes, projects, project.id, TEMPLATE_ID)
+    data = api.handle_apply_template(
+        roadmaps, nodes, store, projects, project.id, TEMPLATE_ID)
 
     survivor = next(n for n in data["nodes"] if n["id"] == pre_existing.id)
     assert survivor["status"] == "accepted"
@@ -176,13 +192,17 @@ def test_applying_to_a_roadmap_with_existing_nodes_leaves_them_untouched(
     assert len(data["nodes"]) == len(TEMPLATE.steps) + 1
 
 
-def test_unknown_project_errors(roadmaps, nodes, projects):
-    data = api.handle_apply_template(roadmaps, nodes, projects, "nope", TEMPLATE_ID)
+def test_unknown_project_errors(roadmaps, nodes, store, projects):
+    data = api.handle_apply_template(
+        roadmaps, nodes, store, projects, "nope", TEMPLATE_ID)
 
     assert "error" in data
 
 
-def test_unknown_template_errors(roadmaps, nodes, projects, project):
-    data = api.handle_apply_template(roadmaps, nodes, projects, project.id, "nope")
+def test_unknown_template_errors(
+    roadmaps, nodes, store, projects, project
+):
+    data = api.handle_apply_template(
+        roadmaps, nodes, store, projects, project.id, "nope")
 
     assert "error" in data
