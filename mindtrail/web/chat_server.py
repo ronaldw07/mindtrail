@@ -114,6 +114,14 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes
                     )
                 )
+            elif path == "/api/search":
+                params = parse_qs(urlparse(self.path).query)
+                self._json(
+                    api.handle_search(
+                        deps.store, deps.chats, deps.projects,
+                        params.get("q", [""])[0],
+                    )
+                )
             elif path.startswith("/api/conversations/"):
                 self._json(
                     api.handle_conversation_entries(

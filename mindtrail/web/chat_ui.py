@@ -30,6 +30,26 @@ CHAT_HTML = """<!doctype html>
                 text-align: left; padding: 0.45rem 0.6rem; border-radius: 6px; border: none;
                 background: transparent; color: #b8b8b8; font-size: 0.85rem; cursor: pointer; }
     .side-btn:hover { background: #212121; color: #fff; }
+
+    /* --- search --- */
+    #search-box { position: relative; padding: 0 0.75rem 0.6rem; }
+    #search-input { width: 100%; background: #1f1f1f; border: 1px solid #2e2e2e;
+                    border-radius: 7px; color: #ececec; padding: 0.4rem 0.6rem;
+                    font-size: 0.83rem; outline: none; }
+    #search-input:focus { border-color: #4f46e5; }
+    #search-input::placeholder { color: #868686; }
+    #search-results { position: absolute; top: calc(100% - 0.3rem); left: 0.75rem;
+                      right: 0.75rem; display: none; background: #212121;
+                      border: 1px solid #333; border-radius: 8px; padding: 0.3rem;
+                      max-height: 60vh; overflow-y: auto; z-index: 50;
+                      box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+    #search-results.open { display: block; }
+    .sr-item { padding: 0.5rem 0.6rem; border-radius: 6px; cursor: pointer; }
+    .sr-item:hover { background: #2a2a2a; }
+    .sr-title { font-size: 0.84rem; color: #ececec; font-weight: 500;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sr-sub { font-size: 0.74rem; color: #868686; margin-top: 0.15rem;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #tree { flex: 1; overflow-y: auto; padding: 0 0.5rem 1.5rem; }
 
     .section { display: flex; align-items: center; gap: 0.35rem;
@@ -353,6 +373,11 @@ CHAT_HTML = """<!doctype html>
   <div id="app">
     <aside id="sidebar">
       <div class="brand" id="brand" title="Today">mindtrail</div>
+      <div id="search-box">
+        <input id="search-input" placeholder="Search your memory&#8230;"
+               aria-label="Search everything stored">
+        <div id="search-results"></div>
+      </div>
       <button class="side-btn" id="open-profile">&#128100; Profile</button>
       <div id="tree"></div>
     </aside>
@@ -2253,6 +2278,84 @@ CHAT_HTML = """<!doctype html>
   }
 
   $('open-profile').onclick = () => openProfileView();
+
+  // ---------- search ----------
+  // Semantic search over everything stored - the app's core retrieval,
+  // otherwise only reachable indirectly through a follow-up question.
+
+  (() => {
+    const input = $('search-input');
+    const results = $('search-results');
+    let debounceTimer = null;
+    let latestQuery = '';
+
+    function closeResults() {
+      results.classList.remove('open');
+      results.innerHTML = '';
+    }
+
+    function renderResults(items, query) {
+      results.innerHTML = '';
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'muted';
+        empty.style.padding = '0.5rem 0.6rem';
+        empty.textContent = 'No matches for "' + query + '".';
+        results.appendChild(empty);
+        results.classList.add('open');
+        return;
+      }
+      items.forEach(r => {
+        const item = document.createElement('div');
+        item.className = 'sr-item';
+        const title = document.createElement('div');
+        title.className = 'sr-title';
+        title.textContent = r.query;
+        item.appendChild(title);
+        const subParts = [];
+        if (r.project_name) subParts.push(r.project_name);
+        else if (r.conversation_title) subParts.push(r.conversation_title);
+        subParts.push(r.kind);
+        subParts.push(relTime(r.created_at));
+        const sub = document.createElement('div');
+        sub.className = 'sr-sub';
+        sub.textContent = subParts.join(' \\u00b7 ');
+        item.appendChild(sub);
+        item.onclick = () => {
+          closeResults();
+          input.value = '';
+          if (r.conversation_id) {
+            showChatView();
+            openConversation(r.conversation_id);
+          }
+        };
+        results.appendChild(item);
+      });
+      results.classList.add('open');
+    }
+
+    input.addEventListener('input', () => {
+      const query = input.value.trim();
+      clearTimeout(debounceTimer);
+      if (!query) { closeResults(); return; }
+      debounceTimer = setTimeout(async () => {
+        latestQuery = query;
+        const data = await api('/api/search?q=' + encodeURIComponent(query));
+        // A slower earlier request resolving after a newer one must not
+        // clobber what's already on screen.
+        if (query !== latestQuery) return;
+        renderResults(data.results || [], query);
+      }, 250);
+    });
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { input.blur(); closeResults(); }
+    });
+
+    document.addEventListener('click', e => {
+      if (!e.target.closest('#search-box')) closeResults();
+    });
+  })();
 
   // ---------- dashboard ----------
 
