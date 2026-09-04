@@ -986,6 +986,71 @@ def handle_apply_template(
     return handle_get_roadmap(roadmaps, nodes, project_id)
 
 
+def _creates_cycle(node_id: str, depends_on: list[str], all_nodes: list) -> bool:
+    """True if setting `node_id`'s depends_on to `depends_on` would let a
+    dependency chain lead back to `node_id`.
+
+    Deliberately separate from `_grid_positions`'s cycle handling: that one
+    is cycle *tolerance* fused to column assignment (it stops recursion so
+    layout doesn't hang, but never reports whether a cycle exists). This is
+    a plain reachability check with no other job.
+    """
+    adjacency = {n.id: list(n.depends_on) for n in all_nodes}
+    adjacency[node_id] = list(depends_on)
+
+    stack: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(current: str) -> bool:
+        if current in stack:
+            return True
+        if current in visited:
+            return False
+        visited.add(current)
+        stack.add(current)
+        for dep in adjacency.get(current, []):
+            if visit(dep):
+                return True
+        stack.discard(current)
+        return False
+
+    return visit(node_id)
+
+
+def _validate_depends_on(nodes: RoadmapNodeStore, node_id: str, depends_on) -> list[str]:
+    """The only place `depends_on` is checked before it reaches the
+    database - `RoadmapNodeStore.set_depends_on` itself is a bare
+    ",".join(...) with no validation at all, so this is the whole guard.
+
+    Rejects a non-list (the wire format is pinned to a list of ids, not a
+    comma-joined string), self-links, duplicates, ids that don't belong to
+    a node in the same roadmap (which also covers unknown ids and
+    cross-roadmap ids in one check), and anything that would create a
+    dependency cycle.
+    """
+    if not isinstance(depends_on, list) or not all(isinstance(d, str) for d in depends_on):
+        raise ValueError("depends_on must be a list of node ids")
+    if node_id in depends_on:
+        raise ValueError("a node cannot depend on itself")
+    if len(set(depends_on)) != len(depends_on):
+        raise ValueError("depends_on contains duplicate ids")
+
+    target = nodes.get(node_id)
+    if target is None:
+        raise ValueError("no such node")
+
+    all_nodes = nodes.for_roadmap(target.roadmap_id)
+    by_id = {n.id: n for n in all_nodes}
+    unknown = [d for d in depends_on if d not in by_id]
+    if unknown:
+        raise ValueError(f"unknown or cross-roadmap node id: {unknown[0]}")
+
+    if _creates_cycle(node_id, depends_on, all_nodes):
+        raise ValueError("that would create a dependency cycle")
+
+    return depends_on
+
+
 def handle_update_node(nodes: RoadmapNodeStore, node_id: str, body: dict) -> dict:
     try:
         if "status" in body:
@@ -998,6 +1063,8 @@ def handle_update_node(nodes: RoadmapNodeStore, node_id: str, body: dict) -> dic
             nodes.rename(node_id, str(body["title"]), str(body.get("detail", "")))
         if "due_date" in body:
             nodes.set_due_date(node_id, str(body["due_date"]))
+        if "depends_on" in body:
+            nodes.set_depends_on(node_id, _validate_depends_on(nodes, node_id, body["depends_on"]))
     except ValueError as exc:
         return {"error": str(exc)}
     updated = nodes.get(node_id)

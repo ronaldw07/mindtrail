@@ -393,6 +393,94 @@ def test_updating_a_missing_node_errors(nodes):
     assert "error" in api.handle_update_node(nodes, "nope", {"status": "accepted"})
 
 
+# --- depends_on validation --------------------------------------------
+
+
+def test_setting_depends_on_persists_a_list_of_ids(nodes, roadmaps, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    a = nodes.add(roadmap.id, "A")
+    b = nodes.add(roadmap.id, "B")
+
+    result = api.handle_update_node(nodes, b.id, {"depends_on": [a.id]})
+
+    assert result["depends_on"] == [a.id]
+
+
+def test_depends_on_as_a_string_is_rejected(nodes, roadmaps, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    a = nodes.add(roadmap.id, "A")
+    b = nodes.add(roadmap.id, "B")
+
+    result = api.handle_update_node(nodes, b.id, {"depends_on": a.id})
+
+    assert "error" in result
+    assert nodes.get(b.id).depends_on == ()
+
+
+def test_depends_on_self_link_is_rejected(nodes, roadmaps, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    a = nodes.add(roadmap.id, "A")
+
+    result = api.handle_update_node(nodes, a.id, {"depends_on": [a.id]})
+
+    assert "error" in result
+
+
+def test_depends_on_duplicates_are_rejected(nodes, roadmaps, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    a = nodes.add(roadmap.id, "A")
+    b = nodes.add(roadmap.id, "B")
+
+    result = api.handle_update_node(nodes, b.id, {"depends_on": [a.id, a.id]})
+
+    assert "error" in result
+
+
+def test_depends_on_unknown_id_is_rejected(nodes, roadmaps, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    b = nodes.add(roadmap.id, "B")
+
+    result = api.handle_update_node(nodes, b.id, {"depends_on": ["nope"]})
+
+    assert "error" in result
+
+
+def test_depends_on_cross_roadmap_id_is_rejected(nodes, roadmaps, project):
+    roadmap1 = roadmaps.create("Goal 1", project_id=project.id)
+    roadmap2 = roadmaps.create("Goal 2", project_id=project.id)
+    other = nodes.add(roadmap2.id, "Other")
+    b = nodes.add(roadmap1.id, "B")
+
+    result = api.handle_update_node(nodes, b.id, {"depends_on": [other.id]})
+
+    assert "error" in result
+
+
+def test_depends_on_direct_cycle_is_rejected(nodes, roadmaps, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    a = nodes.add(roadmap.id, "A")
+    b = nodes.add(roadmap.id, "B")
+    nodes.set_depends_on(a.id, [b.id])
+
+    result = api.handle_update_node(nodes, b.id, {"depends_on": [a.id]})
+
+    assert "error" in result
+    assert nodes.get(b.id).depends_on == ()
+
+
+def test_depends_on_indirect_cycle_is_rejected(nodes, roadmaps, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    a = nodes.add(roadmap.id, "A")
+    b = nodes.add(roadmap.id, "B")
+    c = nodes.add(roadmap.id, "C")
+    nodes.set_depends_on(a.id, [b.id])
+    nodes.set_depends_on(b.id, [c.id])
+
+    result = api.handle_update_node(nodes, c.id, {"depends_on": [a.id]})
+
+    assert "error" in result
+
+
 def test_invalid_status_update_errors(nodes, roadmaps, project):
     roadmap = roadmaps.create("Goal", project_id=project.id)
     node = nodes.add(roadmap.id, "X")
