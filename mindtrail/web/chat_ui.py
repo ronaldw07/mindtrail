@@ -453,9 +453,9 @@ CHAT_HTML = """<!doctype html>
     .icon-btn:hover { background: var(--surface-hover); color: var(--text-bright); }
     .icon-btn.recording { color: var(--danger); background: #3a2020; } /* one-off: recording mic bg */
     button.send { padding: 0.55rem 1.1rem; border-radius: 20px; border: none;
-                  background: var(--accent); color: white; font-size: var(--fs-sm); cursor: pointer; }
+                  background: var(--accent); color: white; font-size: var(--fs-md); cursor: pointer; }
     button.send:disabled { opacity: 0.4; cursor: default; }
-    #status { max-width: 760px; margin: 0.4rem auto 0; font-size: var(--fs-xs); color: var(--text-muted);
+    #status { max-width: 760px; margin: 0.4rem auto 0; font-size: var(--fs-sm); color: var(--text-muted);
               min-height: 1rem; }
   </style>
 </head>
