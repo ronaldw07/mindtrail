@@ -36,6 +36,8 @@ class RoadmapNode:
     y: float
     depends_on: tuple[str, ...]
     created_at: str
+    due_date: str = ""
+    """ISO date (YYYY-MM-DD), or empty for no due date."""
 
 
 def _to_roadmap(row) -> Roadmap:
@@ -60,6 +62,7 @@ def _to_node(row) -> RoadmapNode:
         y=row["y"],
         depends_on=tuple(d for d in raw.split(",") if d),
         created_at=row["created_at"],
+        due_date=row["due_date"] if "due_date" in row.keys() else "",
     )
 
 
@@ -121,6 +124,7 @@ class RoadmapNodeStore:
         x: float = 0,
         y: float = 0,
         depends_on: list[str] | None = None,
+        due_date: str = "",
     ) -> RoadmapNode:
         if status not in STATUSES:
             raise ValueError(f"invalid status: {status}")
@@ -128,16 +132,17 @@ class RoadmapNodeStore:
             id=str(uuid.uuid4()), roadmap_id=roadmap_id, title=title.strip(),
             detail=detail.strip(), status=status, note="", x=x, y=y,
             depends_on=tuple(depends_on or []), created_at=now_iso(),
+            due_date=due_date.strip(),
         )
         with connect(self._path) as conn:
             conn.execute(
                 "INSERT INTO roadmap_nodes "
                 "(id, roadmap_id, title, detail, status, note, x, y, "
-                "depends_on, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "depends_on, created_at, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     node.id, node.roadmap_id, node.title, node.detail,
                     node.status, node.note, node.x, node.y,
-                    ",".join(node.depends_on), node.created_at,
+                    ",".join(node.depends_on), node.created_at, node.due_date,
                 ),
             )
         return node
@@ -158,6 +163,9 @@ class RoadmapNodeStore:
 
     def set_note(self, node_id: str, note: str) -> None:
         self._update(node_id, "note", note)
+
+    def set_due_date(self, node_id: str, due_date: str) -> None:
+        self._update(node_id, "due_date", due_date.strip())
 
     def move(self, node_id: str, x: float, y: float) -> None:
         with connect(self._path) as conn:

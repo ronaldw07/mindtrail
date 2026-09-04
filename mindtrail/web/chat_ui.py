@@ -324,6 +324,8 @@ CHAT_HTML = """<!doctype html>
     .node-detail { color: #a5a5a5; font-size: 0.78rem; line-height: 1.4; margin-bottom: 0.4rem; }
     .node-note { font-size: 0.76rem; color: #cdd8ff; background: #1e2340; border-radius: 6px;
                  padding: 0.3rem 0.5rem; margin-bottom: 0.4rem; }
+    .node-due { font-size: 0.74rem; color: #868686; margin-bottom: 0.4rem; }
+    .node-due.overdue { color: #f87171; }
     .node-actions { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
     .node-actions button { font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 5px;
                             border: 1px solid #3a3a3a; background: #2a2a2a; color: #ccc;
@@ -516,6 +518,7 @@ CHAT_HTML = """<!doctype html>
       if (opts.input) {
         field = document.createElement(opts.multiline ? 'textarea' : 'input');
         if (opts.multiline) field.className = 'modal-textarea';
+        else field.type = opts.inputType || 'text';
         field.value = opts.value || '';
         field.placeholder = opts.placeholder || '';
         box.appendChild(field);
@@ -1995,6 +1998,17 @@ CHAT_HTML = """<!doctype html>
         if (note === null) return;
         updateNode(n, {note});
       }});
+      items.push({label: n.due_date ? 'Change due date' : 'Set due date', run: async () => {
+        const dueDate = await modal({
+          title: 'Due date', input: true, inputType: 'date', value: n.due_date || '',
+          confirmLabel: 'Save',
+        });
+        if (dueDate === null) return;
+        updateNode(n, {due_date: dueDate});
+      }});
+      if (n.due_date) {
+        items.push({label: 'Clear due date', run: () => updateNode(n, {due_date: ''})});
+      }
       items.push({divider: true});
       items.push({label: 'Delete', danger: true, run: async () => {
         const ok = await askConfirm('Delete step', '"' + n.title + '" will be removed.', 'Delete');
@@ -2034,6 +2048,13 @@ CHAT_HTML = """<!doctype html>
         note.className = 'node-note';
         note.textContent = n.note;
         el.appendChild(note);
+      }
+      if (n.due_date) {
+        const due = document.createElement('div');
+        const overdue = n.status !== 'done' && n.due_date < new Date().toISOString().slice(0, 10);
+        due.className = 'node-due' + (overdue ? ' overdue' : '');
+        due.textContent = (overdue ? '\\u26a0 Overdue: ' : '\\u23f1 Due ') + n.due_date;
+        el.appendChild(due);
       }
 
       const actions = document.createElement('div');
@@ -2523,7 +2544,8 @@ CHAT_HTML = """<!doctype html>
       nextCard.appendChild(p);
     }
     data.next_up.forEach(n => {
-      let sub = n.project_name + (n.note ? ' \\u2014 ' + n.note : '');
+      let sub = n.project_name + (n.due_date ? ' \\u00b7 due ' + n.due_date : '') +
+                (n.note ? ' \\u2014 ' + n.note : '');
       if (!n.unblocked) sub += ' \\u00b7 waiting on a dependency';
       const item = dashItem(n.title, sub, () => openRoadmapView(n.project_id, n.project_name));
       if (!n.unblocked) item.style.opacity = '0.7';

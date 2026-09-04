@@ -113,6 +113,36 @@ def test_set_note_is_independent_of_status(nodes, roadmap_id):
     assert updated.status == "rejected"
 
 
+def test_new_node_has_no_due_date_by_default(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X")
+
+    assert node.due_date == ""
+
+
+def test_a_node_can_be_created_with_a_due_date(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X", due_date="2026-09-30")
+
+    assert node.due_date == "2026-09-30"
+
+
+def test_set_due_date_is_independent_of_other_fields(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X", status="accepted")
+
+    nodes.set_due_date(node.id, "2026-10-15")
+
+    updated = nodes.get(node.id)
+    assert updated.due_date == "2026-10-15"
+    assert updated.status == "accepted"
+
+
+def test_set_due_date_can_clear_it(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X", due_date="2026-09-30")
+
+    nodes.set_due_date(node.id, "")
+
+    assert nodes.get(node.id).due_date == ""
+
+
 def test_move_updates_position(nodes, roadmap_id):
     node = nodes.add(roadmap_id, "X", x=0, y=0)
 

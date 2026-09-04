@@ -372,6 +372,23 @@ def test_updating_node_note(nodes, roadmaps, project):
     assert result["note"] == "my thought"
 
 
+def test_updating_node_due_date(nodes, roadmaps, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    node = nodes.add(roadmap.id, "X")
+
+    result = api.handle_update_node(nodes, node.id, {"due_date": "2026-09-30"})
+
+    assert result["due_date"] == "2026-09-30"
+
+
+def test_adding_a_node_with_a_due_date(nodes, roadmaps, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+
+    result = api.handle_add_node(nodes, roadmap.id, {"title": "X", "due_date": "2026-10-01"})
+
+    assert result["due_date"] == "2026-10-01"
+
+
 def test_updating_a_missing_node_errors(nodes):
     assert "error" in api.handle_update_node(nodes, "nope", {"status": "accepted"})
 
