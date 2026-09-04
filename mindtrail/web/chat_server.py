@@ -437,6 +437,12 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                         deps.roadmap_nodes, self._tail("/api/roadmap-node/"), body
                     )
                 )
+            elif path.startswith("/api/entry/"):
+                self._json(
+                    api.handle_update_entry(
+                        deps.store, self._tail("/api/entry/"), body
+                    )
+                )
             else:
                 self._not_found()
 
@@ -465,6 +471,10 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
             elif path.startswith("/api/projects/"):
                 self._json(
                     api.handle_delete_project(deps.projects, self._tail("/api/projects/"))
+                )
+            elif path.startswith("/api/entry/"):
+                self._json(
+                    api.handle_delete_entry(deps.store, self._tail("/api/entry/"))
                 )
             else:
                 self._not_found()

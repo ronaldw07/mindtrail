@@ -404,6 +404,35 @@
   const askConfirm = (title, message, confirmLabel) =>
     modal({title, message, confirmLabel, danger: true});
 
+  // ---------- memory entry edit/delete (shared by the chat view and search) ----------
+  // A single bad or wrong research entry used to be permanent - the only
+  // removal path was deleting the whole conversation. Both actions go
+  // through /api/entry/<id>; the server re-embeds on edit (see
+  // MemoryStore.update_entry) so recall never keeps matching stale text
+  // while the UI shows something new.
+
+  async function editEntry(entryId, currentSummary) {
+    const text = await modal({
+      title: 'Edit entry', value: currentSummary, multiline: true,
+      input: true, confirmLabel: 'Save',
+    });
+    if (text === null) return null;
+    const res = await jsonSend('/api/entry/' + entryId, {summary: text}, 'PATCH');
+    if (res.error) { toast(res.error, {error: true}); return null; }
+    return res;
+  }
+
+  async function deleteEntry(entryId) {
+    const ok = await askConfirm('Delete entry',
+      'This memory entry will be removed and will no longer come up in recall. '
+      + 'This cannot be undone.', 'Delete');
+    if (!ok) return false;
+    const res = await api('/api/entry/' + entryId, {method: 'DELETE'});
+    if (res.error) { toast(res.error, {error: true}); return false; }
+    toast('Entry deleted');
+    return true;
+  }
+
   // ---------- sidebar ----------
 
   async function loadSidebar() {
@@ -880,6 +909,24 @@
       userLine(t, e.query);
       assistantText(t, e.summary, e.kind, {plain: e.kind === 'document' || e.kind === 'note'});
       metaBlock(t, e.recalled, e.sources);
+
+      const actions = document.createElement('div');
+      const editBtn = document.createElement('button');
+      editBtn.className = 'card-btn';
+      editBtn.textContent = 'Edit';
+      editBtn.onclick = async () => {
+        const updated = await editEntry(e.id, e.summary);
+        if (updated) await openConversation(id);
+      };
+      actions.appendChild(editBtn);
+      const delBtn = document.createElement('button');
+      delBtn.className = 'card-btn';
+      delBtn.textContent = 'Delete';
+      delBtn.onclick = async () => {
+        if (await deleteEntry(e.id)) await openConversation(id);
+      };
+      actions.appendChild(delBtn);
+      t.appendChild(actions);
     });
     setBreadcrumb();
     recordVisit(id);
@@ -2683,6 +2730,27 @@
         sub.className = 'sr-sub';
         sub.textContent = subParts.join(' \u00b7 ');
         item.appendChild(sub);
+
+        const actions = document.createElement('div');
+        const editBtn = document.createElement('button');
+        editBtn.className = 'card-btn';
+        editBtn.textContent = 'Edit';
+        editBtn.onclick = async ev => {
+          ev.stopPropagation();
+          const updated = await editEntry(r.id, r.summary);
+          if (updated) { r.summary = updated.summary; title.textContent = updated.query; }
+        };
+        actions.appendChild(editBtn);
+        const delBtn = document.createElement('button');
+        delBtn.className = 'card-btn';
+        delBtn.textContent = 'Delete';
+        delBtn.onclick = async ev => {
+          ev.stopPropagation();
+          if (await deleteEntry(r.id)) item.remove();
+        };
+        actions.appendChild(delBtn);
+        item.appendChild(actions);
+
         makeClickable(item, () => {
           closeResults();
           input.value = '';

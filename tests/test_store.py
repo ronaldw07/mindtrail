@@ -3,6 +3,7 @@
 import pytest
 
 from mindtrail.memory.store import CHUNK_CHARS, MemoryStore, _chunk_text
+from mindtrail.web import api
 
 
 @pytest.fixture
@@ -383,3 +384,129 @@ def test_reindex_is_idempotent(store):
 
     assert first == 1
     assert second == 0
+
+
+# --- single-entry delete and edit (G3) ------------------------------------
+
+
+def test_deleting_a_single_entry_leaves_its_siblings_intact(store):
+    doomed = store.add("bad research", "wrong answer", [])
+    survivor = store.add("good research", "right answer", [])
+
+    removed = store.delete_entry(doomed.id)
+
+    assert removed is True
+    assert [e.id for e in store.all()] == [survivor.id]
+
+
+def test_deleting_a_missing_entry_returns_false(store):
+    assert store.delete_entry("nope") is False
+
+
+def test_deleting_a_long_entry_removes_every_chunk(store):
+    long_summary = "Filler content repeated many times. " * 60
+    entry = store.add("long entry", long_summary, [])
+
+    assert store.delete_entry(entry.id) is True
+
+    raw = store._collection.get()
+    assert entry.id not in raw["ids"]
+    assert not any(rid.startswith(entry.id + "::chunk") for rid in raw["ids"])
+
+
+def test_editing_a_missing_entry_returns_none(store):
+    assert store.update_entry("nope", summary="new text") is None
+
+
+def test_editing_to_empty_text_is_rejected(store):
+    entry = store.add("q", "a", [])
+
+    with pytest.raises(ValueError):
+        store.update_entry(entry.id, summary="   ")
+
+
+def test_edit_preserves_the_id_and_untouched_fields(store):
+    entry = store.add("q", "original", ["http://a.com"], topic="Docker", kind="note")
+
+    updated = store.update_entry(entry.id, summary="revised")
+
+    assert updated.id == entry.id
+    assert updated.query == "q"
+    assert updated.topic == "Docker"
+    assert updated.kind == "note"
+    assert updated.sources == ("http://a.com",)
+    assert updated.summary == "revised"
+
+
+def test_edit_re_embeds_and_is_findable_by_the_new_text(store):
+    # The whole trap this task is about: a plain metadata swap would
+    # leave the old vector in place, so search for the new wording would
+    # still fail even though the UI shows it. This edits an entry to
+    # something semantically far from the original, then proves the new
+    # text - not the old - is what recall now matches.
+    entry = store.add(
+        "what is a vector database",
+        "A vector database stores embeddings for similarity search.",
+        [],
+    )
+    store.add("unrelated filler", "This entry is about baking sourdough bread.", [])
+
+    store.update_entry(
+        entry.id,
+        query="how do I roast coffee beans",
+        summary="Light roast coffee beans at a lower temperature for a shorter time.",
+    )
+
+    found = store.search("roasting coffee beans at home", k=1)
+    assert found[0].id == entry.id
+    assert found[0].summary == (
+        "Light roast coffee beans at a lower temperature for a shorter time."
+    )
+
+
+def test_edit_removes_the_old_document_text_from_the_index(store):
+    entry = store.add("original question", "original answer text", [])
+
+    store.update_entry(entry.id, query="different question", summary="different answer text")
+
+    raw = store._collection.get()
+    assert "original answer text" not in raw["documents"]
+
+
+# --- single-entry delete and edit through the API (G3) --------------------
+
+
+def test_handle_delete_entry_removes_it(store):
+    entry = store.add("q", "a", [])
+
+    result = api.handle_delete_entry(store, entry.id)
+
+    assert result == {"ok": True}
+    assert store.get(entry.id) is None
+
+
+def test_handle_delete_entry_on_a_missing_id_returns_an_error(store):
+    assert api.handle_delete_entry(store, "nope") == {"error": "no such entry"}
+
+
+def test_handle_update_entry_applies_only_the_summary(store):
+    entry = store.add("q", "old summary", [])
+
+    result = api.handle_update_entry(store, entry.id, {"summary": "new summary"})
+
+    assert result["summary"] == "new summary"
+    assert result["query"] == "q"
+
+
+def test_handle_update_entry_on_a_missing_id_returns_the_documented_error(store):
+    assert api.handle_update_entry(store, "nope", {"summary": "x"}) == {
+        "error": "no such entry"
+    }
+
+
+def test_handle_update_entry_rejects_blank_text(store):
+    entry = store.add("q", "a", [])
+
+    result = api.handle_update_entry(store, entry.id, {"summary": "   "})
+
+    assert "error" in result

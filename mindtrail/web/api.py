@@ -364,6 +364,7 @@ def handle_conversation_entries(
         "conversation": _conversation_json(conversation),
         "entries": [
             {
+                "id": e.id,
                 "query": e.query,
                 "summary": e.summary,
                 "created_at": e.created_at,
@@ -483,6 +484,46 @@ def handle_undo_delete(
         )
 
     return {"ok": True, "conversation_id": restored.id, "entries": len(held.entries)}
+
+
+def _entry_json(entry) -> dict:
+    return {
+        "id": entry.id,
+        "query": entry.query,
+        "summary": entry.summary,
+        "kind": entry.kind,
+        "topic": entry.topic,
+        "created_at": entry.created_at,
+        "conversation_id": entry.conversation_id,
+    }
+
+
+def handle_update_entry(store: MemoryStore, entry_id: str, body: dict) -> dict:
+    """Edit a single entry's text. Applies whichever of query/summary is
+    present, same shape as handle_update_conversation, so the client can
+    send just the field that changed.
+
+    Goes through MemoryStore.update_entry, which re-embeds - this is the
+    fix for G3's whole trap: a plain text swap without re-embedding
+    would leave recall silently matching the old wording.
+    """
+    try:
+        updated = store.update_entry(
+            entry_id,
+            summary=str(body["summary"]) if "summary" in body else None,
+            query=str(body["query"]) if "query" in body else None,
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"error": "no such entry"} if updated is None else _entry_json(updated)
+
+
+def handle_delete_entry(store: MemoryStore, entry_id: str) -> dict:
+    """Delete a single entry. Unlike handle_delete_conversation this has
+    no undo - a bad entry should just be gone, and there is no
+    conversation-shaped container left to hold a copy in."""
+    removed = store.delete_entry(entry_id)
+    return {"ok": True} if removed else {"error": "no such entry"}
 
 
 def handle_ask(
