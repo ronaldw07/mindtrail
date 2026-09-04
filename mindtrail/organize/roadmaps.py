@@ -147,6 +147,27 @@ class RoadmapNodeStore:
             )
         return node
 
+    def restore(self, node: RoadmapNode) -> RoadmapNode:
+        """Re-insert a node exactly as it was, id included.
+
+        `delete` leaves other nodes' `depends_on` pointing at this id
+        rather than rewriting them (see `delete` below), so a restore
+        under a fresh id would leave those edges dangling forever - the
+        id has to come back, not just the content.
+        """
+        with connect(self._path) as conn:
+            conn.execute(
+                "INSERT INTO roadmap_nodes "
+                "(id, roadmap_id, title, detail, status, note, x, y, "
+                "depends_on, created_at, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    node.id, node.roadmap_id, node.title, node.detail,
+                    node.status, node.note, node.x, node.y,
+                    ",".join(node.depends_on), node.created_at, node.due_date,
+                ),
+            )
+        return node
+
     def _update(self, node_id: str, column: str, value) -> None:
         with connect(self._path) as conn:
             cursor = conn.execute(

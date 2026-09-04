@@ -23,7 +23,7 @@ from mindtrail.organize.conversations import ConversationStore
 from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
-from mindtrail.organize.trash import Trash
+from mindtrail.organize.trash import NodeTrash, Trash
 from mindtrail.web import api
 from mindtrail.web.chat_ui import CHAT_HTML
 
@@ -68,6 +68,7 @@ class Deps:
         self.llm = llm
         self.topic_extractor = topic_extractor
         self.trash = Trash()
+        self.node_trash = NodeTrash()
         self.profile = profile or ProfileStore()
         self.roadmaps = roadmaps or RoadmapStore()
         self.roadmap_nodes = roadmap_nodes or RoadmapNodeStore()
@@ -293,6 +294,14 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         self._tail("/api/undo-delete/"),
                     )
                 )
+            elif path.startswith("/api/undo-delete-node/"):
+                self._json(
+                    api.handle_undo_delete_node(
+                        deps.roadmap_nodes,
+                        deps.node_trash,
+                        self._tail("/api/undo-delete-node/"),
+                    )
+                )
             elif path == "/api/note":
                 body = self._json_body() or {}
                 self._json(
@@ -376,7 +385,9 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
             elif path.startswith("/api/roadmap-node/"):
                 self._json(
                     api.handle_delete_node(
-                        deps.roadmap_nodes, self._tail("/api/roadmap-node/")
+                        deps.roadmap_nodes,
+                        self._tail("/api/roadmap-node/"),
+                        deps.node_trash,
                     )
                 )
             elif path.startswith("/api/projects/"):
