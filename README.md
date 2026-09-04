@@ -312,6 +312,19 @@ mindtrail web
 needs no API key and costs nothing. This also avoids pulling in torch, which
 would have added roughly 4GB for a job an 80MB model does.
 
+**Entries are chunked before embedding.** That MiniLM truncates at 256
+word-piece tokens with no warning — anything past roughly 800 characters was
+silently invisible to search. Measured against this project's own stored
+entries, 13 of 19 exceeded it; long research summaries and uploaded PDFs
+were the worst hit. `store.add` now splits long text into ~800-char chunks
+on sentence boundaries, embeds each separately, and `store.search` collapses
+multiple chunk hits back to one result per entry. A one-time
+`reindex_legacy_entries()` runs at `chat` startup so entries written before
+this existed get migrated in place, keeping their original id. This did not
+move the reported recall@1/@3 below — the eval fixture's summaries max out
+around 365 characters and never approached the truncation point, so it
+exercises a different failure mode than the one this fixes.
+
 **Search sits behind a protocol.** DuckDuckGo is scraped rather than served
 by an official API, and it rate-limits without warning. `FallbackSearch`
 takes an ordered list of providers so a second one can be added without the
@@ -409,7 +422,7 @@ whenever you want it current.
 
 ## Tests
 
-398 tests, no network and no API key required — search, fetch, and the model
+412 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.
