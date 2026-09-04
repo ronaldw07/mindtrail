@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from mindtrail.ingest.researcher import Researcher
@@ -27,6 +28,18 @@ from mindtrail.web import api
 from mindtrail.web.chat_ui import CHAT_HTML
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+
+# Resolved from this file's location, not the working directory: the server
+# is launched via `python -m mindtrail.cli chat` from wherever the user
+# happens to be, and from /app inside Docker.
+STATIC_DIR = Path(__file__).parent / "static"
+
+# Explicit filename -> content type map, not a directory join, so a request
+# can never escape STATIC_DIR by walking a path in the URL.
+STATIC_FILES = {
+    "/static/app.css": ("app.css", "text/css; charset=utf-8"),
+    "/static/app.js": ("app.js", "application/javascript; charset=utf-8"),
+}
 
 
 class Deps:
@@ -95,6 +108,17 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
             self.send_response(404)
             self.end_headers()
 
+        def _static(self, filename: str, content_type: str) -> None:
+            # no-store: later phases get debugged against these files, and a
+            # cached stale app.js would waste hours chasing a ghost.
+            body = (STATIC_DIR / filename).read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
         # --- routes ---
 
         def do_GET(self):
@@ -106,6 +130,9 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+            elif path in STATIC_FILES:
+                filename, content_type = STATIC_FILES[path]
+                self._static(filename, content_type)
             elif path == "/api/sidebar":
                 self._json(api.handle_sidebar(deps.projects, deps.chats))
             elif path == "/api/dashboard":

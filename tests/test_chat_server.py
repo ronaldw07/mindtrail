@@ -12,7 +12,17 @@ from mindtrail.organize.conversations import ConversationStore
 from mindtrail.organize.db import initialize
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.web import api
+from mindtrail.web.chat_server import STATIC_DIR
 from mindtrail.web.chat_ui import CHAT_HTML
+
+# CSS and JS now live in real files, not inline in CHAT_HTML. The ui tests
+# below check substrings of what the browser actually receives, so glue the
+# shell back together with the assets it links to.
+FULL_PAGE = (
+    CHAT_HTML
+    + (STATIC_DIR / "app.css").read_text(encoding="utf-8")
+    + (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+)
 
 
 class StubResearcher:
@@ -695,7 +705,7 @@ def test_chat_html_references_every_endpoint_it_uses():
         "/api/upload",
         "/api/transcribe",
     ]:
-        assert endpoint in CHAT_HTML
+        assert endpoint in FULL_PAGE
 
 
 def test_no_native_dialogs_are_used():
@@ -703,16 +713,16 @@ def test_no_native_dialogs_are_used():
     # of the page, which breaks the dark UI. Everything goes through the
     # in-page modal instead.
     for call in ["prompt(", "confirm(", "alert("]:
-        assert call not in CHAT_HTML, f"native {call} would render an unstyled dialog"
+        assert call not in FULL_PAGE, f"native {call} would render an unstyled dialog"
 
 
 def test_the_in_page_modal_exists():
-    assert 'id="overlay"' in CHAT_HTML
-    assert ".modal {" in CHAT_HTML, "the modal needs styling to replace native dialogs"
-    assert "function modal(" in CHAT_HTML
+    assert 'id="overlay"' in FULL_PAGE
+    assert ".modal {" in FULL_PAGE, "the modal needs styling to replace native dialogs"
+    assert "function modal(" in FULL_PAGE
 
 
 def test_sidebar_can_be_collapsed_and_navigated():
     for element in ["toggle-sidebar", "nav-back", "nav-fwd"]:
-        assert element in CHAT_HTML
-    assert "#sidebar.collapsed" in CHAT_HTML
+        assert element in FULL_PAGE
+    assert "#sidebar.collapsed" in FULL_PAGE
