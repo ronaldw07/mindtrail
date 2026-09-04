@@ -194,6 +194,12 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                 self._static(filename, content_type)
             elif path == "/api/sidebar":
                 self._json(api.handle_sidebar(deps.projects, deps.chats))
+            elif path == "/api/palette-index":
+                self._json(
+                    api.handle_palette_index(
+                        deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes
+                    )
+                )
             elif path == "/api/dashboard":
                 self._json(
                     api.handle_dashboard(

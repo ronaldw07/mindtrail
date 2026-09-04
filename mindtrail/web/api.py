@@ -65,6 +65,54 @@ def handle_sidebar(projects: ProjectStore, chats: ConversationStore) -> dict:
     }
 
 
+def handle_palette_index(
+    projects: ProjectStore,
+    chats: ConversationStore,
+    roadmaps: RoadmapStore,
+    nodes: RoadmapNodeStore,
+) -> dict:
+    """Everything the command palette needs to fuzzy-match locally.
+
+    /api/search is semantic vector search over memory entries only - it
+    cannot find a project, a chat, or a roadmap step by name, and
+    semantic matching is not fuzzy matching (typing "roadm" would match
+    nothing there). This is plain, unranked data instead, cheap enough
+    to fetch fresh on every palette open, so the client can do fuzzy
+    matching itself with no round trip per keystroke.
+    """
+    all_projects = projects.all()
+    project_names = {p.id: p.name for p in all_projects}
+
+    roadmap_nodes = []
+    for project in all_projects:
+        roadmap = roadmaps.for_project(project.id)
+        if roadmap is None:
+            continue
+        for n in nodes.for_roadmap(roadmap.id):
+            roadmap_nodes.append(
+                {
+                    "id": n.id,
+                    "title": n.title,
+                    "project_id": project.id,
+                    "project_name": project.name,
+                }
+            )
+
+    return {
+        "projects": [{"id": p.id, "name": p.name} for p in all_projects],
+        "chats": [
+            {
+                "id": c.id,
+                "title": c.title,
+                "project_id": c.project_id,
+                "project_name": project_names.get(c.project_id) if c.project_id else None,
+            }
+            for c in chats.all()
+        ],
+        "roadmap_nodes": roadmap_nodes,
+    }
+
+
 NEXT_UP_STATUS = "accepted"
 DASHBOARD_ITEMS_PER_PROJECT = 2
 DASHBOARD_RECENT_LIMIT = 8

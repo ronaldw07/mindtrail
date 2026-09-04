@@ -82,6 +82,8 @@ CHAT_HTML = """<!doctype html>
   <div id="menu"></div>
   <div id="overlay"></div>
   <div id="toasts"></div>
+  <div id="palette"></div>
+  <div id="shortcuts"></div>
 
   <script src="/static/app.js"></script>
 </body>
