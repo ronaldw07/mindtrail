@@ -290,6 +290,43 @@ def handle_delete_project(projects: ProjectStore, project_id: str) -> dict:
     return {"ok": True}
 
 
+SEARCH_DEFAULT_K = 10
+
+
+def handle_search(
+    store: MemoryStore, chats: ConversationStore, projects: ProjectStore, query: str
+) -> dict:
+    """Semantic search over everything stored - the app's core retrieval,
+    previously reachable only from a follow-up question inside a chat,
+    never directly from the browser.
+    """
+    query = query.strip()
+    if not query:
+        return {"results": []}
+
+    results = []
+    for entry in store.search(query, k=SEARCH_DEFAULT_K):
+        conversation = chats.get(entry.conversation_id) if entry.conversation_id else None
+        project_name = None
+        if conversation and conversation.project_id:
+            project = projects.get(conversation.project_id)
+            project_name = project.name if project else None
+        results.append(
+            {
+                "id": entry.id,
+                "query": entry.query,
+                "summary": entry.summary,
+                "kind": entry.kind,
+                "topic": entry.topic,
+                "created_at": entry.created_at,
+                "conversation_id": entry.conversation_id,
+                "conversation_title": conversation.title if conversation else None,
+                "project_name": project_name,
+            }
+        )
+    return {"results": results}
+
+
 def handle_conversation_entries(
     store: MemoryStore, chats: ConversationStore, conversation_id: str
 ) -> dict:

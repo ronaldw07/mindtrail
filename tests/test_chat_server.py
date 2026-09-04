@@ -429,6 +429,50 @@ def test_project_detail_of_a_missing_project_errors(store, chats, projects):
     )
 
 
+# --- search ---------------------------------------------------------------
+
+
+def test_search_finds_a_matching_entry(store, chats, projects):
+    store.add("what is a vector database", "A store for embeddings.", [])
+
+    data = api.handle_search(store, chats, projects, "vector database")
+
+    assert len(data["results"]) == 1
+    assert data["results"][0]["query"] == "what is a vector database"
+
+
+def test_search_with_blank_query_returns_nothing(store, chats, projects):
+    store.add("q", "a", [])
+
+    assert api.handle_search(store, chats, projects, "   ")["results"] == []
+
+
+def test_search_on_empty_store_returns_nothing(store, chats, projects):
+    assert api.handle_search(store, chats, projects, "anything")["results"] == []
+
+
+def test_search_result_includes_owning_conversation_and_project(store, chats, projects):
+    project = projects.create("Career")
+    chat = chats.create("PM chat", project_id=project.id)
+    store.add("how do I become a PM", "Start with case studies.", [], conversation_id=chat.id)
+
+    data = api.handle_search(store, chats, projects, "become a PM")
+
+    result = data["results"][0]
+    assert result["conversation_id"] == chat.id
+    assert result["conversation_title"] == "PM chat"
+    assert result["project_name"] == "Career"
+
+
+def test_search_result_without_a_conversation_has_no_project(store, chats, projects):
+    store.add("orphaned entry", "no conversation attached", [])
+
+    data = api.handle_search(store, chats, projects, "orphaned")
+
+    assert data["results"][0]["conversation_title"] is None
+    assert data["results"][0]["project_name"] is None
+
+
 def test_instructions_can_be_saved_and_read_back(store, chats, projects):
     project = projects.create("Career")
 

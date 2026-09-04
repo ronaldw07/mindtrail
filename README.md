@@ -46,8 +46,13 @@ chats and documents. Nothing on it triggers a model call; it only reads
 what's already stored, so opening it costs nothing. Click the mindtrail
 logo any time to come back to it.
 
-The sidebar holds **projects** you create by hand, with chats nested under
-them:
+A search box sits at the top of the sidebar — semantic search over
+everything stored (research, notes, documents), the same retrieval that
+powers follow-up recall, now reachable directly instead of only through a
+question. Results link straight into the conversation they came from.
+
+The sidebar also holds **projects** you create by hand, with chats nested
+under them:
 
 - **Rename, delete, pin, and mark unread** any chat from its `⋯` menu.
   Pinned sorts to the top; unread shows bold with a dot.
@@ -422,7 +427,7 @@ whenever you want it current.
 
 ## Tests
 
-412 tests, no network and no API key required — search, fetch, and the model
+417 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.
