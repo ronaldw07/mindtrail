@@ -94,7 +94,7 @@ CHAT_HTML = """<!doctype html>
     .side-btn, .chat, .project-head, .add, .card-btn, .nav-btn, .icon-btn,
     #menu div, #zoom-controls button, .sr-item, .proj-chat, .dash-item-title,
     .hl-head, .node-actions button, .rc-action-buttons button, .node-more,
-    .toast .undo, .btn-ghost, .btn-primary, .btn-danger {
+    .toast .undo, .btn-ghost, .btn-primary, .btn-danger, .template-card {
       transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
     }
     /* Focus border-color changes get their own (slightly longer) timing
@@ -443,10 +443,28 @@ CHAT_HTML = """<!doctype html>
                  background: var(--surface-hover); color: var(--text-3); border-radius: var(--r-sm); padding: 0.1rem 0.5rem;
                  font-size: var(--fs-base); line-height: 1.4; cursor: pointer; }
     .node-more:hover { background: var(--surface-active); color: var(--text-bright); }
-    #roadmap-empty { padding: 2rem; max-width: 480px; }
+    #roadmap-empty { padding: 2rem; max-width: 560px; }
     #roadmap-empty input { width: 100%; padding: 0.6rem 0.75rem; border-radius: var(--r);
                             border: 1px solid var(--border); background: var(--surface-sunken); color: var(--text);
                             font-size: var(--fs-md); margin: 0.6rem 0; }
+    /* Divider above the template picker - a border rather than just
+       whitespace, so "or start from a template" reads as a second
+       option distinct from the goal input above it. */
+    .template-divider { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); }
+    /* Single column rather than a grid - at this width a grid of cards
+       would either crowd the description text or force the column
+       narrower than the goal input above it. */
+    .template-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; }
+    .template-card { display: block; width: 100%; text-align: left; padding: 0.7rem 0.85rem;
+                      border-radius: var(--r); border: 1px solid var(--border);
+                      background: var(--surface); color: var(--text); cursor: pointer;
+                      font-family: inherit; }
+    .template-card:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--border-strong); }
+    .template-card:disabled { opacity: 0.5; cursor: default; }
+    .template-card-name { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+    .template-card-desc { font-size: var(--fs-base); color: var(--text-2); margin-top: 0.2rem;
+                           line-height: var(--lh-tight); }
+    .template-card-count { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 0.4rem; }
 
     /* --- profile view --- */
     #profile-view textarea { width: 100%; min-height: 220px; background: var(--surface-sunken);
@@ -1860,7 +1878,16 @@ CHAT_HTML = """<!doctype html>
     loading.style.padding = '1.5rem';
     view.appendChild(loading);
 
-    const data = await api('/api/roadmap/' + projectId);
+    // Fired together rather than one after the other, same as the
+    // project/roadmap pair in openProject - the template list is only
+    // needed if there turns out to be no roadmap yet, but there's no
+    // reason to wait for the roadmap fetch to finish before starting it.
+    // A failed or slow template fetch must never block rendering an
+    // existing roadmap, so its rejection is swallowed here rather than
+    // left for the empty-state branch to deal with.
+    const dataPromise = api('/api/roadmap/' + projectId);
+    const templatesPromise = api('/api/roadmap-templates').catch(() => null);
+    const data = await dataPromise;
     if (!data.roadmap) {
       view.innerHTML = '';
       const empty = document.createElement('div');
@@ -1894,10 +1921,79 @@ CHAT_HTML = """<!doctype html>
       back.textContent = 'Back to project';
       back.onclick = () => openProject(projectId);
       empty.appendChild(back);
+
       view.appendChild(empty);
+
+      const templatesRes = await templatesPromise;
+      const templates = templatesRes && Array.isArray(templatesRes.templates)
+        ? templatesRes.templates : [];
+      // A missing template list is a missing optional affordance, not an
+      // error worth a toast - the goal input and Generate button above
+      // still work fine without it.
+      if (templates.length) appendTemplatePicker(empty, templates, projectId, projectName, goalInput);
       return;
     }
     renderRoadmap(projectId, projectName, data.roadmap, data.nodes, {fitView: true});
+  }
+
+  // Fills in a template's name/description/step-count on a card - split
+  // out so a failed apply can rebuild the same content after wiping it
+  // for the busy spinner via setButtonBusy.
+  function fillTemplateCard(card, t) {
+    const name = document.createElement('div');
+    name.className = 'template-card-name';
+    name.textContent = t.name;
+    card.appendChild(name);
+
+    const desc = document.createElement('div');
+    desc.className = 'template-card-desc';
+    desc.textContent = t.description;
+    card.appendChild(desc);
+
+    const count = document.createElement('div');
+    count.className = 'template-card-count';
+    count.textContent = t.step_count + (t.step_count === 1 ? ' step' : ' steps');
+    card.appendChild(count);
+  }
+
+  function appendTemplatePicker(empty, templates, projectId, projectName, goalInput) {
+    const divider = document.createElement('div');
+    divider.className = 'muted template-divider';
+    divider.textContent = 'or start from a template';
+    empty.appendChild(divider);
+
+    const list = document.createElement('div');
+    list.className = 'template-list';
+    empty.appendChild(list);
+
+    templates.forEach(t => {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'template-card';
+      fillTemplateCard(card, t);
+
+      card.onclick = async () => {
+        // One card in flight must block every other card too, so a
+        // double-click (or a click on a neighbor while the first request
+        // is still out) can't apply two templates at once.
+        const cards = Array.from(list.querySelectorAll('.template-card'));
+        cards.forEach(c => { c.disabled = true; });
+        setButtonBusy(card, 'Applying\\u2026');
+
+        const goal = goalInput.value.trim();
+        const res = await jsonSend('/api/roadmap/' + projectId + '/template',
+                                    {template_id: t.id, goal});
+        if (res.error) {
+          toast(res.error, {error: true});
+          cards.forEach(c => { c.disabled = false; });
+          setButtonIdle(card, '');
+          fillTemplateCard(card, t);
+          return;
+        }
+        renderRoadmap(projectId, projectName, res.roadmap, res.nodes, {fitView: true});
+      };
+      list.appendChild(card);
+    });
   }
 
   function renderRoadmap(projectId, projectName, roadmap, nodesList, opts) {
