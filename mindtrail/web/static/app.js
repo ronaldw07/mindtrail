@@ -55,6 +55,88 @@
   const MIN_ZOOM = 0.2, MAX_ZOOM = 2;
   const openProjects = new Set(prefs.get('openProjects', []));
 
+  // ---------- roadmap canvas selection (module scope, on purpose) ----------
+  // renderRoadmap tears the whole canvas down (view.innerHTML = '') and
+  // rebuilds it from scratch on every single node edit - 11 call sites,
+  // including every status change. Selection state living in the DOM (a
+  // class on a node element) would silently vanish on the very next
+  // render. Keeping it here, outside renderRoadmap, and reapplying it at
+  // the end of every render is what makes "select six, accept all"
+  // actually work instead of half-working and reading as a flake.
+  const selectedNodeIds = new Set();
+  let selectedEdge = null; // {nodeId, depId} of the currently-selected dependency edge, or null
+
+  // Set once per renderRoadmap call so the module-level keyboard handlers
+  // below (registered a single time, not per-render) can reach whatever
+  // the current render's canvas needs without re-registering a new
+  // document listener - and leaking the old one - on every rebuild.
+  let activeRoadmapCtx = null;
+  const isRoadmapViewOpen = () => $('roadmap-view').classList.contains('open');
+
+  // Shared by the Space-drag-to-pan tracker and the selection keyboard
+  // handlers below, so neither one hijacks typing in a real field.
+  const isTypingTarget = el =>
+    !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+
+  let spaceHeld = false;
+  document.addEventListener('keydown', ev => {
+    if (ev.code === 'Space' && !spaceHeld && !isTypingTarget(ev.target) && isRoadmapViewOpen()) {
+      spaceHeld = true;
+      ev.preventDefault(); // stop the page from scrolling on Space
+      if (activeRoadmapCtx) activeRoadmapCtx.scroll.style.cursor = 'grab';
+    }
+  });
+  document.addEventListener('keyup', ev => {
+    if (ev.code === 'Space') {
+      spaceHeld = false;
+      if (activeRoadmapCtx) activeRoadmapCtx.scroll.style.cursor = '';
+    }
+  });
+
+  // Escape clears the canvas selection; Delete/Backspace removes a
+  // selected edge. Both are no-ops outside the roadmap view or while
+  // typing, so they can never hijack an unrelated field.
+  document.addEventListener('keydown', ev => {
+    if (!isRoadmapViewOpen() || !activeRoadmapCtx || isTypingTarget(ev.target)) return;
+    if (ev.key === 'Escape') {
+      if (selectedNodeIds.size || selectedEdge) {
+        ev.preventDefault();
+        selectedNodeIds.clear();
+        selectedEdge = null;
+        activeRoadmapCtx.refresh();
+      }
+    } else if (ev.key === 'Delete' || ev.key === 'Backspace') {
+      if (selectedEdge) {
+        ev.preventDefault();
+        activeRoadmapCtx.removeSelectedEdge();
+      }
+    }
+  });
+
+  // Fresh reachability check - NOT the cycle guard inside _grid_positions
+  // on the server, which is cycle *tolerance* fused to column assignment
+  // (it stops recursion so layout doesn't hang, but never reports whether
+  // a cycle exists). This mirrors the same check api.py does server-side,
+  // so a bad drag never even round-trips before the user sees why it was
+  // rejected.
+  function createsCycle(nodeId, dependsOn, allNodes) {
+    const adjacency = {};
+    allNodes.forEach(n => { adjacency[n.id] = n.depends_on || []; });
+    adjacency[nodeId] = dependsOn;
+    const visited = new Set(), stack = new Set();
+    function visit(id) {
+      if (stack.has(id)) return true;
+      if (visited.has(id)) return false;
+      visited.add(id); stack.add(id);
+      for (const dep of (adjacency[id] || [])) {
+        if (visit(dep)) return true;
+      }
+      stack.delete(id);
+      return false;
+    }
+    return visit(nodeId);
+  }
+
   const api = async (path, opts) => (await fetch(path, opts)).json();
   const jsonSend = (path, body, method) => api(path, {
     method: method || 'POST',
@@ -82,7 +164,20 @@
       }
 
       let field = null;
-      if (opts.input) {
+      if (opts.select) {
+        // A plain <select> - natively keyboard-operable (Tab, arrows,
+        // Enter) with no extra wiring, which is why this reuses the
+        // modal rather than inventing a bespoke list-picker for the
+        // node overflow menu's "Depends on..." action.
+        field = document.createElement('select');
+        opts.select.forEach(o => {
+          const optEl = document.createElement('option');
+          optEl.value = o.value;
+          optEl.textContent = o.label;
+          field.appendChild(optEl);
+        });
+        box.appendChild(field);
+      } else if (opts.input) {
         field = document.createElement(opts.multiline ? 'textarea' : 'input');
         if (opts.multiline) field.className = 'modal-textarea';
         else field.type = opts.inputType || 'text';
@@ -112,7 +207,9 @@
         document.removeEventListener('keydown', onKey);
         resolve(result);
       };
-      const submit = () => close(opts.input ? (field.value.trim() || null) : true);
+      const submit = () => close(
+        opts.select ? field.value : (opts.input ? (field.value.trim() || null) : true)
+      );
       const onKey = e => {
         if (e.key === 'Escape') { e.preventDefault(); close(null); }
         // Enter submits a single-line field; a textarea needs it to
@@ -126,7 +223,7 @@
       ok.onclick = submit;
       overlay.onclick = e => { if (e.target === overlay) close(null); };
       document.addEventListener('keydown', onKey);
-      if (field) { field.focus(); field.select(); }
+      if (field) { field.focus(); if (typeof field.select === 'function') field.select(); }
       else ok.focus();
     });
   }
@@ -509,7 +606,11 @@
       const d = document.createElement('div');
       d.textContent = it.label;
       if (it.danger) d.className = 'danger';
-      d.onclick = async () => { menu.style.display = 'none'; await it.run(); };
+      // makeClickable, not a raw onclick - the established pattern for a
+      // keyboard-activatable non-button row, so a menu opened from a
+      // keyboard-reachable trigger (the "..." button) stays reachable
+      // once it's open too.
+      makeClickable(d, async () => { menu.style.display = 'none'; await it.run(); });
       menu.appendChild(d);
     });
     menu.style.display = 'block';
@@ -1457,19 +1558,13 @@
     const addBtn = document.createElement('button');
     addBtn.className = 'card-btn';
     addBtn.textContent = '+ Add step';
-    addBtn.onclick = async () => {
-      const title = await askText('New step', '', 'Title');
-      if (!title) return;
+    addBtn.onclick = () => {
       // Cascades new cards so repeated adds don't stack exactly on top
-      // of each other before the user drags them apart.
+      // of each other before the user drags them apart. Right-click
+      // "Add step here" (below) uses the same addStepAt with the actual
+      // click point instead of this cascade.
       const offset = (nodesList.length % 6) * 40;
-      const node = await jsonSend('/api/roadmap-node/' + roadmap.id,
-                                  {title, x: 40 + offset, y: 40 + offset});
-      if (node.error) { toast(node.error, {error: true}); return; }
-      // The server hands back the full node, so the new card can be
-      // added straight into the canvas instead of re-fetching everything.
-      nodesList.push(node);
-      renderRoadmap(projectId, projectName, roadmap, nodesList);
+      addStepAt(40 + offset, 40 + offset);
     };
     top.appendChild(addBtn);
 
@@ -1621,24 +1716,109 @@
       }
     }, {passive: false});
 
-    // Drag anywhere that isn't a card to pan.
+    // Screen (clientX/clientY) -> canvas-local pixel coordinates - the
+    // exact inverse of the transform applyViewport writes onto #canvas
+    // (translate(panX,panY) scale(zoom), transform-origin 0 0, with
+    // #canvas positioned at the scroll container's own top-left). Needed
+    // wherever a pointer event has to land at the right spot on a panned,
+    // zoomed canvas: drop detection for a dragged dependency, and
+    // placing a right-click-added step where the click actually was.
+    function screenToCanvas(clientX, clientY) {
+      const rect = scroll.getBoundingClientRect();
+      return {
+        x: (clientX - rect.left - roadmapView.panX) / roadmapView.zoom,
+        y: (clientY - rect.top - roadmapView.panY) / roadmapView.zoom,
+      };
+    }
+
+    // Figma's convention, and what people guess: a plain left-drag on
+    // empty canvas marquee-selects, while Space-held or middle-button
+    // drag pans. Right-click (button 2) is reserved for the context menu
+    // and never starts either.
     let panning = null;
+    let marquee = null;
     scroll.addEventListener('pointerdown', ev => {
-      if (ev.target.closest('.node, #zoom-controls')) return;
-      panning = {x: ev.clientX, y: ev.clientY,
-                 panX: roadmapView.panX, panY: roadmapView.panY};
-      scroll.classList.add('panning');
+      if (ev.button !== 0 && ev.button !== 1) return;
+      if (ev.target.closest('#zoom-controls')) return;
+      const wantsPan = ev.button === 1 || (ev.button === 0 && spaceHeld);
+      if (wantsPan) {
+        panning = {x: ev.clientX, y: ev.clientY,
+                   panX: roadmapView.panX, panY: roadmapView.panY};
+        scroll.classList.add('panning');
+        scroll.setPointerCapture(ev.pointerId);
+        return;
+      }
+      // A card or its edge-creation handle owns its own pointerdown - let
+      // that handler run instead of starting a marquee under it.
+      if (ev.target.closest('.node, .node-edge-handle')) return;
+
+      const box = document.createElement('div');
+      box.style.cssText = 'position:absolute;border:1px solid var(--accent);' +
+        'background:color-mix(in srgb, var(--accent) 15%, transparent);' +
+        'pointer-events:none;z-index:5;';
+      scroll.appendChild(box);
+      const additive = ev.shiftKey || ev.metaKey || ev.ctrlKey;
+      marquee = {
+        startClientX: ev.clientX, startClientY: ev.clientY,
+        endClientX: ev.clientX, endClientY: ev.clientY,
+        box, additive, baseline: additive ? new Set(selectedNodeIds) : new Set(),
+      };
       scroll.setPointerCapture(ev.pointerId);
     });
     scroll.addEventListener('pointermove', ev => {
-      if (!panning) return;
-      roadmapView.panX = panning.panX + (ev.clientX - panning.x);
-      roadmapView.panY = panning.panY + (ev.clientY - panning.y);
-      applyViewport();
+      if (panning) {
+        roadmapView.panX = panning.panX + (ev.clientX - panning.x);
+        roadmapView.panY = panning.panY + (ev.clientY - panning.y);
+        applyViewport();
+        return;
+      }
+      if (marquee) {
+        const rect = scroll.getBoundingClientRect();
+        marquee.endClientX = ev.clientX;
+        marquee.endClientY = ev.clientY;
+        const x1 = Math.min(marquee.startClientX, ev.clientX) - rect.left;
+        const y1 = Math.min(marquee.startClientY, ev.clientY) - rect.top;
+        const x2 = Math.max(marquee.startClientX, ev.clientX) - rect.left;
+        const y2 = Math.max(marquee.startClientY, ev.clientY) - rect.top;
+        marquee.box.style.left = x1 + 'px';
+        marquee.box.style.top = y1 + 'px';
+        marquee.box.style.width = (x2 - x1) + 'px';
+        marquee.box.style.height = (y2 - y1) + 'px';
+      }
     });
-    const endPan = () => { panning = null; scroll.classList.remove('panning'); };
-    scroll.addEventListener('pointerup', endPan);
-    scroll.addEventListener('pointercancel', endPan);
+    const endPointerInteraction = () => {
+      if (panning) { panning = null; scroll.classList.remove('panning'); }
+      if (marquee) {
+        const a = screenToCanvas(marquee.startClientX, marquee.startClientY);
+        const b = screenToCanvas(marquee.endClientX, marquee.endClientY);
+        const minX = Math.min(a.x, b.x), maxX = Math.max(a.x, b.x);
+        const minY = Math.min(a.y, b.y), maxY = Math.max(a.y, b.y);
+        const hit = nodesList.filter(n => {
+          const el = els[n.id];
+          const w = el ? el.offsetWidth : 220, h = el ? el.offsetHeight : 70;
+          return n.x < maxX && n.x + w > minX && n.y < maxY && n.y + h > minY;
+        });
+        selectedNodeIds.clear();
+        marquee.baseline.forEach(id => selectedNodeIds.add(id));
+        hit.forEach(n => selectedNodeIds.add(n.id));
+        selectedEdge = marquee.additive ? selectedEdge : null;
+        marquee.box.remove();
+        marquee = null;
+        refreshCanvasSelection();
+      }
+    };
+    scroll.addEventListener('pointerup', endPointerInteraction);
+    scroll.addEventListener('pointercancel', endPointerInteraction);
+
+    // Right-click "Add step here" - the keyboard-triggered equivalent is
+    // the "+ Add step" toolbar button, which places at a cascading offset
+    // instead of a click point that doesn't exist without a pointer.
+    scroll.addEventListener('contextmenu', ev => {
+      if (ev.target.closest('.node, #zoom-controls, .node-edge-handle')) return;
+      ev.preventDefault();
+      const at = screenToCanvas(ev.clientX, ev.clientY);
+      showMenu(ev, [{label: 'Add step here', run: () => addStepAt(at.x, at.y)}]);
+    });
 
     const zoomControls = document.createElement('div');
     zoomControls.id = 'zoom-controls';
@@ -1659,6 +1839,17 @@
     zoomBtn('\u2922', 'Fit to view', () => fitCanvasToContent());
     scroll.appendChild(zoomControls);
 
+    // A hidden preview line drawn from the drag handle to the cursor
+    // while a dependency link is being dragged - see the handle's
+    // pointerdown/move/up below. Declared once and re-appended by
+    // drawEdges (which clears the whole <svg> on every call, including
+    // mid-drag redraws triggered by a plain node move) rather than being
+    // recreated, so a link-drag survives an unrelated redraw.
+    const linkPreview = document.createElementNS(svgNS, 'path');
+    linkPreview.style.cssText = 'fill:none;stroke:var(--accent);stroke-width:2px;' +
+      'stroke-dasharray:4 3;display:none;';
+    let linking = null;
+
     function drawEdges() {
       svg.innerHTML = '';
       nodesList.forEach(n => {
@@ -1669,13 +1860,37 @@
           const from = edgeAnchor(dep, 'out');
           const to = edgeAnchor(n, 'in');
           const mx = (from.x + to.x) / 2;
+          const d = 'M' + from.x + ',' + from.y +
+            ' C' + mx + ',' + from.y + ' ' + mx + ',' + to.y + ' ' + to.x + ',' + to.y;
+          const isSelected = !!selectedEdge &&
+            selectedEdge.nodeId === n.id && selectedEdge.depId === depId;
+
+          // A wide, invisible hit-target behind the thin visible line -
+          // clicking a 1.5px stroke precisely is unreasonable, and the
+          // path has no fill for pointer-events to catch otherwise.
+          const hit = document.createElementNS(svgNS, 'path');
+          hit.setAttribute('d', d);
+          // #canvas svg has pointer-events:none (so the transparent parts
+          // of the overlay don't block panning/marquee) - pointer-events
+          // is inherited, so it has to be turned back on right here or
+          // this "wide invisible click target" is unclickable.
+          hit.style.cssText = 'fill:none;stroke:transparent;stroke-width:14px;' +
+            'cursor:pointer;pointer-events:stroke;';
+          hit.addEventListener('click', ev => {
+            ev.stopPropagation();
+            selectedNodeIds.clear();
+            selectedEdge = {nodeId: n.id, depId};
+            refreshCanvasSelection();
+          });
+          svg.appendChild(hit);
+
           const path = document.createElementNS(svgNS, 'path');
-          path.setAttribute('d',
-            'M' + from.x + ',' + from.y +
-            ' C' + mx + ',' + from.y + ' ' + mx + ',' + to.y + ' ' + to.x + ',' + to.y);
+          path.setAttribute('d', d);
+          if (isSelected) path.style.cssText = 'stroke:var(--accent);stroke-width:2.5px;';
           svg.appendChild(path);
         });
       });
+      svg.appendChild(linkPreview);
     }
 
     // Optimistic: applies the change and re-renders immediately, then
@@ -1696,6 +1911,155 @@
         Object.assign(n, res);
       });
     }
+
+    // Adds one step at a canvas point and renders once - shared by the
+    // toolbar's "+ Add step" (a cascading offset, its keyboard-reachable
+    // equivalent) and the right-click "Add step here" menu (the actual
+    // click point, converted via screenToCanvas).
+    async function addStepAt(x, y) {
+      const title = await askText('New step', '', 'Title');
+      if (!title) return;
+      const node = await jsonSend('/api/roadmap-node/' + roadmap.id, {title, x, y});
+      if (node.error) { toast(node.error, {error: true}); return; }
+      nodesList.push(node);
+      renderRoadmap(projectId, projectName, roadmap, nodesList);
+    }
+
+    function removeDependency(nodeId, depId) {
+      const target = byId[nodeId];
+      if (!target) return;
+      selectedEdge = null;
+      updateNode(target, {depends_on: (target.depends_on || []).filter(d => d !== depId)});
+    }
+
+    // Paints selectedNodeIds/selectedEdge onto whatever elements exist
+    // right now - called after every render (see pruneSelection below)
+    // and after every selection change that doesn't otherwise re-render.
+    function refreshSelectionUI() {
+      nodesList.forEach(n => {
+        const el = els[n.id];
+        if (!el) return;
+        const isSelected = selectedNodeIds.has(n.id);
+        el.style.boxShadow = isSelected ? '0 0 0 2px var(--accent)' : '';
+        el.setAttribute('aria-selected', String(isSelected));
+      });
+      const count = selectedNodeIds.size;
+      bulkBar.style.display = count >= 2 ? 'flex' : 'none';
+      bulkLabel.textContent = count + ' selected';
+    }
+    function refreshCanvasSelection() { refreshSelectionUI(); drawEdges(); }
+
+    // Nodes that were deleted (by this user or, via a background
+    // refresh, someone/something else) can't stay selected forever.
+    function pruneSelection() {
+      const live = new Set(nodesList.map(n => n.id));
+      Array.from(selectedNodeIds).forEach(id => { if (!live.has(id)) selectedNodeIds.delete(id); });
+    }
+
+    function selectOnly(id) {
+      selectedNodeIds.clear();
+      selectedNodeIds.add(id);
+      selectedEdge = null;
+      refreshCanvasSelection();
+    }
+    function toggleSelect(id) {
+      if (selectedNodeIds.has(id)) selectedNodeIds.delete(id); else selectedNodeIds.add(id);
+      selectedEdge = null;
+      refreshCanvasSelection();
+    }
+
+    // Mutates every selected node with one patch and renders once -
+    // renderRoadmap tears the whole canvas down, so six sequential
+    // accepts would mean six full teardown/rebuilds. This applies all
+    // six, renders once, then persists in the background exactly like
+    // updateNode does for a single node, rolling back only what failed.
+    function batchUpdateNodes(ids, buildPatch) {
+      const targets = ids.map(id => byId[id]).filter(Boolean);
+      if (!targets.length) return;
+      const patches = targets.map(buildPatch);
+      const previous = targets.map(n => ({...n}));
+      targets.forEach((n, i) => Object.assign(n, patches[i]));
+      renderRoadmap(projectId, projectName, roadmap, nodesList);
+      Promise.all(targets.map((n, i) =>
+        jsonSend('/api/roadmap-node/' + n.id, patches[i], 'PATCH')
+      )).then(results => {
+        let failed = false;
+        results.forEach((res, i) => {
+          if (res.error) { failed = true; Object.assign(targets[i], previous[i]); }
+          else Object.assign(targets[i], res);
+        });
+        if (failed) {
+          toast('Some updates failed', {error: true});
+          renderRoadmap(projectId, projectName, roadmap, nodesList);
+        }
+      });
+    }
+
+    async function batchDeleteNodes(ids) {
+      const targets = ids.map(id => byId[id]).filter(Boolean);
+      if (!targets.length) return;
+      const ok = await askConfirm('Delete steps',
+        targets.length + ' step(s) will be removed.', 'Delete');
+      if (!ok) return;
+      targets.forEach(n => {
+        const idx = nodesList.indexOf(n);
+        if (idx !== -1) nodesList.splice(idx, 1);
+        selectedNodeIds.delete(n.id);
+      });
+      renderRoadmap(projectId, projectName, roadmap, nodesList);
+      const results = await Promise.all(
+        targets.map(n => api('/api/roadmap-node/' + n.id, {method: 'DELETE'}))
+      );
+      if (results.some(r => r.error)) {
+        toast('Some steps could not be deleted', {error: true});
+        // Reconciling by re-fetching is simpler and more correct than
+        // trying to splice the failed ones back in at their old index.
+        const fresh = await api('/api/roadmap/' + projectId);
+        if (fresh.roadmap) renderRoadmap(projectId, projectName, fresh.roadmap, fresh.nodes);
+      }
+    }
+
+    const bulkBar = document.createElement('div');
+    bulkBar.style.cssText = 'display:none;align-items:center;gap:0.5rem;' +
+      'margin-left:0.75rem;padding:0.25rem 0.6rem;border-radius:8px;' +
+      'border:1px solid var(--border-strong);background:var(--surface);';
+    const bulkLabel = document.createElement('span');
+    bulkLabel.className = 'muted';
+    bulkBar.appendChild(bulkLabel);
+    const bulkBtn = (label, onClick, danger) => {
+      const b = document.createElement('button');
+      b.className = danger ? 'btn-danger' : 'card-btn';
+      b.textContent = label;
+      b.onclick = onClick;
+      bulkBar.appendChild(b);
+      return b;
+    };
+    bulkBtn('Accept all', () =>
+      batchUpdateNodes(Array.from(selectedNodeIds), () => ({status: 'accepted'})));
+    bulkBtn('Reject all', () =>
+      batchUpdateNodes(Array.from(selectedNodeIds), () => ({status: 'rejected'})));
+    bulkBtn('Mark done', () =>
+      batchUpdateNodes(Array.from(selectedNodeIds), () => ({status: 'done'})));
+    bulkBtn('Set due date', async () => {
+      const dueDate = await modal({
+        title: 'Due date', input: true, inputType: 'date', confirmLabel: 'Save',
+      });
+      if (dueDate === null) return;
+      batchUpdateNodes(Array.from(selectedNodeIds), () => ({due_date: dueDate}));
+    });
+    bulkBtn('Delete', () => batchDeleteNodes(Array.from(selectedNodeIds)), true);
+    top.appendChild(bulkBar);
+
+    // Read by the module-level Escape/Delete keyboard handlers declared
+    // near selectedNodeIds, above - refreshed on every render so they
+    // always act on the canvas that's actually on screen.
+    activeRoadmapCtx = {
+      scroll,
+      refresh: refreshCanvasSelection,
+      removeSelectedEdge: () => {
+        if (selectedEdge) removeDependency(selectedEdge.nodeId, selectedEdge.depId);
+      },
+    };
 
     function nodeMenuItems(n) {
       const items = [];
@@ -1725,6 +2089,35 @@
         items.push({label: 'Clear due date', run: () => updateNode(n, {due_date: ''})});
       }
       items.push({divider: true});
+      // The keyboard-reachable path to F1's drag-to-create dependency -
+      // dragging the edge handle is pointer-only by construction, so
+      // this is the only way to add a dependency without a mouse.
+      items.push({label: 'Depends on…', run: async () => {
+        const options = nodesList.filter(
+          other => other.id !== n.id && !(n.depends_on || []).includes(other.id)
+        );
+        if (!options.length) {
+          toast('No other steps available to depend on', {error: true});
+          return;
+        }
+        const chosen = await modal({
+          title: 'Depends on', confirmLabel: 'Add dependency',
+          select: options.map(o => ({value: o.id, label: o.title})),
+        });
+        if (!chosen) return;
+        const nextDeps = (n.depends_on || []).concat([chosen]);
+        if (createsCycle(n.id, nextDeps, nodesList)) {
+          toast('That would create a dependency cycle', {error: true});
+          return;
+        }
+        updateNode(n, {depends_on: nextDeps});
+      }});
+      (n.depends_on || []).forEach(depId => {
+        const dep = byId[depId];
+        items.push({label: 'Remove dependency: ' + (dep ? dep.title : depId),
+          run: () => removeDependency(n.id, depId)});
+      });
+      items.push({divider: true});
       items.push({label: 'Delete', danger: true, run: async () => {
         const ok = await askConfirm('Delete step', '"' + n.title + '" will be removed.', 'Delete');
         if (!ok) return;
@@ -1746,6 +2139,13 @@
       el.className = 'node ' + n.status;
       el.style.left = n.x + 'px';
       el.style.top = n.y + 'px';
+      // For document.elementFromPoint(...).closest('.node') during a
+      // dependency drag (see the edge handle below) - the source node
+      // holds pointer capture for the whole drag, so a real 'pointerover'
+      // on the target never fires; this is how the drop target is found.
+      el.dataset.nodeId = n.id;
+      el.setAttribute('role', 'group');
+      el.setAttribute('aria-label', n.title + ', ' + n.status);
 
       const title = document.createElement('div');
       title.className = 'node-title';
@@ -1816,43 +2216,149 @@
       more.onclick = ev => { ev.stopPropagation(); showMenu(ev, nodeMenuItems(n)); };
       el.appendChild(more);
 
-      // Pointer events (not mouse events) so dragging works with touch too.
+      // Drag from here to draw a dependency onto another node - anchored
+      // at the same point edgeAnchor(n, 'out') already draws edges from,
+      // vertically centred on the right edge, so it never fights
+      // .node-more (pinned to the bottom-right corner instead) for the
+      // pointer. Pointer-only by construction; "Depends on…" in the
+      // overflow menu above is the keyboard equivalent, so it's hidden
+      // from assistive tech rather than given a false accessible name.
+      const handle = document.createElement('div');
+      handle.className = 'node-edge-handle';
+      handle.title = 'Drag to create a dependency';
+      handle.setAttribute('aria-hidden', 'true');
+      handle.style.cssText = 'position:absolute;top:50%;right:-6px;width:12px;height:12px;' +
+        'margin-top:-6px;border-radius:50%;background:var(--accent);cursor:crosshair;' +
+        'border:2px solid var(--surface);';
+      handle.addEventListener('pointerdown', ev => {
+        if (ev.button !== 0 || spaceHeld) return;
+        ev.stopPropagation();
+        ev.preventDefault();
+        handle.setPointerCapture(ev.pointerId);
+        linking = {sourceId: n.id, pointerId: ev.pointerId};
+        linkPreview.style.display = '';
+      });
+      handle.addEventListener('pointermove', ev => {
+        if (!linking || linking.pointerId !== ev.pointerId) return;
+        const pt = screenToCanvas(ev.clientX, ev.clientY);
+        const from = edgeAnchor(n, 'out');
+        const mx = (from.x + pt.x) / 2;
+        linkPreview.setAttribute('d',
+          'M' + from.x + ',' + from.y +
+          ' C' + mx + ',' + from.y + ' ' + mx + ',' + pt.y + ' ' + pt.x + ',' + pt.y);
+      });
+      const endLink = ev => {
+        if (!linking || linking.pointerId !== ev.pointerId) return;
+        const sourceNode = byId[linking.sourceId];
+        linking = null;
+        linkPreview.style.display = 'none';
+        // The source node holds pointer capture for the whole drag, so a
+        // real 'pointerover' never reaches the node underneath the
+        // cursor - elementFromPoint is the only way to find the target.
+        const under = document.elementFromPoint(ev.clientX, ev.clientY);
+        const targetEl = under && under.closest('.node');
+        if (!targetEl || !sourceNode) return;
+        const targetNode = byId[targetEl.dataset.nodeId];
+        if (!targetNode || targetNode.id === sourceNode.id) return;
+        const current = targetNode.depends_on || [];
+        if (current.includes(sourceNode.id)) {
+          toast('Already depends on "' + sourceNode.title + '"', {error: true});
+          return;
+        }
+        const nextDeps = current.concat([sourceNode.id]);
+        if (createsCycle(targetNode.id, nextDeps, nodesList)) {
+          toast('That would create a dependency cycle', {error: true});
+          return;
+        }
+        updateNode(targetNode, {depends_on: nextDeps});
+      };
+      handle.addEventListener('pointerup', endLink);
+      handle.addEventListener('pointercancel', () => {
+        linking = null;
+        linkPreview.style.display = 'none';
+      });
+      el.appendChild(handle);
+
+      // Pointer events (not mouse events) so dragging works with touch
+      // too. A short move threshold tells a click (select) apart from a
+      // drag (move) using the same pointerdown/up pair, and dragging any
+      // node that's part of the current multi-selection moves the whole
+      // selection together.
+      const DRAG_THRESHOLD = 4;
       let dragging = null;
       el.addEventListener('pointerdown', ev => {
-        if (ev.target.closest('button, input, label')) return;
-        dragging = {startX: ev.clientX, startY: ev.clientY, origX: n.x, origY: n.y};
+        // Gated to the left button - a right-click on a card used to
+        // start a drag before there was any right-click menu to
+        // conflict with. Space-held defers to canvas panning instead.
+        if (ev.button !== 0 || spaceHeld) return;
+        if (ev.target.closest('button, input, label, .node-edge-handle')) return;
+        const groupIds = (selectedNodeIds.has(n.id) && selectedNodeIds.size > 1)
+          ? Array.from(selectedNodeIds) : [n.id];
+        const origins = {};
+        groupIds.forEach(id => {
+          const gn = byId[id];
+          if (gn) origins[id] = {x: gn.x, y: gn.y};
+        });
+        dragging = {
+          startX: ev.clientX, startY: ev.clientY, moved: false,
+          groupIds, origins, shiftKey: ev.shiftKey, metaKey: ev.metaKey || ev.ctrlKey,
+        };
         el.setPointerCapture(ev.pointerId);
       });
       el.addEventListener('pointermove', ev => {
         if (!dragging) return;
+        const dx = ev.clientX - dragging.startX, dy = ev.clientY - dragging.startY;
+        if (!dragging.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+        dragging.moved = true;
         // Cursor movement is in screen pixels but the card is positioned
         // in canvas pixels, so the delta has to be divided by the zoom
         // or a zoomed-out card outruns the cursor.
-        n.x = dragging.origX + (ev.clientX - dragging.startX) / roadmapView.zoom;
-        n.y = dragging.origY + (ev.clientY - dragging.startY) / roadmapView.zoom;
-        el.style.left = n.x + 'px';
-        el.style.top = n.y + 'px';
+        const cdx = dx / roadmapView.zoom, cdy = dy / roadmapView.zoom;
+        dragging.groupIds.forEach(id => {
+          const gn = byId[id], origin = dragging.origins[id];
+          if (!gn || !origin) return;
+          gn.x = origin.x + cdx;
+          gn.y = origin.y + cdy;
+          const gel = els[id];
+          if (gel) { gel.style.left = gn.x + 'px'; gel.style.top = gn.y + 'px'; }
+        });
         drawEdges();
       });
       const endDrag = () => {
         if (!dragging) return;
+        const {moved, groupIds, shiftKey, metaKey} = dragging;
         dragging = null;
+        if (!moved) {
+          // A click, not a drag: select instead of persisting a move.
+          if (shiftKey || metaKey) toggleSelect(n.id); else selectOnly(n.id);
+          return;
+        }
+        if (groupIds.length > 1) {
+          batchUpdateNodes(groupIds, gn => ({x: gn.x, y: gn.y}));
+          return;
+        }
         // The dragged position is already on screen, so this persists in
         // the background without the full-canvas re-render updateNode
-        // does elsewhere — nothing here needs to change visually.
+        // (or the group path above) does elsewhere.
         jsonSend('/api/roadmap-node/' + n.id, {x: n.x, y: n.y}, 'PATCH').then(res => {
           if (res.error) toast(res.error, {error: true});
           else Object.assign(n, res);
         });
       };
       el.addEventListener('pointerup', endDrag);
-      el.addEventListener('pointercancel', endDrag);
+      el.addEventListener('pointercancel', () => { dragging = null; });
 
       canvas.appendChild(el);
       els[n.id] = el;
     });
 
     drawEdges();
+
+    // Reapply the selection that survived this teardown/rebuild (see the
+    // warning above selectedNodeIds) - every node status change routes
+    // through here, so this is the one place that has to catch it.
+    pruneSelection();
+    refreshSelectionUI();
 
     // ---------- roadmap chat panel ----------
     // The model only ever proposes actions here; nothing touches the
