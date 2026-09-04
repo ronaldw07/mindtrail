@@ -128,6 +128,8 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         deps.store, deps.chats, self._tail("/api/conversations/")
                     )
                 )
+            elif path == "/api/roadmap-templates":
+                self._json(api.handle_list_templates())
             elif path.startswith("/api/roadmap/"):
                 self._json(
                     api.handle_get_roadmap(
@@ -193,6 +195,19 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
             elif path.startswith("/api/roadmap-node/") and path.endswith("/tidy"):
                 roadmap_id = path[len("/api/roadmap-node/") : -len("/tidy")]
                 self._json(api.handle_tidy_roadmap(deps.roadmap_nodes, roadmap_id))
+            elif path.startswith("/api/roadmap/") and path.endswith("/template"):
+                body = self._json_body() or {}
+                project_id = path[len("/api/roadmap/") : -len("/template")]
+                self._json(
+                    api.handle_apply_template(
+                        deps.roadmaps,
+                        deps.roadmap_nodes,
+                        deps.projects,
+                        project_id,
+                        str(body.get("template_id", "")),
+                        str(body.get("goal", "")),
+                    )
+                )
             elif path.startswith("/api/roadmap/") and path.endswith("/chat"):
                 body = self._json_body() or {}
                 roadmap_id = path[len("/api/roadmap/") : -len("/chat")]
