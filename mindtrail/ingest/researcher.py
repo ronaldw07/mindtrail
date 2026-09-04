@@ -201,6 +201,7 @@ class Researcher:
             topic=topic,
             key_facts=list(key_facts),
             conversation_id=conversation_id,
+            recalled_ids=[e.id for e in result.recalled],
         )
         return result
 

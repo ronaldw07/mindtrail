@@ -350,10 +350,32 @@ def handle_conversation_entries(
                 "created_at": e.created_at,
                 "kind": e.kind,
                 "sources": list(e.sources),
+                "recalled": _resolve_recalled(store, e.recalled_ids),
             }
             for e in store.by_conversation(conversation_id)
         ],
     }
+
+
+def _resolve_recalled(store: MemoryStore, recalled_ids: tuple[str, ...]) -> list[dict]:
+    """Turns stored recalled_ids into something a client can render and
+    link into - a query to show and a conversation to open. A recalled
+    entry whose conversation was since deleted is skipped rather than
+    shown as a dead link.
+    """
+    resolved = []
+    for entry_id in recalled_ids:
+        recalled = store.get(entry_id)
+        if recalled is None or not recalled.conversation_id:
+            continue
+        resolved.append(
+            {
+                "id": recalled.id,
+                "query": recalled.query,
+                "conversation_id": recalled.conversation_id,
+            }
+        )
+    return resolved
 
 
 def handle_update_conversation(
@@ -501,7 +523,10 @@ def handle_ask(
     return {
         "answer": result.summary,
         "sources": list(result.sources),
-        "recalled": [e.query for e in result.recalled],
+        "recalled": [
+            {"id": e.id, "query": e.query, "conversation_id": e.conversation_id}
+            for e in result.recalled
+        ],
         "conversation_id": conversation_id,
         "topic": topic,
     }

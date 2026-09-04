@@ -49,6 +49,10 @@ class Entry:
     conversation_id: str = ""
     """Which conversation this belongs to. Empty for entries created
     before conversations existed, and for advice."""
+    recalled_ids: tuple[str, ...] = ()
+    """Ids of past entries that were recalled and folded into this
+    one's research prompt - the trail a follow-up answer was built on.
+    Empty for anything that isn't a research entry."""
 
     def with_summary(self, summary: str) -> "Entry":
         """Return a copy carrying a new summary, leaving this one untouched."""
@@ -85,6 +89,7 @@ def _chunk_text(text: str, max_chars: int = CHUNK_CHARS) -> list[str]:
 def _to_entry(meta: dict, entry_id: str, doc: str = "") -> Entry:
     raw_sources = meta.get("sources", "")
     raw_facts = meta.get("key_facts", "")
+    raw_recalled = meta.get("recalled_ids", "")
     # `doc` is one chunk of the embedded query+summary blob, not the
     # summary itself - it must be read back from its own metadata field.
     return Entry(
@@ -97,6 +102,7 @@ def _to_entry(meta: dict, entry_id: str, doc: str = "") -> Entry:
         key_facts=tuple(f for f in raw_facts.split("\n") if f),
         kind=meta.get("kind", DEFAULT_KIND),
         conversation_id=meta.get("conversation_id", ""),
+        recalled_ids=tuple(r for r in raw_recalled.split("\n") if r),
     )
 
 
@@ -127,6 +133,7 @@ class MemoryStore:
         key_facts: list[str] | None = None,
         kind: str = DEFAULT_KIND,
         conversation_id: str = "",
+        recalled_ids: list[str] | None = None,
     ) -> Entry:
         """Store one researched question. Returns the created entry."""
         if not query.strip():
@@ -144,9 +151,18 @@ class MemoryStore:
             key_facts=tuple(key_facts or []),
             kind=kind,
             conversation_id=conversation_id,
+            recalled_ids=tuple(recalled_ids or []),
         )
         self._write_chunks(entry)
         return entry
+
+    def get(self, entry_id: str) -> Entry | None:
+        """A single entry by id, for resolving a recalled_ids backlink
+        into something displayable (its query text, its conversation)."""
+        row = self._collection.get(ids=[entry_id])
+        if not row["ids"]:
+            return None
+        return _to_entry(row["metadatas"][0], row["ids"][0], row["documents"][0])
 
     def _write_chunks(self, entry: Entry) -> None:
         # Chroma metadata values must be scalars, so list fields are
@@ -163,6 +179,7 @@ class MemoryStore:
             "key_facts": "\n".join(entry.key_facts),
             "kind": entry.kind,
             "conversation_id": entry.conversation_id,
+            "recalled_ids": "\n".join(entry.recalled_ids),
             "parent_id": entry.id,
         }
         chunks = _chunk_text(f"{entry.query}\n\n{entry.summary}")

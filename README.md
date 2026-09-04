@@ -90,6 +90,11 @@ Follow-ups within a chat carry that conversation's earlier turns, so
 "what are its drawbacks?" resolves against what you were just discussing
 rather than being searched literally.
 
+Whenever an answer recalls a past entry, that "Built on:" trail is now
+persisted, not just shown once at ask time — reopening the chat later
+still shows what it was built on, as clickable chips that jump straight
+to the source conversation.
+
 **👤 Profile**, in the sidebar, is a short freeform description of you —
 role, goals, background — used to personalize every answer, highlight, and
 roadmap. Write it by hand, generate a starting draft from whatever
@@ -430,7 +435,7 @@ whenever you want it current.
 
 ## Tests
 
-425 tests, no network and no API key required — search, fetch, and the model
+435 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.

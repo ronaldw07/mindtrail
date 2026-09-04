@@ -63,6 +63,25 @@ def test_research_and_store_persists_the_entry(store, provider):
     assert store.count() == 1
 
 
+def test_research_and_store_persists_recalled_ids(store, provider):
+    prior = store.add("what is a vector database", "It stores embeddings.", [])
+    researcher = Researcher(store, provider, StubLLM())
+
+    researcher.research_and_store("how do vector databases scale")
+
+    entries = [e for e in store.all() if e.query != prior.query]
+    assert len(entries) == 1
+    assert prior.id in entries[0].recalled_ids
+
+
+def test_a_fresh_store_persists_no_recalled_ids(store, provider):
+    researcher = Researcher(store, provider, StubLLM())
+
+    researcher.research_and_store("what is X")
+
+    assert store.all()[0].recalled_ids == ()
+
+
 def test_prior_research_is_injected_into_the_prompt(store, provider):
     store.add("what is a vector database", "It stores embeddings.", [])
     llm = StubLLM()

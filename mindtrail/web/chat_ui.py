@@ -181,6 +181,11 @@ CHAT_HTML = """<!doctype html>
     .meta { margin-top: 0.6rem; font-size: 0.78rem; color: #888; }
     .meta a { color: #8ab4f8; display: block; text-decoration: none; }
     .meta a:hover { text-decoration: underline; }
+    .recalled-label { margin-bottom: 0.25rem; }
+    .recalled-trail { margin-bottom: 0.4rem; }
+    .recalled-chip { display: inline-block; color: #8ab4f8; cursor: pointer;
+                     margin: 0 0.5rem 0.25rem 0; }
+    .recalled-chip:hover { text-decoration: underline; }
     .kind-tag { display: inline-block; font-size: 0.68rem; text-transform: uppercase;
                 letter-spacing: 0.03em; color: #999; margin-bottom: 0.3rem; }
     .empty-state { color: #6a6a6a; font-size: 0.9rem; text-align: center;
@@ -1053,9 +1058,21 @@ CHAT_HTML = """<!doctype html>
     if (!(recalled || []).length && !(sources || []).length) return;
     const m = document.createElement('div'); m.className = 'meta';
     if ((recalled || []).length) {
-      const r = document.createElement('div');
-      r.textContent = 'Built on: ' + recalled.join(', ');
-      m.appendChild(r);
+      const label = document.createElement('div');
+      label.className = 'recalled-label';
+      label.textContent = 'Built on:';
+      m.appendChild(label);
+      const trail = document.createElement('div');
+      trail.className = 'recalled-trail';
+      recalled.forEach(r => {
+        const chip = document.createElement('span');
+        chip.className = 'recalled-chip';
+        chip.textContent = r.query;
+        chip.title = 'Open this chat';
+        makeClickable(chip, () => { showChatView(); openConversation(r.conversation_id); });
+        trail.appendChild(chip);
+      });
+      m.appendChild(trail);
     }
     (sources || []).forEach(u => {
       const a = document.createElement('a');
@@ -1141,7 +1158,7 @@ CHAT_HTML = """<!doctype html>
       const t = turn();
       userLine(t, e.query);
       assistantText(t, e.summary, e.kind, {plain: e.kind === 'document' || e.kind === 'note'});
-      metaBlock(t, [], e.sources);
+      metaBlock(t, e.recalled, e.sources);
     });
     setBreadcrumb();
     recordVisit(id);
