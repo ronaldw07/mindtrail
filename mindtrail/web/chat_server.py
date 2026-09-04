@@ -11,6 +11,7 @@ the HTTP plumbing around them.
 from __future__ import annotations
 
 import json
+import ssl
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -24,7 +25,8 @@ from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.organize.trash import NodeTrash, Trash
-from mindtrail.web import api
+from mindtrail.web import api, auth
+from mindtrail.web.auth import AuthState
 from mindtrail.web.chat_ui import CHAT_HTML
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -74,20 +76,70 @@ class Deps:
         self.roadmap_nodes = roadmap_nodes or RoadmapNodeStore()
 
 
-def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
+def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandler]:
     class ChatHandler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):
             pass  # keep the terminal quiet during a chat session
 
         # --- helpers ---
 
-        def _json(self, payload: dict, status: int = 200) -> None:
+        def _json(
+            self, payload: dict, status: int = 200, headers: dict[str, str] | None = None
+        ) -> None:
             body = json.dumps(payload).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(body)
+
+        # --- auth ---
+
+        def _session_id(self) -> str | None:
+            return auth.parse_session_cookie(self.headers.get("Cookie"))
+
+        def _is_authenticated(self) -> bool:
+            return auth_state.sessions.is_valid(self._session_id())
+
+        def _unauthorized(self) -> None:
+            self._json({"error": "unauthorized"}, 401)
+
+        def _login_page(self) -> None:
+            body = auth.LOGIN_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _request_is_https(self) -> bool:
+            # This server never terminates TLS itself. Either it is
+            # SSL-wrapped directly, or it sits behind a reverse proxy that
+            # is expected to say so - never setting Secure would be wrong
+            # in that second case.
+            if isinstance(self.connection, ssl.SSLSocket):
+                return True
+            return self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+
+        def _handle_login(self) -> None:
+            address = self.client_address[0] if self.client_address else "unknown"
+            if auth_state.limiter.is_blocked(address):
+                self._json({"error": "too many attempts, try again shortly"}, 429)
+                return
+            body = self._json_body() or {}
+            candidate = str(body.get("token", ""))
+            if not auth_state.config.check(candidate):
+                auth_state.limiter.record_failure(address)
+                self._json({"error": "invalid token"}, 401)
+                return
+            auth_state.limiter.record_success(address)
+            session_id = auth_state.sessions.create()
+            cookie = auth.build_session_cookie_header(
+                session_id, secure=self._request_is_https()
+            )
+            self._json({"ok": True}, headers={"Set-Cookie": cookie})
 
         def _body(self) -> bytes:
             length = int(self.headers.get("Content-Length", 0))
@@ -124,6 +176,12 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
 
         def do_GET(self):
             path = urlparse(self.path).path
+            if auth_state.config.required and not self._is_authenticated():
+                if path == "/":
+                    self._login_page()
+                else:
+                    self._unauthorized()
+                return
             if path == "/":
                 body = CHAT_HTML.encode("utf-8")
                 self.send_response(200)
@@ -186,6 +244,14 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
         def do_POST(self):
             parsed = urlparse(self.path)
             path = parsed.path
+
+            if auth_state.config.required:
+                if path == "/login":
+                    self._handle_login()
+                    return
+                if not self._is_authenticated():
+                    self._unauthorized()
+                    return
 
             if path == "/api/ask":
                 body = self._json_body()
@@ -345,6 +411,9 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
 
         def do_PATCH(self):
             path = urlparse(self.path).path
+            if auth_state.config.required and not self._is_authenticated():
+                self._unauthorized()
+                return
             body = self._json_body()
             if body is None:
                 self._json({"error": "malformed request body"}, 400)
@@ -373,6 +442,9 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
 
         def do_DELETE(self):
             path = urlparse(self.path).path
+            if auth_state.config.required and not self._is_authenticated():
+                self._unauthorized()
+                return
             if path.startswith("/api/conversations/"):
                 self._json(
                     api.handle_delete_conversation(
@@ -406,7 +478,13 @@ def run_chat_server(
     open_browser: bool = True,
     host: str = "127.0.0.1",
 ) -> None:
-    server = ThreadingHTTPServer((host, port), make_handler(deps))
+    # Resolved (and, if unsafe, raised) before any socket is bound: a
+    # 0.0.0.0 bind with no MINDTRAIL_TOKEN must never come up listening.
+    auth_state = AuthState.for_host(host)
+    if auth_state.config.required:
+        print("mindtrail chat: MINDTRAIL_TOKEN set, auth required")
+
+    server = ThreadingHTTPServer((host, port), make_handler(deps, auth_state))
     url = f"http://{'127.0.0.1' if host == '0.0.0.0' else host}:{port}"
     print(f"mindtrail chat running at {url}  (Ctrl+C to stop)")
     if open_browser:
