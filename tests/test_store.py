@@ -2,7 +2,7 @@
 
 import pytest
 
-from mindtrail.memory.store import MemoryStore
+from mindtrail.memory.store import CHUNK_CHARS, MemoryStore, _chunk_text
 
 
 @pytest.fixture
@@ -181,3 +181,164 @@ def test_kind_round_trips_through_storage(store):
     store.add("q", "a", [], kind="note")
 
     assert store.all()[0].kind == "note"
+
+
+# --- chunking (long entries split into multiple embedded vectors) --------
+
+
+def test_chunk_text_leaves_short_text_alone():
+    assert _chunk_text("short") == ["short"]
+
+
+def test_chunk_text_splits_long_text():
+    long_text = "Sentence one. " * 200
+
+    chunks = _chunk_text(long_text)
+
+    assert len(chunks) > 1
+    assert all(len(c) <= CHUNK_CHARS for c in chunks)
+
+
+def test_a_long_entry_is_stored_as_multiple_chroma_rows(store):
+    long_summary = "Filler sentence about nothing important. " * 60
+    entry = store.add("q", long_summary, [])
+
+    raw = store._collection.get()
+    rows = [
+        rid for rid in raw["ids"]
+        if rid == entry.id or rid.startswith(entry.id + "::chunk")
+    ]
+    assert len(rows) > 1
+
+
+def test_search_finds_content_only_present_in_a_later_chunk(store):
+    # A distinctive phrase placed after enough filler that it would sit
+    # past the embedder's 256-token truncation point in a single vector -
+    # this is the exact failure a single-vector store would have.
+    filler = "This paragraph discusses ordinary background material. " * 40
+    long_summary = filler + "The secret keyword is zylophonic."
+    store.add("a very long entry", long_summary, [])
+    store.add("an unrelated short entry", "This is about gardening and plants.", [])
+
+    found = store.search("zylophonic", k=1)
+
+    assert len(found) == 1
+    assert found[0].query == "a very long entry"
+
+
+def test_search_does_not_return_the_same_entry_twice_from_multiple_chunks(store):
+    long_summary = "Filler content repeated many times. " * 60
+    store.add("long entry", long_summary, [])
+    store.add("other entry", "something else entirely", [])
+
+    found = store.search("filler content repeated", k=5)
+
+    ids = [e.id for e in found]
+    assert len(ids) == len(set(ids))
+
+
+def test_all_counts_a_long_entry_once(store):
+    long_summary = "Filler content repeated many times. " * 60
+    store.add("long entry", long_summary, [])
+
+    assert len(store.all()) == 1
+
+
+def test_count_reflects_entries_not_chunk_rows(store):
+    long_summary = "Filler content repeated many times. " * 60
+    store.add("long entry", long_summary, [])
+    store.add("short entry", "short", [])
+
+    assert store.count() == 2
+
+
+def test_deleting_a_conversation_removes_every_chunk_of_a_long_entry(store):
+    long_summary = "Filler content repeated many times. " * 60
+    entry = store.add("long entry", long_summary, [], conversation_id="c1")
+
+    removed = store.delete_conversation_entries("c1")
+
+    assert removed == 1
+    raw = store._collection.get()
+    assert entry.id not in raw["ids"]
+    assert not any(rid.startswith(entry.id + "::chunk") for rid in raw["ids"])
+
+
+def test_assigning_a_conversation_updates_every_chunk(store):
+    long_summary = "Filler content repeated many times. " * 60
+    entry = store.add("long entry", long_summary, [])
+
+    store.assign_conversation([entry.id], "c1")
+
+    raw = store._collection.get()
+    for meta in raw["metadatas"]:
+        if meta.get("parent_id") == entry.id:
+            assert meta["conversation_id"] == "c1"
+
+
+# --- reindexing pre-chunking entries --------------------------------------
+
+
+def _legacy_row(store, entry_id, query="q", summary="s", **overrides):
+    """Writes a row the way the store did before chunking existed - no
+    is_chunk or parent_id metadata."""
+    meta = {
+        "query": query, "summary": summary, "sources": "",
+        "created_at": "2020-01-01T00:00:00+00:00", "topic": "",
+        "key_facts": "", "kind": "research", "conversation_id": "",
+    }
+    meta.update(overrides)
+    store._collection.add(
+        ids=[entry_id], documents=[f"{query}\n\n{summary}"], metadatas=[meta]
+    )
+
+
+def test_reindex_is_a_noop_when_nothing_is_legacy(store):
+    store.add("q", "a", [])
+
+    assert store.reindex_legacy_entries() == 0
+
+
+def test_reindex_migrates_a_pre_chunking_row(store):
+    _legacy_row(store, "legacy-1", query="old question", summary="old summary")
+
+    migrated = store.reindex_legacy_entries()
+
+    assert migrated == 1
+    entries = store.all()
+    assert len(entries) == 1
+    assert entries[0].id == "legacy-1"
+    assert entries[0].query == "old question"
+
+
+def test_reindexing_preserves_the_original_id_and_conversation(store):
+    _legacy_row(store, "legacy-2", conversation_id="c1")
+
+    store.reindex_legacy_entries()
+
+    assert store.all()[0].id == "legacy-2"
+    assert store.by_conversation("c1")[0].id == "legacy-2"
+
+
+def test_reindexing_a_long_legacy_entry_splits_it_into_chunks(store):
+    long_summary = "Filler content repeated many times. " * 60
+    _legacy_row(store, "legacy-3", summary=long_summary)
+
+    store.reindex_legacy_entries()
+
+    raw = store._collection.get()
+    rows = [
+        rid for rid in raw["ids"]
+        if rid == "legacy-3" or rid.startswith("legacy-3::chunk")
+    ]
+    assert len(rows) > 1
+
+
+def test_reindex_is_idempotent(store):
+    _legacy_row(store, "legacy-4")
+
+    first = store.reindex_legacy_entries()
+    second = store.reindex_legacy_entries()
+
+    assert first == 1
+    assert second == 0

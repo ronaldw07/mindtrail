@@ -152,6 +152,9 @@ def cmd_chat(args) -> int:
     created = backfill_conversations(store, chats)
     if created:
         print(f"organized {created} existing topic(s) into conversations")
+    reindexed = store.reindex_legacy_entries()
+    if reindexed:
+        print(f"reindexed {reindexed} existing entr{'y' if reindexed == 1 else 'ies'} for chunked search")
 
     deps = Deps(
         researcher=researcher,
