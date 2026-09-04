@@ -433,6 +433,18 @@ key facts; the page groups entries under those topics with a keyword filter
 and links back to sources. Nothing to keep running — regenerate with `web`
 whenever you want it current.
 
+`chat` binds `127.0.0.1` by default and needs no login there. Pass
+`--host 0.0.0.0` (as the Docker image does, to be reachable from outside
+the container) and it requires `MINDTRAIL_TOKEN` to be set — it refuses
+to start otherwise, rather than come up world-reachable with no auth.
+With a token set, the first request gets a login page; a correct token
+sets a session cookie for subsequent requests.
+
+```bash
+MINDTRAIL_TOKEN=some-long-random-string \
+  .venv/bin/python -m mindtrail.cli chat --host 0.0.0.0
+```
+
 ## Tests
 
 446 tests, no network and no API key required — search, fetch, and the model
