@@ -26,6 +26,7 @@ from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import ConversationStore, title_from_question
 from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import ProjectStore
+from mindtrail.organize.roadmap_templates import TEMPLATES, get_template
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.organize.trash import DeletedConversation, Trash
 
@@ -910,6 +911,66 @@ def handle_generate_roadmap(
 
     title_to_id = {n.title: n.id for n in decided}
     placed = _place_new_nodes(decided, proposal)
+    for item, x, y in placed:
+        created = nodes.add(
+            roadmap.id, item.title, item.detail, status="proposed", x=x, y=y
+        )
+        title_to_id[item.title] = created.id
+
+    for item, _, _ in placed:
+        deps = [title_to_id[d] for d in item.depends_on if d in title_to_id]
+        if deps:
+            nodes.set_depends_on(title_to_id[item.title], deps)
+
+    return handle_get_roadmap(roadmaps, nodes, project_id)
+
+
+def handle_list_templates() -> dict:
+    return {
+        "templates": [
+            {
+                "id": t.id,
+                "name": t.name,
+                "description": t.description,
+                "step_count": len(t.steps),
+            }
+            for t in TEMPLATES
+        ]
+    }
+
+
+def handle_apply_template(
+    roadmaps: RoadmapStore,
+    nodes: RoadmapNodeStore,
+    projects: ProjectStore,
+    project_id: str,
+    template_id: str,
+    goal: str = "",
+) -> dict:
+    """Instantiate a template's steps as proposed nodes on the project's
+    roadmap.
+
+    Unlike generation, this never deletes anything - applying a template
+    twice is the user's choice, not a bug to prevent. Steps propose, they
+    do not decide, so they land with status="proposed" and go through the
+    same accept/reject flow as an LLM-generated step.
+    """
+    project = projects.get(project_id)
+    if project is None:
+        return {"error": "no such project"}
+
+    template = get_template(template_id)
+    if template is None:
+        return {"error": "no such template"}
+
+    roadmap = roadmaps.for_project(project_id)
+    if roadmap is None:
+        roadmap = roadmaps.create(goal.strip() or template.name, project_id=project_id)
+
+    existing = nodes.for_roadmap(roadmap.id)
+    placed = _place_new_nodes(existing, template.steps)
+
+    title_to_id: dict[str, str] = {}
     for item, x, y in placed:
         created = nodes.add(
             roadmap.id, item.title, item.detail, status="proposed", x=x, y=y
