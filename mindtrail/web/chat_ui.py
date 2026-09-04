@@ -734,8 +734,23 @@ CHAT_HTML = """<!doctype html>
       b.onclick = e => { e.stopPropagation(); opts.onAdd(); };
       row.appendChild(b);
     }
-    if (opts.onClick) row.onclick = opts.onClick;
+    if (opts.onClick) makeClickable(row, opts.onClick);
     return row;
+  }
+
+  // Every clickable row in the app is a plain div with an onclick and no
+  // other affordance for reaching it - Tab skips over all of them, and
+  // there was no keyboard equivalent for the click at all. This makes a
+  // div behave like a real button: reachable by Tab, activated by
+  // Enter or Space, exposed to a screen reader as a button.
+  function makeClickable(el, onClick) {
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    el.onclick = onClick;
+    el.addEventListener('keydown', e => {
+      if (e.target !== el) return; // let a real button/input inside handle its own key
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e); }
+    });
   }
 
   function chatRow(c) {
@@ -766,7 +781,7 @@ CHAT_HTML = """<!doctype html>
     btn.setAttribute('aria-label', 'Chat options');
     btn.onclick = e => { e.stopPropagation(); openChatMenu(e, c); };
     row.appendChild(btn);
-    row.onclick = () => openConversation(c.id);
+    makeClickable(row, () => openConversation(c.id));
     return row;
   }
 
@@ -806,7 +821,7 @@ CHAT_HTML = """<!doctype html>
         name.textContent = p.name;
         // Clicking the name opens the project screen; the caret to its
         // left is what expands the chat list inline.
-        name.onclick = e => { e.stopPropagation(); openProject(p.id); };
+        makeClickable(name, e => { e.stopPropagation(); openProject(p.id); });
         head.appendChild(name);
         const btn = document.createElement('button');
         btn.className = 'menu-btn';
@@ -815,10 +830,10 @@ CHAT_HTML = """<!doctype html>
         btn.setAttribute('aria-label', 'Project options');
         btn.onclick = e => { e.stopPropagation(); openProjectMenu(e, p); };
         head.appendChild(btn);
-        head.onclick = () => {
+        makeClickable(head, () => {
           expanded ? openProjects.delete(p.id) : openProjects.add(p.id);
           renderTree();
-        };
+        });
         wrap.appendChild(head);
 
         if (expanded) {
@@ -1382,7 +1397,7 @@ CHAT_HTML = """<!doctype html>
       w.className = 'when';
       w.textContent = relTime(c.updated_at);
       row.appendChild(w);
-      row.onclick = () => { showChatView(); openConversation(c.id); };
+      makeClickable(row, () => { showChatView(); openConversation(c.id); });
       chatsCard.appendChild(row);
     });
     main.appendChild(chatsCard);
@@ -1499,7 +1514,7 @@ CHAT_HTML = """<!doctype html>
       const chip = document.createElement('span');
       chip.className = 'file-chip';
       chip.textContent = f.name;
-      chip.onclick = () => { showChatView(); openConversation(f.conversation_id); };
+      makeClickable(chip, () => { showChatView(); openConversation(f.conversation_id); });
       filesCard.appendChild(chip);
     });
     rail.appendChild(filesCard);
@@ -1585,7 +1600,7 @@ CHAT_HTML = """<!doctype html>
         s.textContent = 'from: ' + h.source.replace(/^\\[[A-Z]+\\]\\s*/, '');
         item.appendChild(s);
       }
-      item.onclick = () => expandHighlight(h, data.name);
+      makeClickable(item, () => expandHighlight(h, data.name));
       cardEl.appendChild(item);
     });
 
@@ -2401,14 +2416,14 @@ CHAT_HTML = """<!doctype html>
         sub.className = 'sr-sub';
         sub.textContent = subParts.join(' \\u00b7 ');
         item.appendChild(sub);
-        item.onclick = () => {
+        makeClickable(item, () => {
           closeResults();
           input.value = '';
           if (r.conversation_id) {
             showChatView();
             openConversation(r.conversation_id);
           }
-        };
+        });
         results.appendChild(item);
       });
       results.classList.add('open');
@@ -2452,7 +2467,7 @@ CHAT_HTML = """<!doctype html>
       s.textContent = subText;
       item.appendChild(s);
     }
-    item.onclick = onClick;
+    makeClickable(item, onClick);
     return item;
   }
 
