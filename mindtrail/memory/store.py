@@ -296,6 +296,54 @@ class MemoryStore:
             self._collection.delete(ids=self._all_chunk_ids(doomed))
         return len(doomed)
 
+    def delete_entry(self, entry_id: str) -> bool:
+        """Delete one entry (and every extra chunk it was split into).
+
+        Returns whether an entry with that id existed. The bulk sibling
+        is delete_conversation_entries; this is the single-entry path a
+        bad or wrong research result needs so it stops resurfacing in
+        recall forever.
+        """
+        ids = self._all_chunk_ids([entry_id])
+        if not ids:
+            return False
+        self._collection.delete(ids=ids)
+        return True
+
+    def update_entry(
+        self,
+        entry_id: str,
+        summary: str | None = None,
+        query: str | None = None,
+    ) -> Entry | None:
+        """Edit an entry's text, re-embedding it.
+
+        Chroma embeds the document text (query+summary) once, at write
+        time - it is not derived from metadata. A plain metadata update
+        would leave the *old* vector in place, so recall would keep
+        matching the old wording forever while the UI showed the new
+        text: silent, and very hard to debug later. So this deletes the
+        entry's rows and re-adds it through _write_chunks, the same path
+        `add` uses, which both regenerates the embedding and re-splits
+        the text if its length crossed a chunk boundary.
+
+        Returns None if the id does not exist. Fields left as None keep
+        their current value.
+        """
+        existing = self.get(entry_id)
+        if existing is None:
+            return None
+
+        new_summary = existing.summary if summary is None else summary
+        new_query = existing.query if query is None else query
+        if not new_query.strip() or not new_summary.strip():
+            raise ValueError("query and summary must not be empty")
+
+        updated = replace(existing, query=new_query, summary=new_summary)
+        self._collection.delete(ids=self._all_chunk_ids([entry_id]))
+        self._write_chunks(updated)
+        return updated
+
     def reindex_legacy_entries(self) -> int:
         """One-time upgrade path for entries written before chunking
         existed. They carry no is_chunk/parent_id metadata, so the
