@@ -1,13 +1,45 @@
 
   const $ = id => document.getElementById(id);
+
+  // ---------- prefs (localStorage) ----------
+  // Safari private mode throws on touching localStorage at all, and a
+  // full quota throws on write - this is the one place in the app where
+  // swallowing the error is deliberately correct. A failed read just
+  // falls back to the caller's default; a failed write is silently
+  // skipped, so a pref that can't be saved never breaks the feature it
+  // belongs to. Every key is namespaced so the app never collides with
+  // anything else sharing this origin.
+  const PREFS_PREFIX = 'mindtrail:';
+  const prefs = {
+    get(key, fallback) {
+      try {
+        const raw = localStorage.getItem(PREFS_PREFIX + key);
+        return raw === null ? fallback : JSON.parse(raw);
+      } catch (err) {
+        return fallback;
+      }
+    },
+    set(key, value) {
+      try {
+        localStorage.setItem(PREFS_PREFIX + key, JSON.stringify(value));
+      } catch (err) {
+        // ignored - see note above
+      }
+    },
+  };
+
   const log = $('log'), input = $('input'), send = $('send'), status = $('status');
   const menu = $('menu'), overlay = $('overlay');
+  // Restored before the sidebar or composer ever render, so there is no
+  // collapsed-then-expanded (or draft-then-empty) flash on reload.
+  if (prefs.get('sidebarCollapsed', false)) $('sidebar').classList.add('collapsed');
+  input.value = prefs.get('draft', '');
   let current = null;
   let currentProject = null;
   let pendingProject = null;   // project a not-yet-created chat belongs to
   let sidebar = {projects: [], unfiled: []};
-  let projectsOpen = false;
-  let chatsOpen = true;
+  let projectsOpen = prefs.get('projectsOpen', false);
+  let chatsOpen = prefs.get('chatsOpen', true);
   // {role: 'user'|'assistant', content, actions?}[] for the roadmap,
   // project, and profile chat panels - reset when their screen is
   // freshly opened (not on a background refresh), never persisted.
@@ -16,10 +48,12 @@
   let profileChatLog = [];
   // Roadmap canvas viewport. Module-scope because every node edit
   // re-renders the whole canvas, and losing the user's zoom/pan on each
-  // accept or note would be maddening.
+  // accept or note would be maddening. The default here only matters
+  // before a roadmap screen has actually loaded and restored (or
+  // fit) its own viewport.
   let roadmapView = {zoom: 1, panX: 0, panY: 0};
   const MIN_ZOOM = 0.2, MAX_ZOOM = 2;
-  const openProjects = new Set();
+  const openProjects = new Set(prefs.get('openProjects', []));
 
   const api = async (path, opts) => (await fetch(path, opts)).json();
   const jsonSend = (path, body, method) => api(path, {
@@ -369,6 +403,13 @@
   }
 
   function renderTree() {
+    // Every toggle of these three (section open/closed, which projects
+    // are expanded) re-renders the tree, so persisting here in one place
+    // catches every mutation path instead of threading a prefs.set into
+    // each individual click handler.
+    prefs.set('projectsOpen', projectsOpen);
+    prefs.set('chatsOpen', chatsOpen);
+    prefs.set('openProjects', Array.from(openProjects));
     const tree = $('tree');
     tree.innerHTML = '';
 
@@ -719,7 +760,8 @@
   $('nav-fwd').onclick = () => goTo(navPos + 1);
 
   $('toggle-sidebar').onclick = () => {
-    $('sidebar').classList.toggle('collapsed');
+    const collapsed = $('sidebar').classList.toggle('collapsed');
+    prefs.set('sidebarCollapsed', collapsed);
   };
 
   // ---------- opening ----------
@@ -740,6 +782,7 @@
     });
     setBreadcrumb();
     recordVisit(id);
+    prefs.set('lastView', {type: 'chat', id});
     await loadSidebar();
     log.scrollTop = log.scrollHeight;
   }
@@ -752,6 +795,7 @@
     showEmptyState();
     setBreadcrumb();
     recordVisit(null);
+    prefs.set('lastView', {type: 'chat', id: null});
     renderTree();
     input.focus();
   }
@@ -942,6 +986,9 @@
     const rmDataPromise = api('/api/roadmap/' + id);
     const data = await dataPromise;
     if (data.error) { view.innerHTML = ''; setStatus(data.error); return; }
+    // Only a real navigation (not a background refresh after a rename or
+    // move elsewhere) should overwrite what reload restores to.
+    if (!opts.background) prefs.set('lastView', {type: 'project', id});
 
     $('breadcrumb').innerHTML = '';
     $('breadcrumb').appendChild(document.createTextNode('Projects / '));
@@ -1253,6 +1300,7 @@
     roadmapChatLog = [];
     roadmapView = {zoom: 1, panX: 0, panY: 0};
     showRoadmapView();
+    prefs.set('lastView', {type: 'roadmap', id: projectId});
     $('breadcrumb').innerHTML = '';
     $('breadcrumb').appendChild(document.createTextNode(projectName + ' / '));
     const b = document.createElement('b');
@@ -1320,7 +1368,18 @@
       if (templates.length) appendTemplatePicker(empty, templates, projectId, projectName, goalInput);
       return;
     }
-    renderRoadmap(projectId, projectName, data.roadmap, data.nodes, {fitView: true});
+    // Opening an existing roadmap: a saved viewport beats fitting to
+    // content, so the user lands back where they left it panned/zoomed
+    // instead of being re-centred on every visit. (Tidy and regenerate
+    // deliberately skip this and always fit - the layout just changed
+    // under the user, so their old viewport no longer means anything.)
+    const savedView = prefs.get('roadmapView:' + data.roadmap.id, null);
+    if (savedView) {
+      roadmapView = savedView;
+      renderRoadmap(projectId, projectName, data.roadmap, data.nodes);
+    } else {
+      renderRoadmap(projectId, projectName, data.roadmap, data.nodes, {fitView: true});
+    }
   }
 
   // Fills in a template's name/description/step-count on a card - split
@@ -1485,6 +1544,11 @@
         'scale(' + roadmapView.zoom + ')';
       const label = $('zoom-level');
       if (label) label.textContent = Math.round(roadmapView.zoom * 100) + '%';
+      // Every pan/zoom mutation (drag, wheel, zoom buttons, fit-to-view)
+      // funnels through here, so this is the one place that needs to
+      // persist the viewport - keyed per roadmap so different projects
+      // don't clobber each other's pan/zoom.
+      prefs.set('roadmapView:' + roadmap.id, roadmapView);
     }
 
     function contentBounds() {
@@ -1961,8 +2025,9 @@
     showProfileView();
     $('breadcrumb').textContent = 'Profile';
     // A background refresh (after the assistant saves a proposed
-    // profile) must not wipe the chat history it's about to redraw.
-    if (!opts.background) profileChatLog = [];
+    // profile) must not wipe the chat history it's about to redraw, nor
+    // overwrite what reload restores to.
+    if (!opts.background) { profileChatLog = []; prefs.set('lastView', {type: 'profile'}); }
 
     const view = $('profile-view');
     view.innerHTML = '';
@@ -2171,6 +2236,7 @@
     currentProject = null;
     current = null;
     showDashboardView();
+    prefs.set('lastView', {type: 'dashboard'});
     $('breadcrumb').textContent = 'Today';
 
     const view = $('dashboard-view');
@@ -2240,6 +2306,11 @@
 
   // ---------- asking ----------
 
+  // Persisted as the user types, so a reload never loses an unsent
+  // message. Cleared only once a send actually succeeds (below) - if the
+  // request fails, the draft stays so it isn't lost a second time.
+  input.addEventListener('input', () => prefs.set('draft', input.value));
+
   $('form').addEventListener('submit', async e => {
     e.preventDefault();
     const message = input.value.trim();
@@ -2262,6 +2333,7 @@
       pending.classList.remove('pending');
       if (data.error) { pending.textContent = 'Error: ' + data.error; }
       else {
+        prefs.set('draft', '');
         setMarkdown(pending, data.answer);
         metaBlock(t, data.recalled, data.sources);
         if (!current) {
@@ -2387,7 +2459,40 @@
     return btn;
   }
 
-  openDashboardView();
+  // ---------- boot ----------
+  // Restores whichever screen the user was last on. A persisted view
+  // pointing at a project, roadmap, or chat that no longer exists (it
+  // was deleted since the last visit) must never strand the user on a
+  // broken screen, so every branch validates first and falls back to
+  // Today silently rather than surfacing an error with nothing to do
+  // about it.
+  async function restoreLastView() {
+    const last = prefs.get('lastView', null);
+    if (!last) { openDashboardView(); return; }
+    if (last.type === 'chat') {
+      if (!last.id) { newChat(); return; }
+      const data = await api('/api/conversations/' + last.id);
+      if (data.error) { openDashboardView(); return; }
+      await openConversation(last.id);
+      return;
+    }
+    if (last.type === 'project') {
+      const data = await api('/api/projects/' + last.id + '?background=1');
+      if (data.error) { openDashboardView(); return; }
+      await openProject(last.id);
+      return;
+    }
+    if (last.type === 'roadmap') {
+      const data = await api('/api/projects/' + last.id + '?background=1');
+      if (data.error) { openDashboardView(); return; }
+      await openRoadmapView(last.id, data.name);
+      return;
+    }
+    if (last.type === 'profile') { await openProfileView(); return; }
+    openDashboardView();
+  }
+
+  restoreLastView();
   updateNav();
   loadSidebar();
   
