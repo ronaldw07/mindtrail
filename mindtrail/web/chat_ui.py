@@ -204,8 +204,24 @@ CHAT_HTML = """<!doctype html>
                    border-bottom: 1px solid #2a2a2a; flex-shrink: 0; }
     #roadmap-top .goal { flex: 1; font-size: 0.92rem; font-weight: 600; }
     #roadmap-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
-    #canvas-scroll { flex: 1; position: relative; overflow: auto; }
-    #canvas { position: relative; width: 2400px; height: 1600px; }
+    /* Pan/zoom viewport: the canvas is transformed rather than scrolled,
+       so a scaled canvas can't disagree with the scrollbars about how
+       big it is. Panning is handled in JS on the background. */
+    #canvas-scroll { flex: 1; position: relative; overflow: hidden;
+                     cursor: grab; touch-action: none; }
+    #canvas-scroll.panning { cursor: grabbing; }
+    #canvas { position: absolute; top: 0; left: 0; width: 2400px; height: 1600px;
+              transform-origin: 0 0; }
+    #zoom-controls { position: absolute; right: 0.9rem; bottom: 0.9rem; z-index: 5;
+                     display: flex; align-items: center; gap: 0.25rem; padding: 0.25rem;
+                     background: #212121cc; border: 1px solid #333; border-radius: 8px;
+                     backdrop-filter: blur(8px); }
+    #zoom-controls button { border: none; background: transparent; color: #c5c5c5;
+                            cursor: pointer; font-size: 0.85rem; border-radius: 5px;
+                            padding: 0.2rem 0.5rem; line-height: 1.5; }
+    #zoom-controls button:hover { background: #333; color: #fff; }
+    #zoom-level { font-size: 0.75rem; color: #868686; min-width: 3.1rem;
+                  text-align: center; user-select: none; }
     #canvas svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%;
                   pointer-events: none; }
     #canvas svg path { fill: none; stroke: #3d3d3d; stroke-width: 1.5; }
@@ -389,6 +405,11 @@ CHAT_HTML = """<!doctype html>
   let roadmapChatLog = [];
   let projectChatLog = [];
   let profileChatLog = [];
+  // Roadmap canvas viewport. Module-scope because every node edit
+  // re-renders the whole canvas, and losing the user's zoom/pan on each
+  // accept or note would be maddening.
+  let roadmapView = {zoom: 1, panX: 0, panY: 0};
+  const MIN_ZOOM = 0.2, MAX_ZOOM = 2;
   const openProjects = new Set();
 
   const api = async (path, opts) => (await fetch(path, opts)).json();
@@ -1531,6 +1552,7 @@ CHAT_HTML = """<!doctype html>
     currentProject = projectId;
     current = null;
     roadmapChatLog = [];
+    roadmapView = {zoom: 1, panX: 0, panY: 0};
     showRoadmapView();
     $('breadcrumb').innerHTML = '';
     $('breadcrumb').appendChild(document.createTextNode(projectName + ' / '));
@@ -1677,11 +1699,19 @@ CHAT_HTML = """<!doctype html>
       return side === 'out' ? {x: n.x + w, y: n.y + h / 2} : {x: n.x, y: n.y + h / 2};
     }
 
-    // Shrinks and scales the canvas so every card fits in the visible
-    // viewport at once - "zoom out" scaled to how much content there
-    // is, never zooming in past 100% for a small roadmap.
-    function fitCanvasToContent() {
-      if (!nodesList.length) return;
+    // --- pan / zoom ---------------------------------------------------
+
+    const clampZoom = z => Math.min(Math.max(z, MIN_ZOOM), MAX_ZOOM);
+
+    function applyViewport() {
+      canvas.style.transform =
+        'translate(' + roadmapView.panX + 'px,' + roadmapView.panY + 'px) ' +
+        'scale(' + roadmapView.zoom + ')';
+      const label = $('zoom-level');
+      if (label) label.textContent = Math.round(roadmapView.zoom * 100) + '%';
+    }
+
+    function contentBounds() {
       const margin = 80;
       let maxRight = 0, maxBottom = 0;
       nodesList.forEach(n => {
@@ -1690,18 +1720,104 @@ CHAT_HTML = """<!doctype html>
         maxRight = Math.max(maxRight, n.x + el.offsetWidth);
         maxBottom = Math.max(maxBottom, n.y + el.offsetHeight);
       });
-      const contentWidth = Math.max(maxRight + margin, 400);
-      const contentHeight = Math.max(maxBottom + margin, 300);
-      canvas.style.width = contentWidth + 'px';
-      canvas.style.height = contentHeight + 'px';
-      const scale = Math.min(
-        scroll.clientWidth / contentWidth,
-        scroll.clientHeight / contentHeight,
-        1
-      );
-      canvas.style.transform = 'scale(' + scale + ')';
-      canvas.style.transformOrigin = '0 0';
+      return {
+        width: Math.max(maxRight + margin, 400),
+        height: Math.max(maxBottom + margin, 300),
+      };
     }
+
+    // Scales so every card fits at once and centres what's there,
+    // never zooming past 100% for a small roadmap.
+    function fitCanvasToContent() {
+      if (!nodesList.length) return;
+      const {width, height} = contentBounds();
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      const zoom = clampZoom(Math.min(
+        scroll.clientWidth / width, scroll.clientHeight / height, 1
+      ));
+      roadmapView = {
+        zoom,
+        panX: Math.max((scroll.clientWidth - width * zoom) / 2, 0),
+        panY: Math.max((scroll.clientHeight - height * zoom) / 2, 0),
+      };
+      applyViewport();
+    }
+
+    // Keeps the point under the cursor fixed while the scale changes,
+    // so zooming feels like it's aimed where you're looking rather than
+    // at an arbitrary corner.
+    function zoomAt(clientX, clientY, nextZoom) {
+      const rect = scroll.getBoundingClientRect();
+      const vx = clientX - rect.left, vy = clientY - rect.top;
+      const zoom = clampZoom(nextZoom);
+      const k = zoom / roadmapView.zoom;
+      roadmapView = {
+        zoom,
+        panX: vx - (vx - roadmapView.panX) * k,
+        panY: vy - (vy - roadmapView.panY) * k,
+      };
+      applyViewport();
+    }
+
+    function zoomFromCentre(nextZoom) {
+      zoomAt(
+        scroll.getBoundingClientRect().left + scroll.clientWidth / 2,
+        scroll.getBoundingClientRect().top + scroll.clientHeight / 2,
+        nextZoom
+      );
+    }
+
+    // Trackpad pinch arrives as wheel + ctrlKey; a plain wheel scrolls
+    // the canvas rather than the page, which is what a canvas should do.
+    scroll.addEventListener('wheel', ev => {
+      ev.preventDefault();
+      if (ev.ctrlKey || ev.metaKey) {
+        zoomAt(ev.clientX, ev.clientY, roadmapView.zoom * (1 - ev.deltaY * 0.01));
+      } else {
+        roadmapView.panX -= ev.deltaX;
+        roadmapView.panY -= ev.deltaY;
+        applyViewport();
+      }
+    }, {passive: false});
+
+    // Drag anywhere that isn't a card to pan.
+    let panning = null;
+    scroll.addEventListener('pointerdown', ev => {
+      if (ev.target.closest('.node, #zoom-controls')) return;
+      panning = {x: ev.clientX, y: ev.clientY,
+                 panX: roadmapView.panX, panY: roadmapView.panY};
+      scroll.classList.add('panning');
+      scroll.setPointerCapture(ev.pointerId);
+    });
+    scroll.addEventListener('pointermove', ev => {
+      if (!panning) return;
+      roadmapView.panX = panning.panX + (ev.clientX - panning.x);
+      roadmapView.panY = panning.panY + (ev.clientY - panning.y);
+      applyViewport();
+    });
+    const endPan = () => { panning = null; scroll.classList.remove('panning'); };
+    scroll.addEventListener('pointerup', endPan);
+    scroll.addEventListener('pointercancel', endPan);
+
+    const zoomControls = document.createElement('div');
+    zoomControls.id = 'zoom-controls';
+    const zoomBtn = (label, title, onClick) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.title = title;
+      b.setAttribute('aria-label', title);
+      b.onclick = onClick;
+      zoomControls.appendChild(b);
+      return b;
+    };
+    zoomBtn('\\u2212', 'Zoom out', () => zoomFromCentre(roadmapView.zoom / 1.2));
+    const zoomLabel = document.createElement('span');
+    zoomLabel.id = 'zoom-level';
+    zoomControls.appendChild(zoomLabel);
+    zoomBtn('+', 'Zoom in', () => zoomFromCentre(roadmapView.zoom * 1.2));
+    zoomBtn('\\u2922', 'Fit to view', () => fitCanvasToContent());
+    scroll.appendChild(zoomControls);
 
     function drawEdges() {
       svg.innerHTML = '';
@@ -1851,8 +1967,11 @@ CHAT_HTML = """<!doctype html>
       });
       el.addEventListener('pointermove', ev => {
         if (!dragging) return;
-        n.x = dragging.origX + (ev.clientX - dragging.startX);
-        n.y = dragging.origY + (ev.clientY - dragging.startY);
+        // Cursor movement is in screen pixels but the card is positioned
+        // in canvas pixels, so the delta has to be divided by the zoom
+        // or a zoomed-out card outruns the cursor.
+        n.x = dragging.origX + (ev.clientX - dragging.startX) / roadmapView.zoom;
+        n.y = dragging.origY + (ev.clientY - dragging.startY) / roadmapView.zoom;
         el.style.left = n.x + 'px';
         el.style.top = n.y + 'px';
         drawEdges();
@@ -1986,8 +2105,17 @@ CHAT_HTML = """<!doctype html>
     body.appendChild(chatPanel);
 
     // Measured after the chat panel is in place, so the available
-    // width already excludes the space it takes up.
-    if (opts.fitView) fitCanvasToContent();
+    // width already excludes the space it takes up. Without fitView
+    // (a single node edit) the canvas keeps whatever zoom and pan the
+    // user had set, and only re-sizes to the new content bounds.
+    if (opts.fitView) {
+      fitCanvasToContent();
+    } else {
+      const {width, height} = contentBounds();
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      applyViewport();
+    }
   }
 
   // Applies one accepted chat-proposed action through the same endpoints
