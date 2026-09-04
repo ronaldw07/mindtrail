@@ -186,6 +186,58 @@ no focus trap and never restores focus to its trigger. Build a topmost-layer sta
 
 ---
 
+## Phase 2b — Durability
+
+The product is a memory tool that cannot back up, recover, or correct its own memory.
+That is a hole in the product, not a missing nicety. These come before the polish.
+
+### G1 — Export to markdown  *(build first)*
+Nothing in the codebase exports anything; `documents.py` is the only hit for "export" and
+it is an importer. Everything lives in one SQLite file plus a Chroma directory on one Mac.
+
+`mindtrail export --out DIR [--project ID]` writing plain markdown with YAML frontmatter:
+one file per conversation (turns, sources, recalled ids), one per project (instructions,
+highlights, roadmap with statuses/notes/due dates/dependencies), one for the profile, and
+`notes.md`. Deterministic filenames, slugified and collision-suffixed, so re-running
+overwrites cleanly instead of duplicating. Add a `POST /api/export` returning the path.
+This is the backup story and the portability story in one small feature.
+
+### G2 — Persist undo
+`Trash` is an in-memory `OrderedDict` behind a lock (`organize/trash.py:28-50`). Restart
+the server and every recoverable delete is gone. Move it to a `deleted_conversations`
+table with the payload as JSON and a `deleted_at`, keeping the same `put`/`take` API and
+the same eviction bound so nothing above it changes. Purge past `MAX_HELD` on write.
+
+### G3 — Delete and edit a single memory entry
+Only `delete_conversation_entries` exists (`memory/store.py:286`) — bulk, by conversation.
+One bad ingest is permanent and keeps resurfacing in recall forever.
+
+`MemoryStore.delete_entry(entry_id)` and `update_entry(entry_id, summary=...)`, deleting
+from and re-upserting into Chroma. Surface on the entry in the chat view and in search
+results. Editing must re-embed, or recall silently keeps matching the old text — that is
+the whole trap here.
+
+### G4 — Undo for roadmap nodes
+`handle_delete_node` hard-deletes. Reuse whatever G2 lands on; the same toast-with-undo
+pattern the conversation delete already uses. Note `RoadmapNodeStore.delete` deliberately
+leaves dangling `depends_on` references, so a restore must put the node back under its
+original id or the edges do not come back.
+
+### G5 — "This week" across projects
+Due dates render only inside their own roadmap. Nothing answers "what is due this week",
+which is the question the Today view is shaped around and cannot currently answer.
+A dashboard card querying nodes across every roadmap, grouped overdue / today / this week,
+each linking to its node. Sorting and the overdue colour already exist — reuse them.
+
+### G6 — Auth
+There is none, and the Dockerfile binds `0.0.0.0`. Fine on localhost, wide open the moment
+it is hosted. A single shared token from `MINDTRAIL_TOKEN`, checked in one place in
+`chat_server.py`, set as an httpOnly cookie after a login post. **If the variable is unset,
+bind to `127.0.0.1` and skip auth** so local use stays frictionless; refuse to bind
+`0.0.0.0` without a token rather than failing open. Constant-time compare.
+
+---
+
 ## Phase 3 — Verification
 
 Every phase must pass before it is done:
@@ -211,15 +263,29 @@ accessible name.
 
 ✗ The first draft's parallel diagram was falsified by its own text.
 
+Phase 0 is done (`7412d3c`). Because the CSS and JS are now real files, backend work and
+pure-client work genuinely can run in parallel — which was not true before.
+
 ```
-Phase 0   static files + node --check test     (alone)
-F3        prefs                                (alone — touches 4 areas)
-F1+F4+F5  canvas                               (alone in that area)
-F6        memory links                         (backend + canvas)
-F2        palette                              (backend + new module)
-Phase 1   design foundation                    (app.css — last, so it styles everything)
-Phase 3   audit + visual QA
+Phase 0   static files + node --check test     DONE (7412d3c)
+
+lane A (backend: python, api.py, chat_server.py)   lane B (client: app.js only)
+  G1  export to markdown                             F3  prefs      (no backend at all)
+  G2  persist undo                                   │
+  G3  entry delete/edit                              F1+F4+F5  canvas
+  G4  node undo                                      │
+  G5  this-week card                                 │
+  G6  auth                                           │
+        └──────────────── join ─────────────────────┘
+                  F6  memory links   (backend + canvas)
+                  F2  palette        (backend + client)
+                  Phase 1  design    (app.css — last, so it styles everything)
+                  Phase 3  audit + visual QA
 ```
+
+One writer per file at a time. Lane A owns the Python; lane B owns `app.js`. F3 is the
+only client task with zero backend need, which is what makes it safe to run alongside G1.
+Anything touching both lanes waits for the join.
 
 ## Risks
 
