@@ -117,7 +117,10 @@ exactly like research — a follow-up question in `ask` or `chat` can recall
 your resume or a note the same way it recalls a prior answer. `advice`
 reads everything stored (documents, notes, research) and writes a
 prioritized plan, citing which document/note/topic each recommendation
-comes from. `web` pins the latest advice above the topic sections.
+comes from. `web` pins the latest advice above the topic sections. The
+browser has its own **+ Note** button in the sidebar, next to Profile — the
+CLI command above stores a note with no conversation attached, which used
+to mean it was invisible in the browser; both paths now always attach one.
 
 Photos and scanned documents aren't supported — there's no vision-capable
 model on this Groq account (verified directly against the API, not
@@ -427,7 +430,7 @@ whenever you want it current.
 
 ## Tests
 
-417 tests, no network and no API key required — search, fetch, and the model
+425 tests, no network and no API key required — search, fetch, and the model
 are all stubbed. Coverage concentrates on logic that can be silently wrong
 (retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
 CLI glue.

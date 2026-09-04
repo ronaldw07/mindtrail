@@ -562,6 +562,83 @@ def test_upload_of_an_unparseable_pdf_errors(store, chats):
     assert "error" in response
 
 
+# --- notes ------------------------------------------------------------
+
+
+def test_adding_a_note_creates_a_conversation_for_it(store, chats):
+    response = api.handle_add_note(store, chats, "remember to follow up with recruiter")
+
+    assert response["ok"] is True
+    conversation = chats.get(response["conversation_id"])
+    assert conversation is not None
+    assert conversation.title == "remember to follow up with recruiter"
+
+
+def test_a_note_is_findable_afterward(store, chats):
+    response = api.handle_add_note(store, chats, "targeting agent-focused internships")
+
+    entries = store.by_conversation(response["conversation_id"])
+    assert len(entries) == 1
+    assert entries[0].kind == "note"
+    assert entries[0].summary == "targeting agent-focused internships"
+
+
+def test_note_headline_is_only_the_first_line(store, chats):
+    response = api.handle_add_note(store, chats, "first line\nsecond line")
+
+    entries = store.by_conversation(response["conversation_id"])
+    assert entries[0].query == "first line"
+
+
+def test_a_note_can_attach_to_an_existing_conversation(store, chats):
+    existing = chats.create("Career chat")
+
+    response = api.handle_add_note(store, chats, "a note", conversation_id=existing.id)
+
+    assert response["conversation_id"] == existing.id
+    assert len(store.by_conversation(existing.id)) == 1
+
+
+def test_a_note_for_a_missing_conversation_errors(store, chats):
+    response = api.handle_add_note(store, chats, "a note", conversation_id="nope")
+
+    assert "error" in response
+
+
+def test_blank_note_is_rejected(store, chats):
+    assert "error" in api.handle_add_note(store, chats, "   ")
+
+
+def test_note_topic_labeling_uses_the_topic_extractor_when_given(store, chats):
+    class StubExtractor:
+        def extract(self, headline, body, existing_topics):
+            from mindtrail.ingest.topic import TopicAssignment
+            return TopicAssignment(topic="Job Search", key_facts=["fact one"])
+
+    response = api.handle_add_note(
+        store, chats, "a note about applying", topic_extractor=StubExtractor()
+    )
+
+    entry = store.by_conversation(response["conversation_id"])[0]
+    assert entry.topic == "Job Search"
+    assert entry.key_facts == ("fact one",)
+
+
+def test_note_labeling_failure_still_stores_the_note(store, chats):
+    from mindtrail.llm import LLMError
+
+    class FailingExtractor:
+        def extract(self, headline, body, existing_topics):
+            raise LLMError("rate limited")
+
+    response = api.handle_add_note(
+        store, chats, "a note", topic_extractor=FailingExtractor()
+    )
+
+    assert response["ok"] is True
+    assert len(store.by_conversation(response["conversation_id"])) == 1
+
+
 # --- ui ---------------------------------------------------------------
 
 
