@@ -86,6 +86,33 @@ CHAT_HTML = """<!doctype html>
        costs nothing visually for the common case. */
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+    /* --- motion --- */
+    /* Every control whose hover/active state only changes a color gets
+       the same short ease here, in one rule, rather than a transition
+       line repeated on each selector below - keeps the color rules and
+       the motion rule from drifting out of sync as either one changes. */
+    .side-btn, .chat, .project-head, .add, .card-btn, .nav-btn, .icon-btn,
+    #menu div, #zoom-controls button, .sr-item, .proj-chat, .dash-item-title,
+    .hl-head, .node-actions button, .rc-action-buttons button, .node-more,
+    .toast .undo, .btn-ghost, .btn-primary, .btn-danger {
+      transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+    }
+    /* Focus border-color changes get their own (slightly longer) timing
+       rather than joining the hover group above, since a focus ring
+       appearing is a more deliberate moment than a passing hover. */
+    #search-input, .modal input, .modal-textarea, .instructions-box,
+    #roadmap-chat-input, .rc-input, #profile-view textarea {
+      transition: border-color 0.14s ease;
+    }
+    /* Shimmer placeholder used wherever a view previously showed a bare
+       "Loading..." string - a moving gradient reads as "content is on
+       its way" rather than "the page is frozen", without knowing yet
+       what that content looks like. */
+    .skeleton { border-radius: var(--r); background: linear-gradient(90deg,
+                var(--surface) 25%, var(--surface-hover) 37%, var(--surface) 63%);
+                background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }
+    @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
     /* --- sidebar --- */
     #sidebar { width: 275px; background: var(--rail); border-right: 1px solid var(--border-subtle);
                display: flex; flex-direction: column; flex-shrink: 0;
@@ -148,7 +175,8 @@ CHAT_HTML = """<!doctype html>
     .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--info); flex-shrink: 0; }
     .pin { display: inline-flex; margin-right: 0.3rem; color: var(--text-muted); flex-shrink: 0; }
     .menu-btn { opacity: 0; border: none; background: transparent; color: var(--text-muted);
-                cursor: pointer; font-size: var(--fs-lg); padding: 0 0.2rem; line-height: 1; }
+                cursor: pointer; font-size: var(--fs-lg); padding: 0 0.2rem; line-height: 1;
+                transition: opacity 0.12s ease; }
     .chat:hover .menu-btn, .project-head:hover .menu-btn { opacity: 1; }
     .nested { margin-left: 0.85rem; }
 
@@ -163,12 +191,21 @@ CHAT_HTML = """<!doctype html>
     #menu hr { border: none; border-top: 1px solid var(--border-strong); margin: 0.25rem 0; }
 
     /* --- modal (replaces native prompt/confirm) --- */
+    /* display:none -> flex can't be transitioned, so the entrance is a
+       keyframe animation triggered by the .open class instead. Overlay
+       fades; the modal itself also settles in from a slight offset so it
+       reads as arriving rather than just fading in place. */
+    @keyframes overlay-in { from { opacity: 0; } }
+    @keyframes modal-in {
+      from { opacity: 0; transform: translateY(4px) scale(0.985); }
+    }
     #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.62);
                display: none; align-items: center; justify-content: center; z-index: 100; }
-    #overlay.open { display: flex; }
+    #overlay.open { display: flex; animation: overlay-in 0.14s ease; }
     .modal { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-xl);
              padding: 1.25rem; width: 390px; max-width: calc(100vw - 2rem);
-             box-shadow: 0 18px 50px rgba(0,0,0,0.55); }
+             box-shadow: 0 18px 50px rgba(0,0,0,0.55);
+             animation: modal-in 0.18s ease-out; }
     .modal h3 { margin: 0 0 0.75rem; font-size: var(--fs-lg); font-weight: 600; color: var(--text-heading); }
     .modal p { margin: 0 0 1rem; font-size: var(--fs-base); color: var(--text-2); line-height: var(--lh-body);
                white-space: pre-wrap; }
@@ -370,9 +407,13 @@ CHAT_HTML = """<!doctype html>
     .rc-input { flex: 1; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: var(--r);
                 color: var(--text); padding: 0.45rem 0.6rem; font-size: var(--fs-base); outline: none; }
     .rc-input:focus { border-color: var(--accent); }
+    /* border-color/opacity/box-shadow only - never transform or left/top.
+       Those two are set directly while dragging a node, and animating
+       them would make the card lag a frame behind the cursor. */
     .node { position: absolute; width: 220px; background: var(--surface); border: 1px solid var(--border-strong);
             border-radius: var(--r-lg); padding: 0.7rem 0.85rem 2rem; cursor: grab; font-size: var(--fs-base);
-            box-shadow: 0 4px 14px rgba(0,0,0,0.3); user-select: none; }
+            box-shadow: 0 4px 14px rgba(0,0,0,0.3); user-select: none;
+            transition: border-color 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease; }
     .node:active { cursor: grabbing; }
     .node.proposed { border-style: dashed; opacity: 0.85; }
     .node.accepted { border-color: var(--accent); }
@@ -427,13 +468,22 @@ CHAT_HTML = """<!doctype html>
     .stale-note { font-size: var(--fs-sm); color: var(--warn); margin-bottom: 0.5rem; }
 
     /* --- toasts --- */
+    @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+    /* Exit is separate from (and shorter than) the entrance so a toast
+       being dismissed reads as leaving rather than replaying the same
+       motion backwards. Its duration is read by JS via TOAST_EXIT_MS
+       rather than hardcoded twice, so the node removal timer can never
+       drift out of sync with the animation actually finishing. */
+    @keyframes toast-out { to { opacity: 0; transform: translateY(4px); } }
     #toasts { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%);
               display: flex; flex-direction: column; gap: 0.5rem; z-index: 200;
               align-items: center; }
     .toast { background: var(--surface-chip); border: 1px solid var(--border-strong); border-radius: var(--r-lg);
              padding: 0.6rem 0.9rem; font-size: var(--fs-base); color: var(--text);
              box-shadow: 0 8px 26px rgba(0,0,0,0.5); display: flex;
-             align-items: center; gap: 0.75rem; min-width: 280px; }
+             align-items: center; gap: 0.75rem; min-width: 280px;
+             animation: toast-in 0.2s ease-out; }
+    .toast.leaving { animation: toast-out 0.16s ease-out forwards; }
     .toast.err { border-color: var(--danger-border); }
     .toast .msg { flex: 1; }
     .toast .undo { background: transparent; border: 1px solid var(--border-strong); color: #cdd8ff;
@@ -455,8 +505,26 @@ CHAT_HTML = """<!doctype html>
     button.send { padding: 0.55rem 1.1rem; border-radius: 20px; border: none;
                   background: var(--accent); color: white; font-size: var(--fs-md); cursor: pointer; }
     button.send:disabled { opacity: 0.4; cursor: default; }
+    /* Inline spinner for buttons that kick off a slow LLM call (roadmap
+       generation) - swapped in alongside the label so waiting has some
+       visible sign of life instead of a static "Generating..." string. */
+    .spinner { display: inline-block; width: 0.75em; height: 0.75em; border-radius: 50%;
+               border: 2px solid currentColor; border-top-color: transparent;
+               animation: spin 0.7s linear infinite; vertical-align: -1px; margin-right: 0.4rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
     #status { max-width: 760px; margin: 0.4rem auto 0; font-size: var(--fs-sm); color: var(--text-muted);
               min-height: 1rem; }
+
+    /* Deliberately blankets everything on the page, including the
+       #sidebar width transition that predates the rest of this motion
+       work - one blanket rule is easier to trust than chasing every
+       future animation/transition addition individually. */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -715,6 +783,9 @@ CHAT_HTML = """<!doctype html>
   // ---------- toasts ----------
 
   const TOAST_SECONDS = 8;
+  // Must match the .toast-out animation-duration in CSS - read from one
+  // place so the removal timer and the animation can't drift apart.
+  const TOAST_EXIT_MS = 160;
 
   function toast(message, opts) {
     opts = opts || {};
@@ -726,9 +797,12 @@ CHAT_HTML = """<!doctype html>
     el.appendChild(msg);
 
     let timer = null;
+    // The node is removed only after the exit animation has had time to
+    // play, rather than yanked out mid-fade.
     const dismiss = () => {
       if (timer) clearInterval(timer);
-      el.remove();
+      el.classList.add('leaving');
+      setTimeout(() => el.remove(), TOAST_EXIT_MS);
     };
 
     if (opts.undo) {
@@ -751,6 +825,42 @@ CHAT_HTML = """<!doctype html>
 
     $('toasts').appendChild(el);
     return dismiss;
+  }
+
+  // ---------- loading placeholders ----------
+
+  // A handful of varying widths so a stack of skeleton bars reads as
+  // text of different lengths rather than a uniform, obviously-fake block.
+  const SKELETON_WIDTHS = ['92%', '68%', '85%', '55%', '78%'];
+
+  function skeletonBlock(lines) {
+    const wrap = document.createElement('div');
+    for (let i = 0; i < lines; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'skeleton';
+      bar.style.height = '0.85rem';
+      bar.style.marginBottom = '0.6rem';
+      bar.style.width = SKELETON_WIDTHS[i % SKELETON_WIDTHS.length];
+      wrap.appendChild(bar);
+    }
+    return wrap;
+  }
+
+  // Swaps a button's label for a spinner + status text while a slow
+  // request (roadmap generation) is in flight, and restores the exact
+  // original label afterwards - shared so the three generate buttons
+  // can't drift out of sync with each other.
+  function setButtonBusy(btn, label) {
+    btn.disabled = true;
+    btn.innerHTML = '';
+    const spin = document.createElement('span');
+    spin.className = 'spinner';
+    btn.appendChild(spin);
+    btn.appendChild(document.createTextNode(label));
+  }
+  function setButtonIdle(btn, label) {
+    btn.disabled = false;
+    btn.textContent = label;
   }
 
   const askText = (title, value, placeholder) =>
@@ -1404,7 +1514,8 @@ CHAT_HTML = """<!doctype html>
 
     const view = $('project-view');
     if (!opts.background) {
-      view.innerHTML = '<div class="muted">Loading project\\u2026</div>';
+      view.innerHTML = '';
+      view.appendChild(skeletonBlock(6));
       $('breadcrumb').textContent = 'Projects';
       // A background refresh (e.g. after the chat assistant renames the
       // project) must not wipe the chat history it's about to redraw.
@@ -1523,11 +1634,9 @@ CHAT_HTML = """<!doctype html>
       genBtn.onclick = async () => {
         const goal = goalInput.value.trim();
         if (!goal) { toast('Enter a goal first', {error: true}); return; }
-        genBtn.disabled = true;
-        genBtn.textContent = 'Generating\\u2026';
+        setButtonBusy(genBtn, 'Generating\\u2026');
         const res = await jsonSend('/api/roadmap/' + id + '/generate', {goal});
-        genBtn.disabled = false;
-        genBtn.textContent = 'Generate roadmap';
+        setButtonIdle(genBtn, 'Generate roadmap');
         if (res.error) { toast(res.error, {error: true}); return; }
         openRoadmapView(id, data.name);
       };
@@ -1746,7 +1855,10 @@ CHAT_HTML = """<!doctype html>
     $('breadcrumb').appendChild(b);
 
     const view = $('roadmap-view');
-    view.innerHTML = '<div class="muted" style="padding:1.5rem;">Loading roadmap\\u2026</div>';
+    view.innerHTML = '';
+    const loading = skeletonBlock(4);
+    loading.style.padding = '1.5rem';
+    view.appendChild(loading);
 
     const data = await api('/api/roadmap/' + projectId);
     if (!data.roadmap) {
@@ -1768,11 +1880,9 @@ CHAT_HTML = """<!doctype html>
       genBtn.onclick = async () => {
         const goal = goalInput.value.trim();
         if (!goal) { toast('Enter a goal first', {error: true}); return; }
-        genBtn.disabled = true;
-        genBtn.textContent = 'Generating\\u2026';
+        setButtonBusy(genBtn, 'Generating\\u2026');
         const res = await jsonSend('/api/roadmap/' + projectId + '/generate', {goal});
-        genBtn.disabled = false;
-        genBtn.textContent = 'Generate roadmap';
+        setButtonIdle(genBtn, 'Generate roadmap');
         if (res.error) { toast(res.error, {error: true}); return; }
         renderRoadmap(projectId, projectName, res.roadmap, res.nodes, {fitView: true});
       };
@@ -1838,11 +1948,9 @@ CHAT_HTML = """<!doctype html>
     regenBtn.className = 'card-btn';
     regenBtn.textContent = '\\u21bb Regenerate';
     regenBtn.onclick = async () => {
-      regenBtn.disabled = true;
-      regenBtn.textContent = '\\u21bb Regenerating\\u2026';
+      setButtonBusy(regenBtn, 'Regenerating\\u2026');
       const res = await jsonSend('/api/roadmap/' + projectId + '/generate', {goal: roadmap.goal});
-      regenBtn.disabled = false;
-      regenBtn.textContent = '\\u21bb Regenerate';
+      setButtonIdle(regenBtn, '\\u21bb Regenerate');
       if (res.error) { toast(res.error, {error: true}); return; }
       renderRoadmap(projectId, projectName, res.roadmap, res.nodes, {fitView: true});
     };
@@ -2374,7 +2482,8 @@ CHAT_HTML = """<!doctype html>
     if (!opts.background) profileChatLog = [];
 
     const view = $('profile-view');
-    view.innerHTML = '<div class="muted">Loading profile\\u2026</div>';
+    view.innerHTML = '';
+    view.appendChild(skeletonBlock(5));
     const data = await api('/api/profile');
     view.innerHTML = '';
 
@@ -2582,7 +2691,8 @@ CHAT_HTML = """<!doctype html>
     $('breadcrumb').textContent = 'Today';
 
     const view = $('dashboard-view');
-    view.innerHTML = '<div class="muted">Loading\\u2026</div>';
+    view.innerHTML = '';
+    view.appendChild(skeletonBlock(6));
     const data = await api('/api/dashboard');
     view.innerHTML = '';
 
