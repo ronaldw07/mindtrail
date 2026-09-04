@@ -14,10 +14,23 @@ CHAT_HTML = """<!doctype html>
   <meta charset="utf-8">
   <title>mindtrail</title>
   <style>
+    :root {
+      --bg: #1a1a1a;
+      --surface: #242424;      /* raised above --bg so cards read as a
+                                   surface rather than a hairline outline */
+      --accent: #4f46e5;
+      --label: #ececec;
+    }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, system-ui, sans-serif;
-           background: #1a1a1a; color: #ececec; height: 100vh; overflow: hidden; }
+           background: var(--bg); color: var(--label); height: 100vh; overflow: hidden;
+           -webkit-font-smoothing: antialiased; }
     #app { display: flex; height: 100vh; }
+    /* Every interactive element gets one consistent ring on keyboard
+       focus - previously nothing in the app had any visible focus
+       state at all. Mouse clicks don't trigger :focus-visible, so this
+       costs nothing visually for the common case. */
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     /* --- sidebar --- */
     #sidebar { width: 275px; background: #171717; border-right: 1px solid #2a2a2a;
@@ -79,7 +92,7 @@ CHAT_HTML = """<!doctype html>
     .chat.unread .chat-title { font-weight: 700; color: #fff; }
     .chat-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .dot { width: 6px; height: 6px; border-radius: 50%; background: #4f8ef7; flex-shrink: 0; }
-    .pin { font-size: 0.7rem; }
+    .pin { display: inline-flex; margin-right: 0.3rem; color: #868686; flex-shrink: 0; }
     .menu-btn { opacity: 0; border: none; background: transparent; color: #999;
                 cursor: pointer; font-size: 0.95rem; padding: 0 0.2rem; line-height: 1; }
     .chat:hover .menu-btn, .project-head:hover .menu-btn { opacity: 1; }
@@ -189,8 +202,13 @@ CHAT_HTML = """<!doctype html>
     .proj-main { flex: 1; min-width: 0; }
     .proj-rail { width: 330px; flex-shrink: 0; }
     .proj-title { font-size: 1.55rem; font-weight: 600; margin: 0 0 1.25rem; }
-    .card { background: #1f1f1f; border: 1px solid #2e2e2e; border-radius: 10px;
-            padding: 1rem 1.1rem; margin-bottom: 1rem; }
+    /* Raised above --bg (#1a1a1a vs #242424, was #1f1f1f - a 1.06:1
+       contrast that made the "card" invisible as a surface, carried
+       only by its border) plus a real elevation shadow and a 4%-white
+       inset top edge, the macOS trick for a lit edge in dark mode. */
+    .card { background: var(--surface); border: 1px solid #333; border-radius: 10px;
+            padding: 1rem 1.1rem; margin-bottom: 1rem;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.35), 0 0 0 0.5px rgba(255,255,255,0.04) inset; }
     .card h4 { margin: 0 0 0.7rem; font-size: 0.72rem; text-transform: uppercase;
                letter-spacing: 0.06em; color: #8a8a8a; display: flex;
                align-items: center; gap: 0.4rem; }
@@ -378,7 +396,13 @@ CHAT_HTML = """<!doctype html>
                aria-label="Search everything stored">
         <div id="search-results"></div>
       </div>
-      <button class="side-btn" id="open-profile">&#128100; Profile</button>
+      <button class="side-btn" id="open-profile">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             style="vertical-align:-2px;margin-right:0.4rem;">
+          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        </svg>Profile
+      </button>
       <div id="tree"></div>
     </aside>
     <main>
@@ -401,7 +425,14 @@ CHAT_HTML = """<!doctype html>
           <button type="button" class="icon-btn" id="attach" title="Upload a PDF"
                   aria-label="Upload a PDF">+</button>
           <button type="button" class="icon-btn" id="mic" title="Dictate"
-                  aria-label="Dictate">&#127908;</button>
+                  aria-label="Dictate">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 style="vertical-align:-3px;">
+              <rect x="9" y="2" width="6" height="12" rx="3"/>
+              <path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+          </button>
           <input id="input" autocomplete="off" placeholder="Ask something..." autofocus>
           <button class="send" id="send">Ask</button>
         </form>
@@ -699,7 +730,11 @@ CHAT_HTML = """<!doctype html>
     }
     if (c.pinned) {
       const p = document.createElement('span');
-      p.className = 'pin'; p.textContent = '\\ud83d\\udccc';
+      p.className = 'pin';
+      p.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" ' +
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+        'stroke-linejoin="round"><path d="M12 17v5"/>' +
+        '<path d="M9 3h6l1 5 3 2-1 3H6l-1-3 3-2 1-5Z"/></svg>';
       row.appendChild(p);
     }
     const title = document.createElement('span');
@@ -1314,7 +1349,16 @@ CHAT_HTML = """<!doctype html>
       row.className = 'proj-chat';
       const t = document.createElement('span');
       t.style.flex = '1';
-      t.textContent = (c.pinned ? '\\ud83d\\udccc  ' : '') + c.title;
+      if (c.pinned) {
+        const pin = document.createElement('span');
+        pin.className = 'pin';
+        pin.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" ' +
+          'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+          'stroke-linejoin="round"><path d="M12 17v5"/>' +
+          '<path d="M9 3h6l1 5 3 2-1 3H6l-1-3 3-2 1-5Z"/></svg>';
+        t.appendChild(pin);
+      }
+      t.appendChild(document.createTextNode(c.title));
       row.appendChild(t);
       const w = document.createElement('span');
       w.className = 'when';
