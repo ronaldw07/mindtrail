@@ -7,6 +7,7 @@ plumbing, so every branch is testable without standing a server up.
 from __future__ import annotations
 
 import tempfile
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from mindtrail.advice.highlights import (
@@ -68,6 +69,35 @@ NEXT_UP_STATUS = "accepted"
 DASHBOARD_ITEMS_PER_PROJECT = 2
 DASHBOARD_RECENT_LIMIT = 8
 
+# done and rejected nodes are no longer decisions waiting to happen, so
+# they are not agenda items even if they carry a due date.
+AGENDA_STATUSES = ("accepted", "proposed")
+# "This week" is a 7-day rolling window from today, not a calendar week -
+# a Friday shouldn't see two days of "this week" and call everything
+# past Sunday "later". A node due exactly 7 days out still reads as
+# "this week"; 8 days out is "later".
+AGENDA_WEEK_DAYS = 7
+
+
+def _parse_due_date(raw: str) -> date | None:
+    """due_date is a free-form string field in storage, not a real SQL
+    date column - malformed or half-entered values are skipped rather
+    than crashing the whole dashboard."""
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _agenda_bucket(due: date, today: date) -> str:
+    if due < today:
+        return "overdue"
+    if due == today:
+        return "today"
+    if due <= today + timedelta(days=AGENDA_WEEK_DAYS):
+        return "this_week"
+    return "later"
+
 
 def handle_dashboard(
     projects: ProjectStore,
@@ -97,7 +127,22 @@ def handle_dashboard(
                 }
             )
 
+    # "Today" is read from the server's local clock, not UTC, and that
+    # choice is made once here rather than per-node. mindtrail's chat
+    # server is a single local process the user runs on their own
+    # machine (see PLAN.md) - there is no separate browser timezone to
+    # reconcile against, the server's local date already *is* the user's.
+    # due_date is stored as a bare YYYY-MM-DD with no offset, so comparing
+    # it against a UTC "today" would misclassify anything due near
+    # midnight local time as overdue (or not) for roughly half the day,
+    # depending on which side of UTC the user sits on - exactly the
+    # trust-eroding bug this task calls out.
+    today = datetime.now().date()
+
     next_up = []
+    agenda: dict[str, list[dict]] = {
+        "overdue": [], "today": [], "this_week": [], "later": []
+    }
     for project in all_projects:
         roadmap = roadmaps.for_project(project.id)
         if roadmap is None:
@@ -134,6 +179,30 @@ def handle_dashboard(
                 }
             )
 
+        # The agenda card, unlike next_up, is not capped per project and
+        # is not limited to accepted nodes - a proposed step with a due
+        # date is still something the user committed a date to, just not
+        # yet decided to act on, and done/rejected nodes are no longer
+        # agenda items at all.
+        for n in all_nodes:
+            if n.status not in AGENDA_STATUSES or not n.due_date:
+                continue
+            due = _parse_due_date(n.due_date)
+            if due is None:
+                continue
+            agenda[_agenda_bucket(due, today)].append(
+                {
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "node_id": n.id,
+                    "title": n.title,
+                    "due_date": n.due_date,
+                }
+            )
+
+    for bucket in agenda.values():
+        bucket.sort(key=lambda item: (item["due_date"], item["project_name"]))
+
     recent = [
         {
             "id": c.id,
@@ -145,7 +214,9 @@ def handle_dashboard(
         for c in chats.all()[:DASHBOARD_RECENT_LIMIT]
     ]
 
-    return {"highlights": highlights, "next_up": next_up, "recent": recent}
+    return {
+        "highlights": highlights, "next_up": next_up, "recent": recent, "agenda": agenda
+    }
 
 
 def _friendly_highlight_error(exc: Exception) -> str:

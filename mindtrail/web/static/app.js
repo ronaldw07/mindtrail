@@ -2859,6 +2859,46 @@
     });
     grid.appendChild(hlCard);
 
+    // Due this week - across every project, not just the one open right
+    // now. Bucketing (overdue/today/this_week/later) and the "today"
+    // boundary itself are computed server-side in handle_dashboard; see
+    // the comment there for why local time, not UTC, is what decides
+    // the boundary.
+    const agendaCard = card('Due this week', null, null);
+    const AGENDA_BUCKETS = [
+      {key: 'overdue', label: 'Overdue'},
+      {key: 'today', label: 'Today'},
+      {key: 'this_week', label: 'This week'},
+      {key: 'later', label: 'Later'},
+    ];
+    const agenda = data.agenda || {};
+    const agendaIsEmpty = AGENDA_BUCKETS.every(b => !(agenda[b.key] || []).length);
+    if (agendaIsEmpty) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'Nothing due.';
+      agendaCard.appendChild(p);
+    } else {
+      AGENDA_BUCKETS.forEach(b => {
+        const items = agenda[b.key] || [];
+        if (!items.length) return;
+        const heading = document.createElement('div');
+        heading.className = 'dash-item-sub';
+        heading.textContent = b.label;
+        agendaCard.appendChild(heading);
+        items.forEach(n => {
+          const item = dashItem(n.title, n.project_name,
+                                 () => openRoadmapView(n.project_id, n.project_name));
+          const due = document.createElement('div');
+          due.className = 'node-due' + (b.key === 'overdue' ? ' overdue' : '');
+          due.textContent = (b.key === 'overdue' ? '⚠ Overdue: ' : '⏱ Due ') + n.due_date;
+          item.insertBefore(due, item.firstChild);
+          agendaCard.appendChild(item);
+        });
+      });
+    }
+    grid.appendChild(agendaCard);
+
     const recentCard = card('Recent', null, null);
     if (!data.recent.length) {
       const p = document.createElement('div');
