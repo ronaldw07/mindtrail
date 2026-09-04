@@ -165,6 +165,50 @@ def test_opening_a_conversation_returns_its_entries(store, chats):
     assert [e["query"] for e in data["entries"]] == ["q1"]
 
 
+def test_opening_a_conversation_resolves_recalled_entries(store, chats):
+    base_chat = chats.create("base")
+    base = store.add("what is a vector database", "a", [], conversation_id=base_chat.id)
+    followup_chat = chats.create("followup")
+    store.add(
+        "how do they scale", "b", [], conversation_id=followup_chat.id,
+        recalled_ids=[base.id],
+    )
+
+    data = api.handle_conversation_entries(store, chats, followup_chat.id)
+
+    recalled = data["entries"][0]["recalled"]
+    assert recalled == [
+        {"id": base.id, "query": "what is a vector database", "conversation_id": base_chat.id}
+    ]
+
+
+def test_recalled_entry_whose_conversation_is_gone_is_skipped(store, chats):
+    # An entry with no conversation_id (pre-conversations, or advice)
+    # cannot be linked to - it should be dropped, not shown as a dead link.
+    orphan = store.add("orphaned prior entry", "a", [])
+    followup_chat = chats.create("followup")
+    store.add(
+        "a question", "b", [], conversation_id=followup_chat.id,
+        recalled_ids=[orphan.id],
+    )
+
+    data = api.handle_conversation_entries(store, chats, followup_chat.id)
+
+    assert data["entries"][0]["recalled"] == []
+
+
+def test_recalled_entry_that_no_longer_exists_is_skipped(store, chats):
+    followup_chat = chats.create("followup")
+    store.add(
+        "a question", "b", [], conversation_id=followup_chat.id,
+        recalled_ids=["deleted-entry-id"],
+    )
+
+    data = api.handle_conversation_entries(store, chats, followup_chat.id)
+
+    assert data["entries"][0]["recalled"] == []
+
+
 def test_opening_a_conversation_clears_unread(store, chats):
     chat = chats.create("t")
     chats.set_unread(chat.id, True)

@@ -183,6 +183,47 @@ def test_kind_round_trips_through_storage(store):
     assert store.all()[0].kind == "note"
 
 
+# --- recall provenance ------------------------------------------------
+
+
+def test_entries_default_to_no_recalled_ids(store):
+    entry = store.add("q", "a", [])
+
+    assert entry.recalled_ids == ()
+
+
+def test_recalled_ids_round_trip(store):
+    base = store.add("base entry", "a", [])
+    followup = store.add("followup", "b", [], recalled_ids=[base.id])
+
+    reloaded = next(e for e in store.all() if e.id == followup.id)
+    assert reloaded.recalled_ids == (base.id,)
+
+
+def test_get_returns_a_single_entry_by_id(store):
+    entry = store.add("q", "a", [], topic="Docker")
+
+    found = store.get(entry.id)
+
+    assert found is not None
+    assert found.query == "q"
+    assert found.topic == "Docker"
+
+
+def test_get_on_a_missing_id_returns_none(store):
+    assert store.get("nope") is None
+
+
+def test_get_works_on_a_long_chunked_entry(store):
+    long_summary = "Filler content repeated many times. " * 60
+    entry = store.add("long entry", long_summary, [])
+
+    found = store.get(entry.id)
+
+    assert found is not None
+    assert found.summary == long_summary
+
+
 # --- chunking (long entries split into multiple embedded vectors) --------
 
 
