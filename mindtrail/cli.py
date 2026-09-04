@@ -103,7 +103,15 @@ def cmd_note(args) -> int:
     headline = text.splitlines()[0][:80] if text else ""
     topic, facts = _assign_topic(LLMClient(), store, headline, text)
 
-    store.add(headline, text, [], topic=topic, key_facts=facts, kind="note")
+    # Attached to a conversation, same as the browser's Note button -
+    # an unattached note has no way to appear in the sidebar at all.
+    initialize()
+    chats = ConversationStore()
+    conversation = chats.create(title=headline or "Note")
+    store.add(
+        headline, text, [], topic=topic, key_facts=facts,
+        kind="note", conversation_id=conversation.id,
+    )
     print(f"saved note under topic: {topic or 'Uncategorized'}")
     return 0
 

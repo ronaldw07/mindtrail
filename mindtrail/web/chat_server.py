@@ -251,6 +251,15 @@ def make_handler(deps: Deps) -> type[BaseHTTPRequestHandler]:
                         self._tail("/api/undo-delete/"),
                     )
                 )
+            elif path == "/api/note":
+                body = self._json_body() or {}
+                self._json(
+                    api.handle_add_note(
+                        deps.store, deps.chats, str(body.get("text", "")),
+                        str(body.get("conversation_id", "") or ""),
+                        deps.topic_extractor,
+                    )
+                )
             elif path == "/api/transcribe":
                 self._json(api.handle_transcribe(deps.llm, self._body()))
             elif path == "/api/upload":

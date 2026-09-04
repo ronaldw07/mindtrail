@@ -571,6 +571,47 @@ def handle_upload(
     }
 
 
+def handle_add_note(
+    store: MemoryStore,
+    chats: ConversationStore,
+    text: str,
+    conversation_id: str = "",
+    topic_extractor=None,
+) -> dict:
+    """Store a manual note the same way research and documents are -
+    topic-labeled, searchable, and attached to a conversation. The CLI
+    version of this stores notes with no conversation_id at all, which
+    is why they've been invisible in the browser; this always attaches
+    one, matching how handle_upload already treats a document.
+    """
+    text = text.strip()
+    if not text:
+        return {"error": "note must not be empty"}
+
+    headline = text.splitlines()[0][:80]
+
+    if not conversation_id:
+        conversation_id = chats.create(title=headline).id
+    elif chats.get(conversation_id) is None:
+        return {"error": "no such conversation"}
+
+    topic, facts = "", []
+    if topic_extractor is not None:
+        try:
+            assignment = topic_extractor.extract(headline, text, store.topics())
+            topic, facts = assignment.topic, list(assignment.key_facts)
+        except (LLMError, ValueError):
+            pass  # labeling is a nicety; the note still gets stored
+
+    store.add(
+        headline, text, [], topic=topic, key_facts=facts,
+        kind="note", conversation_id=conversation_id,
+    )
+    chats.touch(conversation_id)
+
+    return {"ok": True, "conversation_id": conversation_id}
+
+
 # --- profile ------------------------------------------------------------
 
 

@@ -122,6 +122,11 @@ CHAT_HTML = """<!doctype html>
                    border: 1px solid #3a3a3a; background: #191919; color: #ececec;
                    font-size: 0.9rem; outline: none; }
     .modal input:focus { border-color: #4f46e5; }
+    .modal-textarea { width: 100%; min-height: 140px; padding: 0.6rem 0.75rem;
+                      border-radius: 8px; border: 1px solid #3a3a3a; background: #191919;
+                      color: #ececec; font-size: 0.9rem; font-family: inherit;
+                      line-height: 1.5; resize: vertical; outline: none; }
+    .modal-textarea:focus { border-color: #4f46e5; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem;
                      margin-top: 1.1rem; }
     .modal button { padding: 0.5rem 1.05rem; border-radius: 7px; border: none;
@@ -403,6 +408,14 @@ CHAT_HTML = """<!doctype html>
           <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
         </svg>Profile
       </button>
+      <button class="side-btn" id="add-note">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             style="vertical-align:-2px;margin-right:0.4rem;">
+          <path d="M4 19.5V6a2 2 0 0 1 2-2h9l5 5v10.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/>
+          <path d="M14 4v5h5"/><path d="M8 13h8"/><path d="M8 17h5"/>
+        </svg>Note
+      </button>
       <div id="tree"></div>
     </aside>
     <main>
@@ -496,7 +509,8 @@ CHAT_HTML = """<!doctype html>
 
       let field = null;
       if (opts.input) {
-        field = document.createElement('input');
+        field = document.createElement(opts.multiline ? 'textarea' : 'input');
+        if (opts.multiline) field.className = 'modal-textarea';
         field.value = opts.value || '';
         field.placeholder = opts.placeholder || '';
         box.appendChild(field);
@@ -526,7 +540,11 @@ CHAT_HTML = """<!doctype html>
       const submit = () => close(opts.input ? (field.value.trim() || null) : true);
       const onKey = e => {
         if (e.key === 'Escape') { e.preventDefault(); close(null); }
-        else if (e.key === 'Enter') { e.preventDefault(); submit(); }
+        // Enter submits a single-line field; a textarea needs it to
+        // insert a newline instead, so only Cmd/Ctrl+Enter submits.
+        else if (e.key === 'Enter' && (!opts.multiline || e.metaKey || e.ctrlKey)) {
+          e.preventDefault(); submit();
+        }
       };
 
       cancel.onclick = () => close(null);
@@ -1107,7 +1125,7 @@ CHAT_HTML = """<!doctype html>
     data.entries.forEach(e => {
       const t = turn();
       userLine(t, e.query);
-      assistantText(t, e.summary, e.kind, {plain: e.kind === 'document'});
+      assistantText(t, e.summary, e.kind, {plain: e.kind === 'document' || e.kind === 'note'});
       metaBlock(t, [], e.sources);
     });
     setBreadcrumb();
@@ -2322,6 +2340,24 @@ CHAT_HTML = """<!doctype html>
   }
 
   $('open-profile').onclick = () => openProfileView();
+
+  // Notes were CLI-only until now, and the CLI version stores them with
+  // no conversation attached - unreachable from the browser even after
+  // the fact. This always creates one, so a note shows up in the
+  // sidebar exactly like a chat or a document would.
+  $('add-note').onclick = async () => {
+    const text = await modal({
+      title: 'New note', input: true, multiline: true,
+      placeholder: 'Jot something down\\u2026', confirmLabel: 'Save',
+    });
+    if (!text) return;
+    const res = await jsonSend('/api/note', {text});
+    if (res.error) { toast(res.error, {error: true}); return; }
+    await loadSidebar();
+    showChatView();
+    await openConversation(res.conversation_id);
+    toast('Note saved');
+  };
 
   // ---------- search ----------
   // Semantic search over everything stored - the app's core retrieval,
