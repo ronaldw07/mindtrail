@@ -24,6 +24,7 @@ from mindtrail.ingest.researcher import Researcher
 from mindtrail.llm import LLMClient, LLMError
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import ConversationStore, title_from_question
+from mindtrail.organize.export import default_export_dir, export_to_directory
 from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.roadmap_templates import TEMPLATES, get_template
@@ -1025,3 +1026,26 @@ def handle_delete_node(nodes: RoadmapNodeStore, node_id: str) -> dict:
     except ValueError as exc:
         return {"error": str(exc)}
     return {"ok": True}
+
+
+# --- export -----------------------------------------------------------
+
+
+def handle_export(
+    store: MemoryStore,
+    chats: ConversationStore,
+    projects: ProjectStore,
+    roadmaps: RoadmapStore,
+    nodes: RoadmapNodeStore,
+    profile: ProfileStore,
+    out: str = "",
+    project_id: str | None = None,
+) -> dict:
+    target = out.strip() or default_export_dir()
+    try:
+        count = export_to_directory(
+            store, chats, projects, roadmaps, nodes, profile, target, project_id
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"path": str(Path(target).resolve()), "files": count}
