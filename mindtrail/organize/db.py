@@ -25,9 +25,13 @@ CREATE TABLE IF NOT EXISTS projects (
     name       TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
--- Columns added after the first release are applied by _add_missing_columns
--- rather than here, since CREATE TABLE IF NOT EXISTS will not alter an
--- existing table and would silently leave old databases without them.
+-- New TABLES are safe to add anywhere in this script: CREATE TABLE IF NOT
+-- EXISTS is a no-op against a database that already has one, so an old
+-- database picks up new tables for free the next time initialize() runs.
+-- New COLUMNS on an existing table are the opposite - IF NOT EXISTS only
+-- guards table creation, not ALTER, so a column added here would silently
+-- never reach a database that predates it. Those go through
+-- _add_missing_columns/ADDED_COLUMNS below instead.
 
 CREATE TABLE IF NOT EXISTS conversations (
     id         TEXT PRIMARY KEY,
@@ -73,6 +77,24 @@ CREATE TABLE IF NOT EXISTS roadmap_nodes (
 
 CREATE INDEX IF NOT EXISTS idx_nodes_roadmap ON roadmap_nodes(roadmap_id);
 CREATE INDEX IF NOT EXISTS idx_roadmaps_project ON roadmaps(project_id);
+
+-- Held deletions, so a delete can be undone even across a restart. The
+-- payload is JSON rather than typed columns - see organize/trash.py -
+-- and `seq` orders puts so the oldest can be evicted past the cap
+-- without relying on `deleted_at` timestamps, which can tie.
+CREATE TABLE IF NOT EXISTS deleted_items (
+    seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id    TEXT NOT NULL UNIQUE,
+    payload    TEXT NOT NULL,
+    deleted_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS deleted_nodes (
+    seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id    TEXT NOT NULL UNIQUE,
+    payload    TEXT NOT NULL,
+    deleted_at TEXT NOT NULL
+);
 """
 
 

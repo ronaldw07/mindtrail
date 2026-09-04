@@ -29,7 +29,7 @@ from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.roadmap_templates import TEMPLATES, get_template
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
-from mindtrail.organize.trash import DeletedConversation, Trash
+from mindtrail.organize.trash import DeletedConversation, NodeTrash, Trash
 
 
 def _conversation_json(conversation) -> dict:
@@ -1020,12 +1020,36 @@ def handle_add_node(nodes: RoadmapNodeStore, roadmap_id: str, body: dict) -> dic
     return _node_json(node)
 
 
-def handle_delete_node(nodes: RoadmapNodeStore, node_id: str) -> dict:
-    try:
-        nodes.delete(node_id)
-    except ValueError as exc:
-        return {"error": str(exc)}
-    return {"ok": True}
+def handle_delete_node(
+    nodes: RoadmapNodeStore, node_id: str, node_trash: NodeTrash | None = None
+) -> dict:
+    """Delete a node, holding a copy for undo - mirrors
+    `handle_delete_conversation`'s shape exactly."""
+    node = nodes.get(node_id)
+    if node is None:
+        return {"error": f"no such node: {node_id}"}
+
+    if node_trash is not None:
+        node_trash.put(node)
+
+    nodes.delete(node_id)
+    return {"ok": True, "undoable": node_trash is not None}
+
+
+def handle_undo_delete_node(
+    nodes: RoadmapNodeStore, node_trash: NodeTrash, node_id: str
+) -> dict:
+    """Restore a roadmap node deleted within the undo window.
+
+    Restored under its original id - other nodes' `depends_on` still
+    point at that id, and a fresh one would leave those edges dangling.
+    """
+    held = node_trash.take(node_id)
+    if held is None:
+        return {"error": "nothing left to undo"}
+
+    nodes.restore(held)
+    return {"ok": True, "node": _node_json(held)}
 
 
 # --- export -----------------------------------------------------------
