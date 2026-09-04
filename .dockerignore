@@ -1,0 +1,10 @@
+.venv/
+.git/
+.env
+chroma_data/
+mindtrail_site.html
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage*
+tests/

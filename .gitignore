@@ -9,3 +9,5 @@ runs/
 htmlcov/
 .pytest_cache/
 mindtrail_site.html
+mindtrail.db
+graphify-out/
