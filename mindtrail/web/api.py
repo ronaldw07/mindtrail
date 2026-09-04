@@ -812,7 +812,7 @@ def handle_profile_chat(
 # --- roadmaps -------------------------------------------------------------
 
 
-def _node_json(node) -> dict:
+def _node_json(node, store: MemoryStore) -> dict:
     return {
         "id": node.id,
         "title": node.title,
@@ -823,11 +823,16 @@ def _node_json(node) -> dict:
         "y": node.y,
         "depends_on": list(node.depends_on),
         "due_date": node.due_date,
+        # Dangling ids (the entry was deleted since it was linked) are
+        # dropped here rather than stored back - _resolve_recalled already
+        # does exactly this lookup-and-drop for recalled_ids, so it is
+        # reused rather than duplicating the same defensive check.
+        "linked_entries": _resolve_recalled(store, node.linked_entries),
     }
 
 
 def handle_get_roadmap(
-    roadmaps: RoadmapStore, nodes: RoadmapNodeStore, project_id: str
+    roadmaps: RoadmapStore, nodes: RoadmapNodeStore, store: MemoryStore, project_id: str
 ) -> dict:
     """The project's roadmap, or an empty shell if none exists yet -
     the canvas can render either without a special case in the client."""
@@ -836,7 +841,7 @@ def handle_get_roadmap(
         return {"roadmap": None, "nodes": []}
     return {
         "roadmap": {"id": roadmap.id, "goal": roadmap.goal},
-        "nodes": [_node_json(n) for n in nodes.for_roadmap(roadmap.id)],
+        "nodes": [_node_json(n, store) for n in nodes.for_roadmap(roadmap.id)],
     }
 
 
@@ -918,7 +923,7 @@ def _grid_positions(all_nodes: list) -> dict[str, tuple[float, float]]:
     return positions
 
 
-def handle_tidy_roadmap(nodes: RoadmapNodeStore, roadmap_id: str) -> dict:
+def handle_tidy_roadmap(nodes: RoadmapNodeStore, store: MemoryStore, roadmap_id: str) -> dict:
     """Re-run the grid layout over every node in the roadmap, ignoring
     current positions.
 
@@ -932,12 +937,27 @@ def handle_tidy_roadmap(nodes: RoadmapNodeStore, roadmap_id: str) -> dict:
     for n in all_nodes:
         x, y = positions[n.id]
         nodes.move(n.id, x, y)
-    return {"nodes": [_node_json(n) for n in nodes.for_roadmap(roadmap_id)]}
+    return {"nodes": [_node_json(n, store) for n in nodes.for_roadmap(roadmap_id)]}
+
+
+def _linked_entries_by_node(store: MemoryStore, nodes: list) -> dict[str, list]:
+    """node id -> its linked memory entries, resolved and with dangling
+    ids dropped - the same shape chat_about_roadmap and generate_roadmap
+    both take to fold F6 links into what the model is shown."""
+    result = {}
+    for n in nodes:
+        if not n.linked_entries:
+            continue
+        entries = [e for e in (store.get(eid) for eid in n.linked_entries) if e is not None]
+        if entries:
+            result[n.id] = entries
+    return result
 
 
 def handle_roadmap_chat(
     roadmaps: RoadmapStore,
     nodes: RoadmapNodeStore,
+    store: MemoryStore,
     llm: LLMClient,
     profile: ProfileStore,
     roadmap_id: str,
@@ -955,7 +975,8 @@ def handle_roadmap_chat(
     current_nodes = nodes.for_roadmap(roadmap_id)
     try:
         result = chat_about_roadmap(
-            llm, roadmap.goal, current_nodes, profile.get().content, history, message
+            llm, roadmap.goal, current_nodes, profile.get().content, history, message,
+            _linked_entries_by_node(store, current_nodes),
         )
     except (LLMError, ValueError) as exc:
         return {"error": str(exc)}
@@ -1015,6 +1036,7 @@ def handle_generate_roadmap(
             profile=profile.get().content,
             project_entries=project_entries(store, chats, project_id),
             existing_nodes=decided,
+            linked_entries=_linked_entries_by_node(store, decided),
         )
     except (LLMError, ValueError) as exc:
         return {"error": str(exc)}
@@ -1035,7 +1057,7 @@ def handle_generate_roadmap(
         if deps:
             nodes.set_depends_on(title_to_id[item.title], deps)
 
-    return handle_get_roadmap(roadmaps, nodes, project_id)
+    return handle_get_roadmap(roadmaps, nodes, store, project_id)
 
 
 def handle_list_templates() -> dict:
@@ -1055,6 +1077,7 @@ def handle_list_templates() -> dict:
 def handle_apply_template(
     roadmaps: RoadmapStore,
     nodes: RoadmapNodeStore,
+    store: MemoryStore,
     projects: ProjectStore,
     project_id: str,
     template_id: str,
@@ -1095,7 +1118,7 @@ def handle_apply_template(
         if deps:
             nodes.set_depends_on(title_to_id[item.title], deps)
 
-    return handle_get_roadmap(roadmaps, nodes, project_id)
+    return handle_get_roadmap(roadmaps, nodes, store, project_id)
 
 
 def _creates_cycle(node_id: str, depends_on: list[str], all_nodes: list) -> bool:
@@ -1163,7 +1186,27 @@ def _validate_depends_on(nodes: RoadmapNodeStore, node_id: str, depends_on) -> l
     return depends_on
 
 
-def handle_update_node(nodes: RoadmapNodeStore, node_id: str, body: dict) -> dict:
+def _validate_linked_entries(store: MemoryStore, entry_ids) -> list[str]:
+    """The write-side guard for F6 links, mirroring _validate_depends_on's
+    shape: reject a non-list, reject duplicates, reject an id the store
+    doesn't actually have. Unlike the read path (_node_json, which drops
+    a dangling id silently because the entry could have been deleted
+    *after* linking), a bad id offered here is rejected outright - the
+    id came straight out of an /api/search result, so it should exist.
+    """
+    if not isinstance(entry_ids, list) or not all(isinstance(e, str) for e in entry_ids):
+        raise ValueError("linked_entries must be a list of entry ids")
+    if len(set(entry_ids)) != len(entry_ids):
+        raise ValueError("linked_entries contains duplicate ids")
+    unknown = [e for e in entry_ids if store.get(e) is None]
+    if unknown:
+        raise ValueError(f"unknown entry id: {unknown[0]}")
+    return entry_ids
+
+
+def handle_update_node(
+    nodes: RoadmapNodeStore, store: MemoryStore, node_id: str, body: dict
+) -> dict:
     try:
         if "status" in body:
             nodes.set_status(node_id, str(body["status"]))
@@ -1177,13 +1220,19 @@ def handle_update_node(nodes: RoadmapNodeStore, node_id: str, body: dict) -> dic
             nodes.set_due_date(node_id, str(body["due_date"]))
         if "depends_on" in body:
             nodes.set_depends_on(node_id, _validate_depends_on(nodes, node_id, body["depends_on"]))
+        if "linked_entries" in body:
+            nodes.set_linked_entries(
+                node_id, _validate_linked_entries(store, body["linked_entries"])
+            )
     except ValueError as exc:
         return {"error": str(exc)}
     updated = nodes.get(node_id)
-    return {"error": "no such node"} if updated is None else _node_json(updated)
+    return {"error": "no such node"} if updated is None else _node_json(updated, store)
 
 
-def handle_add_node(nodes: RoadmapNodeStore, roadmap_id: str, body: dict) -> dict:
+def handle_add_node(
+    nodes: RoadmapNodeStore, store: MemoryStore, roadmap_id: str, body: dict
+) -> dict:
     title = str(body.get("title", ""))
     if not title.strip():
         return {"error": "node title must not be empty"}
@@ -1196,7 +1245,7 @@ def handle_add_node(nodes: RoadmapNodeStore, roadmap_id: str, body: dict) -> dic
         y=float(body.get("y", 0)),
         due_date=str(body.get("due_date", "")),
     )
-    return _node_json(node)
+    return _node_json(node, store)
 
 
 def handle_delete_node(
@@ -1216,7 +1265,7 @@ def handle_delete_node(
 
 
 def handle_undo_delete_node(
-    nodes: RoadmapNodeStore, node_trash: NodeTrash, node_id: str
+    nodes: RoadmapNodeStore, store: MemoryStore, node_trash: NodeTrash, node_id: str
 ) -> dict:
     """Restore a roadmap node deleted within the undo window.
 
@@ -1228,7 +1277,7 @@ def handle_undo_delete_node(
         return {"error": "nothing left to undo"}
 
     nodes.restore(held)
-    return {"ok": True, "node": _node_json(held)}
+    return {"ok": True, "node": _node_json(held, store)}
 
 
 # --- export -----------------------------------------------------------

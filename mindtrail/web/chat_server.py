@@ -219,7 +219,8 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
             elif path.startswith("/api/roadmap/"):
                 self._json(
                     api.handle_get_roadmap(
-                        deps.roadmaps, deps.roadmap_nodes, self._tail("/api/roadmap/")
+                        deps.roadmaps, deps.roadmap_nodes, deps.store,
+                        self._tail("/api/roadmap/"),
                     )
                 )
             elif path == "/api/profile":
@@ -288,7 +289,7 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                 )
             elif path.startswith("/api/roadmap-node/") and path.endswith("/tidy"):
                 roadmap_id = path[len("/api/roadmap-node/") : -len("/tidy")]
-                self._json(api.handle_tidy_roadmap(deps.roadmap_nodes, roadmap_id))
+                self._json(api.handle_tidy_roadmap(deps.roadmap_nodes, deps.store, roadmap_id))
             elif path.startswith("/api/roadmap/") and path.endswith("/template"):
                 body = self._json_body() or {}
                 project_id = path[len("/api/roadmap/") : -len("/template")]
@@ -296,6 +297,7 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                     api.handle_apply_template(
                         deps.roadmaps,
                         deps.roadmap_nodes,
+                        deps.store,
                         deps.projects,
                         project_id,
                         str(body.get("template_id", "")),
@@ -309,6 +311,7 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                     api.handle_roadmap_chat(
                         deps.roadmaps,
                         deps.roadmap_nodes,
+                        deps.store,
                         deps.llm,
                         deps.profile,
                         roadmap_id,
@@ -320,7 +323,8 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                 body = self._json_body() or {}
                 self._json(
                     api.handle_add_node(
-                        deps.roadmap_nodes, self._tail("/api/roadmap-node/"), body
+                        deps.roadmap_nodes, deps.store,
+                        self._tail("/api/roadmap-node/"), body,
                     )
                 )
             elif path == "/api/profile":
@@ -364,6 +368,7 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                 self._json(
                     api.handle_undo_delete_node(
                         deps.roadmap_nodes,
+                        deps.store,
                         deps.node_trash,
                         self._tail("/api/undo-delete-node/"),
                     )
@@ -434,7 +439,8 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
             elif path.startswith("/api/roadmap-node/"):
                 self._json(
                     api.handle_update_node(
-                        deps.roadmap_nodes, self._tail("/api/roadmap-node/"), body
+                        deps.roadmap_nodes, deps.store,
+                        self._tail("/api/roadmap-node/"), body,
                     )
                 )
             elif path.startswith("/api/entry/"):

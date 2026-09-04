@@ -38,6 +38,13 @@ class RoadmapNode:
     created_at: str
     due_date: str = ""
     """ISO date (YYYY-MM-DD), or empty for no due date."""
+    linked_entries: tuple[str, ...] = ()
+    """Memory entry ids linked to this step. Entries live in Chroma, not
+    this database, so an id here can never be a real foreign key - it can
+    dangle if the entry was since deleted. Comma-joined in storage,
+    exactly like depends_on; dangling ids are dropped on the read path in
+    web/api.py, not here, since only the caller has a MemoryStore to
+    check against."""
 
 
 def _to_roadmap(row) -> Roadmap:
@@ -51,6 +58,8 @@ def _to_roadmap(row) -> Roadmap:
 
 def _to_node(row) -> RoadmapNode:
     raw = row["depends_on"] or ""
+    keys = row.keys()
+    raw_linked = row["linked_entries"] if "linked_entries" in keys else ""
     return RoadmapNode(
         id=row["id"],
         roadmap_id=row["roadmap_id"],
@@ -62,7 +71,8 @@ def _to_node(row) -> RoadmapNode:
         y=row["y"],
         depends_on=tuple(d for d in raw.split(",") if d),
         created_at=row["created_at"],
-        due_date=row["due_date"] if "due_date" in row.keys() else "",
+        due_date=row["due_date"] if "due_date" in keys else "",
+        linked_entries=tuple(e for e in (raw_linked or "").split(",") if e),
     )
 
 
@@ -125,6 +135,7 @@ class RoadmapNodeStore:
         y: float = 0,
         depends_on: list[str] | None = None,
         due_date: str = "",
+        linked_entries: list[str] | None = None,
     ) -> RoadmapNode:
         if status not in STATUSES:
             raise ValueError(f"invalid status: {status}")
@@ -133,16 +144,19 @@ class RoadmapNodeStore:
             detail=detail.strip(), status=status, note="", x=x, y=y,
             depends_on=tuple(depends_on or []), created_at=now_iso(),
             due_date=due_date.strip(),
+            linked_entries=tuple(linked_entries or []),
         )
         with connect(self._path) as conn:
             conn.execute(
                 "INSERT INTO roadmap_nodes "
                 "(id, roadmap_id, title, detail, status, note, x, y, "
-                "depends_on, created_at, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "depends_on, created_at, due_date, linked_entries) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     node.id, node.roadmap_id, node.title, node.detail,
                     node.status, node.note, node.x, node.y,
                     ",".join(node.depends_on), node.created_at, node.due_date,
+                    ",".join(node.linked_entries),
                 ),
             )
         return node
@@ -159,11 +173,13 @@ class RoadmapNodeStore:
             conn.execute(
                 "INSERT INTO roadmap_nodes "
                 "(id, roadmap_id, title, detail, status, note, x, y, "
-                "depends_on, created_at, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "depends_on, created_at, due_date, linked_entries) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     node.id, node.roadmap_id, node.title, node.detail,
                     node.status, node.note, node.x, node.y,
                     ",".join(node.depends_on), node.created_at, node.due_date,
+                    ",".join(node.linked_entries),
                 ),
             )
         return node
@@ -199,6 +215,9 @@ class RoadmapNodeStore:
 
     def set_depends_on(self, node_id: str, depends_on: list[str]) -> None:
         self._update(node_id, "depends_on", ",".join(depends_on))
+
+    def set_linked_entries(self, node_id: str, entry_ids: list[str]) -> None:
+        self._update(node_id, "linked_entries", ",".join(entry_ids))
 
     def rename(self, node_id: str, title: str, detail: str = "") -> None:
         clean = title.strip()

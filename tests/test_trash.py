@@ -256,7 +256,7 @@ def test_deleting_a_node_holds_it_for_undo(nodes, node_trash, roadmap_id):
 
 
 def test_undo_restores_a_deleted_node_under_its_original_id_and_edges(
-    nodes, node_trash, roadmap_id
+    nodes, store, node_trash, roadmap_id
 ):
     """The critical property: RoadmapNodeStore.delete leaves other nodes'
     depends_on pointing at the deleted id, so the restore only fixes
@@ -267,7 +267,7 @@ def test_undo_restores_a_deleted_node_under_its_original_id_and_edges(
     api.handle_delete_node(nodes, base.id, node_trash)
     assert base.id in nodes.get(dependent.id).depends_on, "dangling by design"
 
-    result = api.handle_undo_delete_node(nodes, node_trash, base.id)
+    result = api.handle_undo_delete_node(nodes, store, node_trash, base.id)
 
     assert result["ok"] is True
     restored = nodes.get(base.id)
@@ -276,8 +276,8 @@ def test_undo_restores_a_deleted_node_under_its_original_id_and_edges(
     assert base.id in nodes.get(dependent.id).depends_on
 
 
-def test_undo_for_a_node_never_deleted_reports_nothing_to_undo(nodes, node_trash):
-    assert "error" in api.handle_undo_delete_node(nodes, node_trash, "never-existed")
+def test_undo_for_a_node_never_deleted_reports_nothing_to_undo(nodes, store, node_trash):
+    assert "error" in api.handle_undo_delete_node(nodes, store, node_trash, "never-existed")
 
 
 def test_deleting_a_node_without_a_trash_still_works(nodes, roadmap_id):

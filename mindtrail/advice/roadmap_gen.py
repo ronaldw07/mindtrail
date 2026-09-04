@@ -83,14 +83,19 @@ def _format_project_material(entries: list[Entry]) -> str:
     return "PROJECT MATERIAL:\n" + "\n".join(lines) + "\n\n" if lines else ""
 
 
-def _format_existing_nodes(nodes: list[RoadmapNode]) -> str:
+def _format_existing_nodes(
+    nodes: list[RoadmapNode], linked_entries: dict[str, list[Entry]] | None = None
+) -> str:
     if not nodes:
         return ""
+    linked_entries = linked_entries or {}
     by_status: dict[str, list[str]] = {}
     for node in nodes:
         line = node.title
         if node.note:
             line += f" (user's note: {node.note})"
+        for entry in linked_entries.get(node.id, []):
+            line += f"\n  linked memory: {entry.query}: {entry.summary[:200]}"
         by_status.setdefault(node.status, []).append(line)
 
     sections = []
@@ -106,15 +111,21 @@ def generate_roadmap(
     profile: str = "",
     project_entries: list[Entry] | None = None,
     existing_nodes: list[RoadmapNode] | None = None,
+    linked_entries: dict[str, list[Entry]] | None = None,
 ) -> list[ProposedNode]:
-    """Raises ValueError for an empty goal."""
+    """Raises ValueError for an empty goal.
+
+    linked_entries maps an existing node's id to the memory entries
+    linked to it (F6), shown alongside that node so a decided step's
+    linked context can inform what gets proposed around it.
+    """
     if not goal.strip():
         raise ValueError("a goal is required")
 
     prompt = (
         f"GOAL: {goal}\n\n"
         + (f"USER PROFILE:\n{profile}\n\n" if profile.strip() else "")
-        + _format_existing_nodes(existing_nodes or [])
+        + _format_existing_nodes(existing_nodes or [], linked_entries)
         + _format_project_material(project_entries or [])
     )
     completion = llm.complete(SYSTEM_PROMPT, prompt, max_tokens=GENERATION_MAX_TOKENS)

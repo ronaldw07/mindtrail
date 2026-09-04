@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass, field, replace
 
 from mindtrail.llm import LLMClient
+from mindtrail.memory.store import Entry
 from mindtrail.organize.roadmaps import STATUSES, RoadmapNode
 
 MAX_ACTIONS = 5
@@ -135,9 +136,12 @@ def parse_chat_response(text: str, titles_by_id: dict[str, str]) -> RoadmapChatR
     return RoadmapChatResult(reply=reply, actions=tuple(actions))
 
 
-def _format_nodes(nodes: list[RoadmapNode]) -> str:
+def _format_nodes(
+    nodes: list[RoadmapNode], linked_entries: dict[str, list[Entry]] | None = None
+) -> str:
     if not nodes:
         return "No steps yet.\n\n"
+    linked_entries = linked_entries or {}
     lines = []
     for n in nodes:
         line = f"- id={n.id} [{n.status}] {n.title}"
@@ -145,6 +149,8 @@ def _format_nodes(nodes: list[RoadmapNode]) -> str:
             line += f" - {n.detail}"
         if n.note:
             line += f" (user's note: {n.note})"
+        for entry in linked_entries.get(n.id, []):
+            line += f"\n  linked memory: {entry.query}: {entry.summary[:200]}"
         lines.append(line)
     return "CURRENT STEPS:\n" + "\n".join(lines) + "\n\n"
 
@@ -163,8 +169,14 @@ def chat_about_roadmap(
     profile: str,
     history: list[dict],
     message: str,
+    linked_entries: dict[str, list[Entry]] | None = None,
 ) -> RoadmapChatResult:
-    """Raises ValueError for an empty message."""
+    """Raises ValueError for an empty message.
+
+    linked_entries maps a node id to the memory entries linked to it
+    (F6), so the model can talk about "what I already know" for a step,
+    not just its title/status/note.
+    """
     if not message.strip():
         raise ValueError("message must not be empty")
 
@@ -172,7 +184,7 @@ def chat_about_roadmap(
     prompt = (
         f"GOAL: {goal}\n\n"
         + (f"USER PROFILE:\n{profile}\n\n" if profile.strip() else "")
-        + _format_nodes(nodes)
+        + _format_nodes(nodes, linked_entries)
         + _format_history(history)
         + f"USER: {message}"
     )

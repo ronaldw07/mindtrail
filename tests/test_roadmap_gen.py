@@ -143,3 +143,24 @@ def test_advice_entries_are_excluded_from_material():
     generate_roadmap(llm, "Goal", project_entries=[an_entry("Advice", kind="advice")])
 
     assert "PROJECT MATERIAL" not in llm.last_user_prompt
+
+
+def test_linked_entries_of_a_decided_node_are_included():
+    llm = StubLLM(VALID)
+    node = a_node("Learn Agile", "accepted")
+    entry = an_entry("What is Agile?", summary="Agile is an iterative approach.")
+
+    generate_roadmap(
+        llm, "Goal", existing_nodes=[node], linked_entries={node.id: [entry]}
+    )
+
+    assert "Agile is an iterative approach." in llm.last_user_prompt
+
+
+def test_linked_entries_are_omitted_when_none_given():
+    llm = StubLLM(VALID)
+    node = a_node("Learn Agile", "accepted")
+
+    generate_roadmap(llm, "Goal", existing_nodes=[node])
+
+    assert "linked memory" not in llm.last_user_prompt
