@@ -1285,6 +1285,9 @@ CHAT_HTML = """<!doctype html>
     input.className = 'rc-input';
     input.placeholder = 'Ask\\u2026';
     form.appendChild(input);
+    const mic = micButton();
+    attachDictation(mic, input, msg => { if (msg) toast(msg, {error: msg.includes('fail')}); });
+    form.appendChild(mic);
     const sendBtn = document.createElement('button');
     sendBtn.className = 'send';
     sendBtn.type = 'submit';
@@ -2192,6 +2195,9 @@ CHAT_HTML = """<!doctype html>
     chatInput.id = 'roadmap-chat-input';
     chatInput.placeholder = 'Ask about this roadmap\\u2026';
     form.appendChild(chatInput);
+    const mic = micButton();
+    attachDictation(mic, chatInput, msg => { if (msg) toast(msg, {error: msg.includes('fail')}); });
+    form.appendChild(mic);
     const sendBtn = document.createElement('button');
     sendBtn.className = 'send';
     sendBtn.type = 'submit';
@@ -2517,9 +2523,11 @@ CHAT_HTML = """<!doctype html>
       nextCard.appendChild(p);
     }
     data.next_up.forEach(n => {
-      const sub = n.project_name + (n.note ? ' \\u2014 ' + n.note : '');
-      nextCard.appendChild(dashItem(n.title, sub,
-                                    () => openRoadmapView(n.project_id, n.project_name)));
+      let sub = n.project_name + (n.note ? ' \\u2014 ' + n.note : '');
+      if (!n.unblocked) sub += ' \\u00b7 waiting on a dependency';
+      const item = dashItem(n.title, sub, () => openRoadmapView(n.project_id, n.project_name));
+      if (!n.unblocked) item.style.opacity = '0.7';
+      nextCard.appendChild(item);
     });
     grid.appendChild(nextCard);
 
@@ -2649,37 +2657,60 @@ CHAT_HTML = """<!doctype html>
   };
 
   // ---------- dictation ----------
+  // Shared by the main composer and every chat panel (roadmap, project,
+  // profile assistants) - dictation used to be wired to the main
+  // composer only, so the same feature had to be re-typed by hand
+  // everywhere else in the app.
 
-  let recorder = null, chunks = [];
-  $('mic').onclick = async () => {
-    const mic = $('mic');
-    if (recorder && recorder.state === 'recording') { recorder.stop(); return; }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-      recorder = new MediaRecorder(stream);
-      chunks = [];
-      recorder.ondataavailable = ev => chunks.push(ev.data);
-      recorder.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
-        mic.classList.remove('recording');
-        mic.title = mic.ariaLabel = 'Dictate';
-        setStatus('Transcribing\\u2026');
-        const blob = new Blob(chunks, {type: 'audio/webm'});
-        const res = await fetch('/api/transcribe', {method: 'POST', body: blob});
-        const data = await res.json();
-        if (data.error) { setStatus('Dictation failed: ' + data.error); return; }
-        setStatus('');
-        input.value = (input.value ? input.value + ' ' : '') + data.text;
-        input.focus();
-      };
-      recorder.start();
-      mic.classList.add('recording');
-      mic.title = mic.ariaLabel = 'Stop recording';
-      setStatus('Recording\\u2026 click the mic again to stop.');
-    } catch (err) {
-      setStatus('Microphone unavailable: ' + err.message);
-    }
-  };
+  function attachDictation(micBtn, targetField, reportStatus) {
+    let recorder = null, chunks = [];
+    micBtn.onclick = async () => {
+      if (recorder && recorder.state === 'recording') { recorder.stop(); return; }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+        recorder = new MediaRecorder(stream);
+        chunks = [];
+        recorder.ondataavailable = ev => chunks.push(ev.data);
+        recorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          micBtn.classList.remove('recording');
+          micBtn.title = micBtn.ariaLabel = 'Dictate';
+          reportStatus('Transcribing\\u2026');
+          const blob = new Blob(chunks, {type: 'audio/webm'});
+          const res = await fetch('/api/transcribe', {method: 'POST', body: blob});
+          const data = await res.json();
+          if (data.error) { reportStatus('Dictation failed: ' + data.error); return; }
+          reportStatus('');
+          targetField.value = (targetField.value ? targetField.value + ' ' : '') + data.text;
+          targetField.focus();
+        };
+        recorder.start();
+        micBtn.classList.add('recording');
+        micBtn.title = micBtn.ariaLabel = 'Stop recording';
+        reportStatus('Recording\\u2026 click the mic again to stop.');
+      } catch (err) {
+        reportStatus('Microphone unavailable: ' + err.message);
+      }
+    };
+  }
+
+  attachDictation($('mic'), input, setStatus);
+
+  // A mic button matching #mic's markup, for a panel that doesn't have
+  // the main composer's dedicated status line.
+  function micButton() {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'icon-btn';
+    btn.title = 'Dictate';
+    btn.setAttribute('aria-label', 'Dictate');
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" ' +
+      'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+      'stroke-linejoin="round" style="vertical-align:-3px;"><rect x="9" y="2" ' +
+      'width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/>' +
+      '<line x1="12" y1="19" x2="12" y2="22"/></svg>';
+    return btn;
+  }
 
   openDashboardView();
   updateNav();

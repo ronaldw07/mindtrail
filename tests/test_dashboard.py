@@ -98,6 +98,50 @@ def test_project_with_no_roadmap_contributes_nothing_to_next_up(
     assert data["next_up"] == []
 
 
+def test_next_up_prefers_unblocked_steps_over_x_position(projects, chats, roadmaps, nodes):
+    # x order alone would put "Apply" first (x=1); it depends on a step
+    # that isn't done yet, so the genuinely actionable step should lead
+    # despite its higher x.
+    project = projects.create("Career")
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    prerequisite = nodes.add(roadmap.id, "Learn Agile", status="proposed", x=0)
+    blocked = nodes.add(roadmap.id, "Apply", status="accepted", x=1)
+    nodes.set_depends_on(blocked.id, [prerequisite.id])
+    unblocked = nodes.add(roadmap.id, "Network", status="accepted", x=20)
+
+    data = api.handle_dashboard(projects, chats, roadmaps, nodes)
+
+    titles = [n["title"] for n in data["next_up"]]
+    assert titles == [unblocked.title, blocked.title]
+
+
+def test_next_up_reports_whether_each_step_is_unblocked(projects, chats, roadmaps, nodes):
+    project = projects.create("Career")
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    prerequisite = nodes.add(roadmap.id, "Learn Agile", status="done", x=0)
+    ready = nodes.add(roadmap.id, "Apply", status="accepted", x=10)
+    nodes.set_depends_on(ready.id, [prerequisite.id])
+
+    data = api.handle_dashboard(projects, chats, roadmaps, nodes)
+
+    assert data["next_up"][0]["unblocked"] is True
+
+
+def test_next_up_marks_a_step_with_an_unfinished_dependency_as_blocked(
+    projects, chats, roadmaps, nodes
+):
+    project = projects.create("Career")
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    prerequisite = nodes.add(roadmap.id, "Learn Agile", status="accepted", x=0)
+    blocked = nodes.add(roadmap.id, "Apply", status="accepted", x=10)
+    nodes.set_depends_on(blocked.id, [prerequisite.id])
+
+    data = api.handle_dashboard(projects, chats, roadmaps, nodes)
+
+    blocked_entry = next(n for n in data["next_up"] if n["title"] == "Apply")
+    assert blocked_entry["unblocked"] is False
+
+
 def test_recent_includes_filed_and_unfiled_chats_with_project_names(
     projects, chats, roadmaps, nodes
 ):

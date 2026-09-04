@@ -100,10 +100,23 @@ def handle_dashboard(
         roadmap = roadmaps.for_project(project.id)
         if roadmap is None:
             continue
-        accepted = [n for n in nodes.for_roadmap(roadmap.id) if n.status == NEXT_UP_STATUS]
-        # x position roughly tracks dependency order from the generated
-        # layout, so it doubles as "what's next" without a due-date field.
-        accepted.sort(key=lambda n: n.x)
+        all_nodes = nodes.for_roadmap(roadmap.id)
+        by_id = {n.id: n for n in all_nodes}
+        accepted = [n for n in all_nodes if n.status == NEXT_UP_STATUS]
+
+        def is_unblocked(n) -> bool:
+            return all(
+                by_id.get(dep_id) is not None and by_id[dep_id].status == "done"
+                for dep_id in n.depends_on
+            )
+
+        # Genuinely unblocked steps (every dependency already done) lead;
+        # x position is only a tiebreaker within that, not the primary
+        # signal it used to be. A step still waiting on a dependency
+        # sorts after rather than being hidden, so a project with a real
+        # plan doesn't look empty just because its next actionable step
+        # hasn't been reached yet.
+        accepted.sort(key=lambda n: (not is_unblocked(n), n.x))
         for n in accepted[:DASHBOARD_ITEMS_PER_PROJECT]:
             next_up.append(
                 {
@@ -112,6 +125,7 @@ def handle_dashboard(
                     "node_id": n.id,
                     "title": n.title,
                     "note": n.note,
+                    "unblocked": is_unblocked(n),
                 }
             )
 
