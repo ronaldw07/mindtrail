@@ -40,11 +40,17 @@ $ mindtrail chat
 ```
 
 Opens a browser chat window at `localhost:8765`, landing on **Today** — a
-dashboard pulling together each project's cached highlights, the roadmap
-steps you've accepted but haven't finished, and your most recently touched
-chats and documents. Nothing on it triggers a model call; it only reads
-what's already stored, so opening it costs nothing. Click the mindtrail
-logo any time to come back to it.
+dashboard pulling together each project's cached highlights, a "Due this
+week" agenda of roadmap steps bucketed into overdue/today/this week/later
+(bucketing and the "today" boundary are computed server-side, in local
+time, not UTC), and your most recently touched chats and documents.
+Nothing on it triggers a model call; it only reads what's already stored,
+so opening it costs nothing. Click the mindtrail logo any time to come
+back to it.
+
+Press **Cmd+K** (Ctrl+K on non-Mac) anywhere to open a command palette —
+jump to any project, conversation, or action without touching the
+sidebar. Press **?** to see every keyboard shortcut in an overlay.
 
 A search box sits at the top of the sidebar — semantic search over
 everything stored (research, notes, documents), the same retrieval that
@@ -59,9 +65,9 @@ under them:
 - **Move chats between projects**, or out of one entirely. Deleting a
   project keeps its chats and unfiles them; deleting a *chat* does
   remove its content.
-- **🎤 dictate** — records from your mic and transcribes with Whisper.
-- **+ upload a PDF** into the open chat, parsed and stored as knowledge
-  you can then ask about.
+- **Dictate** — records from your mic and transcribes with Whisper.
+- **Upload a PDF** into the open chat, parsed and stored as knowledge you
+  can then ask about.
 
 Clicking a project name opens its own screen, with three things beside
 its chats:
@@ -73,14 +79,31 @@ its chats:
 - **Instructions** — free text applied to every answer in that project.
   Writing "cite only primary sources" there changes the research, rather
   than being a note to yourself.
-- **Roadmap** — a goal broken into a draggable node canvas. Generating
-  proposes steps with dependencies between them; accept, reject, note, or
-  drag any node, and regenerating only ever touches the still-proposed
-  ones, planning around whatever you already decided. A chat panel sits
-  alongside the canvas — ask about the plan or tell it what changed, and
-  it can propose adding a step, changing a status, or attaching a note.
-  It never applies anything itself; every proposal shows up as a card you
-  accept or dismiss.
+- **Roadmap** — a goal broken into a draggable node canvas, with:
+  - **Templates** — start a roadmap from a prebuilt set of steps instead
+    of generating or building one from scratch.
+  - **Generate** proposes steps with dependencies between them; accept,
+    reject, note, or drag any node, and regenerating only ever touches
+    the still-proposed ones, planning around whatever you already decided.
+  - **Drag-to-link** — drag from a node's edge handle to another node to
+    create a dependency between them, instead of typing ids anywhere.
+  - **Multi-select and bulk actions** — select several nodes at once for
+    Accept all, Reject all, Mark done, Set due date, or Delete in one
+    action, rather than one node at a time.
+  - **Right-click** the canvas to add a new step at that position.
+  - **Due dates and recurring steps** — give a step a due date, and
+    optionally make it repeat (daily/weekly/fortnightly/monthly); marking
+    a repeating step done resets it to accepted with the due date pushed
+    forward instead of leaving a stale completed card behind.
+  - **Progress** — a bar next to the goal showing steps done against
+    every non-rejected step; a rejected step isn't outstanding work, so
+    it's excluded rather than making 100% unreachable.
+  - A chat panel sits alongside the canvas — ask about the plan or tell
+    it what changed, and it can propose adding a step, changing a status,
+    or attaching a note. It never applies anything itself; every proposal
+    shows up as a card you accept or dismiss.
+  - **Link entries** to a step so the research or notes behind a decision
+    stay attached to the step that came from them.
 - **Files** — documents uploaded into that project.
 - **Project Assistant** — the same propose/accept pattern as the roadmap
   chat, scoped to this project: ask it to rename the project or change its
@@ -95,7 +118,7 @@ persisted, not just shown once at ask time — reopening the chat later
 still shows what it was built on, as clickable chips that jump straight
 to the source conversation.
 
-**👤 Profile**, in the sidebar, is a short freeform description of you —
+**Profile**, in the sidebar, is a short freeform description of you —
 role, goals, background — used to personalize every answer, highlight, and
 roadmap. Write it by hand, generate a starting draft from whatever
 documents are already stored, or talk it through with the **Profile
@@ -307,6 +330,11 @@ mindtrail web
 | `mindtrail/organize/` | Projects and conversations in SQLite, plus the backfill |
 | `mindtrail/organize/profile.py` | The user's own background: single-row store, edit-and-save |
 | `mindtrail/organize/roadmaps.py` | Roadmaps and nodes: CRUD, status, notes, canvas position |
+| `mindtrail/organize/roadmap_templates.py` | Prebuilt step sets a roadmap can start from |
+| `mindtrail/organize/export.py` | Export everything to markdown with YAML frontmatter |
+| `mindtrail/organize/restore.py` | Pure parsing half of import: inverts each export builder |
+| `mindtrail/organize/restore_apply.py` | Writer half of import: idempotent-by-id, two-pass dependency resolution |
+| `mindtrail/web/auth.py` | Shared-token auth: loopback-exempt, fail-closed on other hosts |
 | `mindtrail/ingest/documents.py` | PDF text extraction, local, no vision model available |
 | `mindtrail/advice/planner.py` | Grounded next-steps plan across everything stored |
 | `mindtrail/advice/highlights.py` | Per-project "what's next", cached with staleness detection |
@@ -415,16 +443,20 @@ required. The model is `openai/gpt-oss-120b`; note that Groq removed the
 Llama line from its catalog, so older tutorials naming
 `llama-3.3-70b-versatile` will 404.
 
+## CLI reference
+
 ```bash
 .venv/bin/python -m mindtrail.cli ask "what is a vector database"
-.venv/bin/python -m mindtrail.cli search "vector"     # memory only, no lookups
-.venv/bin/python -m mindtrail.cli predict             # likely next questions
-.venv/bin/python -m mindtrail.cli stats               # what is remembered
-.venv/bin/python -m mindtrail.cli web                 # static page, grouped by topic
-.venv/bin/python -m mindtrail.cli chat                 # browser chatbot interface
-.venv/bin/python -m mindtrail.cli docs resume.pdf       # parse and store a PDF
-.venv/bin/python -m mindtrail.cli note "some note"      # save a manual note
-.venv/bin/python -m mindtrail.cli advice                # generate a next-steps plan
+.venv/bin/python -m mindtrail.cli search "vector"        # memory only, no lookups
+.venv/bin/python -m mindtrail.cli predict                # likely next questions (not validated - see Results)
+.venv/bin/python -m mindtrail.cli stats                  # what is remembered
+.venv/bin/python -m mindtrail.cli web                    # static page, grouped by topic
+.venv/bin/python -m mindtrail.cli chat                   # browser chatbot interface
+.venv/bin/python -m mindtrail.cli docs resume.pdf        # parse and store a PDF (typed text only)
+.venv/bin/python -m mindtrail.cli note "some note"       # save a manual note
+.venv/bin/python -m mindtrail.cli advice                 # generate a next-steps plan
+.venv/bin/python -m mindtrail.cli export --out DIR       # back up everything to markdown
+.venv/bin/python -m mindtrail.cli import DIR             # restore from a directory 'export' wrote
 ```
 
 `web` writes a single HTML file and opens it in your default browser. Each
@@ -433,24 +465,83 @@ key facts; the page groups entries under those topics with a keyword filter
 and links back to sources. Nothing to keep running — regenerate with `web`
 whenever you want it current.
 
-`chat` binds `127.0.0.1` by default and needs no login there. Pass
-`--host 0.0.0.0` (as the Docker image does, to be reachable from outside
-the container) and it requires `MINDTRAIL_TOKEN` to be set — it refuses
-to start otherwise, rather than come up world-reachable with no auth.
-With a token set, the first request gets a login page; a correct token
-sets a session cookie for subsequent requests.
+`export` and `import` are covered in [Backup and restore](#backup-and-restore)
+below.
+
+## Auth (`MINDTRAIL_TOKEN`)
+
+`chat` binds `127.0.0.1` by default and needs no login there — loopback is
+not reachable from outside the machine, so a login step would only add
+friction for no security benefit.
+
+Bind anywhere else (`--host 0.0.0.0`, a LAN IP, as the Docker image does)
+and `MINDTRAIL_TOKEN` becomes required. **The server refuses to start
+without it** rather than come up world-reachable with no auth — this is a
+fail-closed design, not a warning you can ignore: every note, chat,
+document, and roadmap would otherwise be readable and writable by anyone
+who can reach that address. With a token set, the first request gets a
+login page; a correct token sets a session cookie for subsequent requests.
+Restarting the process clears all sessions.
 
 ```bash
 MINDTRAIL_TOKEN=some-long-random-string \
   .venv/bin/python -m mindtrail.cli chat --host 0.0.0.0
 ```
 
-## Tests
+## Docker
 
-446 tests, no network and no API key required — search, fetch, and the model
-are all stubbed. Coverage concentrates on logic that can be silently wrong
-(retrieval ranking, JSON parsing, cosine math, retry backoff) rather than on
-CLI glue.
+```bash
+docker build -t mindtrail .
+docker run -e MINDTRAIL_TOKEN=some-long-random-string \
+  -e GROQ_API_KEY=your-key \
+  -p 8765:8765 -v mindtrail-data:/data mindtrail
+```
+
+The image binds `0.0.0.0` (loopback would be invisible to Docker's port
+mapping even with `-p` published), so `MINDTRAIL_TOKEN` is required — the
+container will not start without it, for the same fail-closed reason as
+above. `/data` is a declared volume; bind-mount or name it so memory
+survives a container restart instead of living only in the writable layer.
+
+## Backup and restore
+
+```bash
+.venv/bin/python -m mindtrail.cli export --out ./backup
+.venv/bin/python -m mindtrail.cli import ./backup
+```
+
+`export` writes everything — projects, conversations and their entries,
+roadmaps with dependencies/due dates/notes/repeat schedules, your profile,
+and orphaned notes — as plain markdown with YAML frontmatter under the
+given directory. It's meant to be readable and diffable, not just a
+serialization format: open any file in a text editor and it makes sense.
+
+`import` reads that same directory back into a live database. It is
+idempotent by id: re-running an import skips anything that already
+exists rather than duplicating it. Pass `--overwrite` to replace existing
+records instead of skipping them. A malformed file is reported and
+skipped, not fatal — the rest of the directory still imports, and the
+command prints a created/skipped/failed count plus a warning per problem
+(an unresolvable roadmap dependency, a project name that no longer
+matches, and so on).
+
+There is deliberately no way to restore from the web UI — it's a
+CLI-only, out-of-band operation. A button that can silently replace your
+database is the wrong thing to put one click away.
+
+Conversation entries go back in through the same embedding path a fresh
+`ask` or `note` uses, so semantic search finds a restored entry exactly
+like an original one; nothing comes back invisible to recall.
+
+## Development
+
+578 tests, no network and no API key required — search, fetch, and the
+model are all stubbed. Coverage concentrates on logic that can be
+silently wrong (retrieval ranking, JSON parsing, cosine math, retry
+backoff, export/import round-trip fidelity) rather than on CLI glue.
+`tests/test_static_assets.py` runs `node --check` against the client's
+`app.js` so a syntax error in the browser code fails CI instead of
+shipping (skipped if `node` isn't on `PATH`).
 
 ```bash
 .venv/bin/python -m pytest tests/ -q
