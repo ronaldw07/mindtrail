@@ -428,6 +428,13 @@
     #roadmap-top { display: flex; align-items: center; gap: 0.6rem; padding: 0.8rem 1.25rem;
                    border-bottom: 0.5px solid var(--border-subtle); flex-shrink: 0; }
     #roadmap-top .goal { flex: 1; font-size: var(--fs-md); font-weight: 600; }
+    /* Hidden entirely (not rendered) when there's nothing countable, so
+       it never reads as a broken "0 of 0". */
+    .roadmap-progress { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+    .roadmap-progress-label { font-size: var(--fs-sm); color: var(--text-muted); white-space: nowrap; }
+    .roadmap-progress-bar { width: 90px; height: 4px; border-radius: var(--r-sm);
+                            background: var(--border-subtle); overflow: hidden; }
+    .roadmap-progress-fill { height: 100%; background: var(--success); }
     #roadmap-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
     /* Pan/zoom viewport: the canvas is transformed rather than scrolled,
        so a scaled canvas can't disagree with the scrollbars about how

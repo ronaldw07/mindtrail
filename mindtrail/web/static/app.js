@@ -1657,6 +1657,31 @@
     goalEl.textContent = roadmap.goal;
     top.appendChild(goalEl);
 
+    // Denominator excludes rejected steps - a rejected step isn't
+    // outstanding work, and counting it would mean a roadmap can never
+    // reach 100%. Repeating steps (F4) never actually land in this list
+    // as 'done': the server resets them to 'accepted' the moment they're
+    // completed, so they always count as outstanding here rather than
+    // needing special-casing on the client.
+    const countable = nodesList.filter(n => n.status !== 'rejected');
+    if (countable.length) {
+      const doneCount = countable.filter(n => n.status === 'done').length;
+      const progress = document.createElement('div');
+      progress.className = 'roadmap-progress';
+      const label = document.createElement('span');
+      label.className = 'roadmap-progress-label';
+      label.textContent = doneCount + ' of ' + countable.length + ' done';
+      const bar = document.createElement('div');
+      bar.className = 'roadmap-progress-bar';
+      const fill = document.createElement('div');
+      fill.className = 'roadmap-progress-fill';
+      fill.style.width = Math.round((doneCount / countable.length) * 100) + '%';
+      bar.appendChild(fill);
+      progress.appendChild(label);
+      progress.appendChild(bar);
+      top.appendChild(progress);
+    }
+
     const addBtn = document.createElement('button');
     addBtn.className = 'card-btn';
     addBtn.textContent = '+ Add step';
