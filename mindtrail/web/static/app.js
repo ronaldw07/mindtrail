@@ -3327,32 +3327,22 @@
     }
     paletteTrigger = document.activeElement;
     el.innerHTML = '';
-    // Every rule here is inline, referencing the same :root tokens the
-    // rest of the app uses, rather than adding anything to app.css -
-    // the design pass owns that file next and this is a new element
-    // that doesn't need a rule beyond what the tokens already give it.
-    el.style.cssText =
-      'display:block;position:fixed;inset:0;z-index:150;background:rgba(0,0,0,0.55);';
+    // Styling lives in app.css (.palette-*) - see the "command palette /
+    // shortcuts overlay" section there for the frosted material.
+    el.style.display = 'block';
     const box = document.createElement('div');
-    box.style.cssText =
-      'position:absolute;top:14vh;left:50%;transform:translateX(-50%);' +
-      'width:560px;max-width:calc(100vw - 2rem);max-height:65vh;display:flex;' +
-      'flex-direction:column;overflow:hidden;background:var(--surface);' +
-      'border:1px solid var(--border-strong);border-radius:var(--r-xl);' +
-      'box-shadow:0 18px 50px rgba(0,0,0,0.55);';
+    box.className = 'palette-box';
     el.appendChild(box);
 
     const input = document.createElement('input');
     input.placeholder = 'Search projects, chats, roadmap steps, memory…';
     input.setAttribute('aria-label', 'Command palette');
     input.name = 'palette-query';
-    input.style.cssText =
-      'border:none;border-bottom:1px solid var(--border-subtle);background:transparent;' +
-      'color:var(--text);font-size:var(--fs-lg);padding:0.9rem 1rem;outline:none;';
+    input.className = 'palette-input';
     box.appendChild(input);
 
     const list = document.createElement('div');
-    list.style.cssText = 'overflow-y:auto;padding:0.4rem;';
+    list.className = 'palette-list';
     box.appendChild(list);
 
     el.onclick = ev => { if (ev.target === el) closePalette(); };
@@ -3368,9 +3358,7 @@
       if (!items.length) return;
       const heading = document.createElement('div');
       heading.textContent = label;
-      heading.style.cssText =
-        'font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:0.05em;' +
-        'color:var(--text-muted);padding:0.5rem 0.6rem 0.25rem;';
+      heading.className = 'palette-group-heading';
       list.appendChild(heading);
       items.forEach(item => {
         const idx = flatItems.length;
@@ -3378,9 +3366,7 @@
         const row = document.createElement('div');
         row.dataset.idx = String(idx);
         row.textContent = item.label;
-        row.style.cssText =
-          'padding:0.5rem 0.6rem;border-radius:var(--r);cursor:pointer;' +
-          'font-size:var(--fs-base);color:var(--text-3);';
+        row.className = 'palette-row';
         row.onclick = () => item.run();
         list.appendChild(row);
       });
@@ -3389,8 +3375,7 @@
     function highlight() {
       list.querySelectorAll('[data-idx]').forEach(row => {
         const isSelected = Number(row.dataset.idx) === selected;
-        row.style.background = isSelected ? 'var(--surface-hover)' : '';
-        row.style.color = isSelected ? 'var(--text-bright)' : 'var(--text-3)';
+        row.classList.toggle('selected', isSelected);
         if (isSelected) row.scrollIntoView({block: 'nearest'});
       });
     }
@@ -3433,8 +3418,7 @@
       if (!flatItems.length) {
         const empty = document.createElement('div');
         empty.textContent = query ? 'No matches.' : 'Type to search, or pick an action below.';
-        empty.style.cssText =
-          'padding:0.6rem;color:var(--text-muted);font-size:var(--fs-base);';
+        empty.className = 'palette-empty';
         list.appendChild(empty);
       }
       selected = Math.min(selected, Math.max(flatItems.length - 1, 0));
@@ -3536,34 +3520,27 @@
     if (el.style.display === 'block') return;
     shortcutsTrigger = document.activeElement;
     el.innerHTML = '';
-    el.style.cssText =
-      'display:block;position:fixed;inset:0;z-index:150;background:rgba(0,0,0,0.55);';
+    // Styling lives in app.css (.shortcuts-*).
+    el.style.display = 'block';
     const box = document.createElement('div');
-    box.style.cssText =
-      'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);' +
-      'width:360px;max-width:calc(100vw - 2rem);padding:1.25rem;background:var(--surface);' +
-      'border:1px solid var(--border-strong);border-radius:var(--r-xl);' +
-      'box-shadow:0 18px 50px rgba(0,0,0,0.55);';
+    box.className = 'shortcuts-box';
     el.appendChild(box);
 
     const h = document.createElement('h3');
     h.textContent = 'Keyboard shortcuts';
-    h.style.cssText =
-      'margin:0 0 0.75rem;font-size:var(--fs-lg);font-weight:600;color:var(--text-heading);';
+    h.className = 'shortcuts-title';
     box.appendChild(h);
 
     // Generated straight from KEY_BINDINGS, not retyped - see the banner
     // comment above the table for why that's the whole point.
     KEY_BINDINGS.forEach(b => {
       const row = document.createElement('div');
-      row.style.cssText =
-        'display:flex;justify-content:space-between;gap:1rem;padding:0.3rem 0;' +
-        'font-size:var(--fs-base);color:var(--text-2);';
+      row.className = 'shortcuts-row';
       const label = document.createElement('span');
       label.textContent = b.label;
       const key = document.createElement('span');
       key.textContent = b.keys;
-      key.style.color = 'var(--text-muted)';
+      key.className = 'shortcuts-key';
       row.appendChild(label);
       row.appendChild(key);
       box.appendChild(row);
@@ -3574,7 +3551,7 @@
     const hint = document.createElement('div');
     hint.textContent =
       'While the palette is open: ↑↓ to navigate, Enter to run, Esc to close.';
-    hint.style.cssText = 'margin-top:0.75rem;font-size:var(--fs-sm);color:var(--text-muted);';
+    hint.className = 'shortcuts-hint';
     box.appendChild(hint);
 
     el.onclick = ev => { if (ev.target === el) closeShortcutsOverlay(); };
