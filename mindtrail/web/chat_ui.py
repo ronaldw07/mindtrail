@@ -41,6 +41,14 @@ CHAT_HTML = """<!doctype html>
           <path d="M14 4v5h5"/><path d="M8 13h8"/><path d="M8 17h5"/>
         </svg>Note
       </button>
+      <button class="side-btn" id="export-data">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             style="vertical-align:-2px;margin-right:0.4rem;">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>
+        </svg>Export
+      </button>
       <div id="tree"></div>
     </aside>
     <main>

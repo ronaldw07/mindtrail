@@ -2819,6 +2819,31 @@
   }
   $('add-note').onclick = addNote;
 
+  // Backs up the whole database plus profile to plain markdown on disk -
+  // the CLI's `mindtrail export` had no browser entry point until now, so
+  // the backup story was invisible to anyone who never reads --help.
+  async function exportData() {
+    const btn = $('export-data');
+    // setButtonBusy wipes the button's children for the spinner, so the
+    // original icon + label markup is kept aside and reattached afterwards
+    // rather than rebuilt from scratch or a plain-text fallback.
+    const original = Array.from(btn.childNodes);
+    setButtonBusy(btn, 'Exporting…');
+    try {
+      const res = await jsonSend('/api/export', {});
+      if (res.error) { toast(res.error, {error: true}); return; }
+      toast('Exported ' + res.files + ' file' + (res.files === 1 ? '' : 's') +
+            ' to ' + res.path);
+    } catch (err) {
+      toast('Export failed', {error: true});
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '';
+      original.forEach(node => btn.appendChild(node));
+    }
+  }
+  $('export-data').onclick = exportData;
+
   // ---------- search ----------
   // Semantic search over everything stored - the app's core retrieval,
   // otherwise only reachable indirectly through a follow-up question.
