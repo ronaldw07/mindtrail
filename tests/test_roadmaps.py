@@ -1,8 +1,11 @@
 """Roadmap and node CRUD. Pure SQLite, no network or API key."""
 
+import sqlite3
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
-from mindtrail.organize.db import initialize
+from mindtrail.organize.db import SCHEMA, initialize
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 
@@ -250,3 +253,107 @@ def test_mutating_a_missing_node_raises(nodes):
         nodes.set_status("nope", "accepted")
     with pytest.raises(ValueError):
         nodes.move("nope", 1, 1)
+
+
+# --- recurring steps (F4) --------------------------------------------------
+
+
+def _today() -> str:
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def _in_days(n: int) -> str:
+    return (datetime.now(timezone.utc).date() + timedelta(days=n)).isoformat()
+
+
+def test_new_node_has_no_repeat_by_default(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X")
+
+    assert node.repeat_days == 0
+
+
+def test_a_node_can_be_created_with_repeat_days(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X", repeat_days=7)
+
+    assert node.repeat_days == 7
+
+
+def test_set_repeat_days_updates_it(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X")
+
+    nodes.set_repeat_days(node.id, 14)
+
+    assert nodes.get(node.id).repeat_days == 14
+
+
+def test_set_repeat_days_rejects_negative_values(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X")
+
+    with pytest.raises(ValueError):
+        nodes.set_repeat_days(node.id, -1)
+
+
+def test_marking_a_repeating_node_done_resets_to_accepted_and_advances_due_date(
+    nodes, roadmap_id
+):
+    node = nodes.add(roadmap_id, "X", status="accepted", repeat_days=7)
+
+    nodes.set_status(node.id, "done")
+
+    updated = nodes.get(node.id)
+    assert updated.status == "accepted"
+    assert updated.due_date == _in_days(7)
+
+
+def test_a_non_repeating_node_still_goes_to_done(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X", status="accepted")
+
+    nodes.set_status(node.id, "done")
+
+    assert nodes.get(node.id).status == "done"
+
+
+def test_repeat_days_zero_behaves_exactly_like_no_repeat(nodes, roadmap_id):
+    node = nodes.add(roadmap_id, "X", status="accepted", repeat_days=0)
+
+    nodes.set_status(node.id, "done")
+
+    assert nodes.get(node.id).status == "done"
+
+
+def test_completing_an_overdue_repeating_node_schedules_from_today_not_the_stale_date(
+    nodes, roadmap_id
+):
+    stale_due = _in_days(-30)  # a month overdue
+    node = nodes.add(
+        roadmap_id, "X", status="accepted", repeat_days=7, due_date=stale_due
+    )
+
+    nodes.set_status(node.id, "done")
+
+    updated = nodes.get(node.id)
+    # Anchored on today (today + 7), not on the stale due date (stale + 7),
+    # which would still read as overdue the moment it comes back.
+    assert updated.due_date == _in_days(7)
+    assert updated.due_date > _today()
+
+
+def test_node_without_repeat_days_column_loads_with_default(tmp_path):
+    """Simulates a database that predates this column - the read path
+    (_to_node) must guard for its absence the same way it already does
+    for due_date and linked_entries, rather than raising a KeyError."""
+    path = str(tmp_path / "old.db")
+    conn = sqlite3.connect(path)
+    conn.executescript(SCHEMA)  # base schema only - no ADDED_COLUMNS applied
+    conn.execute(
+        "INSERT INTO roadmap_nodes "
+        "(id, roadmap_id, title, detail, status, note, x, y, depends_on, created_at) "
+        "VALUES ('n1', 'r1', 'Old node', '', 'accepted', '', 0, 0, '', '2020-01-01')"
+    )
+    conn.commit()
+    conn.close()
+
+    node = RoadmapNodeStore(path).get("n1")
+
+    assert node is not None
+    assert node.repeat_days == 0

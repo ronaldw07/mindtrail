@@ -871,6 +871,7 @@ def _node_json(node, store: MemoryStore) -> dict:
         "y": node.y,
         "depends_on": list(node.depends_on),
         "due_date": node.due_date,
+        "repeat_days": node.repeat_days,
         # Dangling ids (the entry was deleted since it was linked) are
         # dropped here rather than stored back - _resolve_recalled already
         # does exactly this lookup-and-drop for recalled_ids, so it is
@@ -1266,6 +1267,8 @@ def handle_update_node(
             nodes.rename(node_id, str(body["title"]), str(body.get("detail", "")))
         if "due_date" in body:
             nodes.set_due_date(node_id, str(body["due_date"]))
+        if "repeat_days" in body:
+            nodes.set_repeat_days(node_id, int(body["repeat_days"]))
         if "depends_on" in body:
             nodes.set_depends_on(node_id, _validate_depends_on(nodes, node_id, body["depends_on"]))
         if "linked_entries" in body:

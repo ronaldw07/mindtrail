@@ -55,6 +55,19 @@
   const MIN_ZOOM = 0.2, MAX_ZOOM = 2;
   const openProjects = new Set(prefs.get('openProjects', []));
 
+  // A small fixed set rather than a free-form number input - "every 9
+  // days" isn't a habit anyone actually wants, and a short list is
+  // faster to pick from than typing a day count.
+  const REPEAT_CHOICES = [
+    {days: 0, label: 'Never'},
+    {days: 1, label: 'Daily'},
+    {days: 7, label: 'Weekly'},
+    {days: 14, label: 'Fortnightly'},
+    {days: 30, label: 'Monthly'},
+  ];
+  const repeatLabel = days =>
+    (REPEAT_CHOICES.find(c => c.days === days) || {label: 'Every ' + days + ' days'}).label;
+
   // ---------- roadmap canvas selection (module scope, on purpose) ----------
   // renderRoadmap tears the whole canvas down (view.innerHTML = '') and
   // rebuilds it from scratch on every single node edit - 11 call sites,
@@ -206,6 +219,7 @@
           optEl.textContent = o.label;
           field.appendChild(optEl);
         });
+        if (opts.value !== undefined) field.value = String(opts.value);
         box.appendChild(field);
       } else if (opts.input) {
         field = document.createElement(opts.multiline ? 'textarea' : 'input');
@@ -2041,7 +2055,15 @@
           toast(res.error, {error: true});
           return;
         }
+        // A repeating step marked done doesn't land on 'done' - the
+        // server resets it to 'accepted' with a new due date (see
+        // RoadmapNodeStore.set_status), so the optimistic patch above
+        // can disagree with what was actually saved. Re-render whenever
+        // that happens so the canvas doesn't keep showing a status the
+        // server didn't accept.
+        const diverged = 'status' in patch && res.status !== patch.status;
         Object.assign(n, res);
+        if (diverged) renderRoadmap(projectId, projectName, roadmap, nodesList);
       });
     }
 
@@ -2133,14 +2155,18 @@
         jsonSend('/api/roadmap-node/' + n.id, patches[i], 'PATCH')
       )).then(results => {
         let failed = false;
+        // Same divergence as updateNode's single-node path: a repeating
+        // node in this batch may come back 'accepted' instead of 'done'.
+        let diverged = false;
         results.forEach((res, i) => {
           if (res.error) { failed = true; Object.assign(targets[i], previous[i]); }
-          else Object.assign(targets[i], res);
+          else {
+            if ('status' in patches[i] && res.status !== patches[i].status) diverged = true;
+            Object.assign(targets[i], res);
+          }
         });
-        if (failed) {
-          toast('Some updates failed', {error: true});
-          renderRoadmap(projectId, projectName, roadmap, nodesList);
-        }
+        if (failed) toast('Some updates failed', {error: true});
+        if (failed || diverged) renderRoadmap(projectId, projectName, roadmap, nodesList);
       });
     }
 
@@ -2237,6 +2263,19 @@
       if (n.due_date) {
         items.push({label: 'Clear due date', run: () => updateNode(n, {due_date: ''})});
       }
+      // Marking a repeating step done doesn't reach 'done' - the server
+      // resets it to 'accepted' and rolls the due date forward instead
+      // (see RoadmapNodeStore.set_status), so weekly/daily habits don't
+      // fill the canvas with a fresh clone every time.
+      items.push({label: 'Repeats every…', run: async () => {
+        const chosen = await modal({
+          title: 'Repeats every', confirmLabel: 'Save',
+          select: REPEAT_CHOICES.map(c => ({value: String(c.days), label: c.label})),
+          value: String(n.repeat_days || 0),
+        });
+        if (chosen === null) return;
+        updateNode(n, {repeat_days: Number(chosen)});
+      }});
       items.push({divider: true});
       // The keyboard-reachable path to F1's drag-to-create dependency -
       // dragging the edge handle is pointer-only by construction, so
@@ -2349,6 +2388,14 @@
         due.className = 'node-due' + (overdue ? ' overdue' : '');
         due.textContent = (overdue ? '\u26a0 Overdue: ' : '\u23f1 Due ') + n.due_date;
         el.appendChild(due);
+      }
+      if (n.repeat_days) {
+        // Reuses .file-chip like the linked-memory chips below, rather
+        // than inventing a repeat-specific chip style for one glyph.
+        const repeat = document.createElement('span');
+        repeat.className = 'file-chip';
+        repeat.textContent = '\u21bb ' + repeatLabel(n.repeat_days);
+        el.appendChild(repeat);
       }
       if ((n.linked_entries || []).length) {
         // Reuses .file-chip (already generic, not scoped to the Files

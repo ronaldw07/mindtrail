@@ -393,6 +393,31 @@ def test_updating_a_missing_node_errors(nodes, store):
     assert "error" in api.handle_update_node(nodes, store, "nope", {"status": "accepted"})
 
 
+def test_updating_node_repeat_days(nodes, roadmaps, store, project):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    node = nodes.add(roadmap.id, "X")
+
+    result = api.handle_update_node(nodes, store, node.id, {"repeat_days": 7})
+
+    assert result["repeat_days"] == 7
+
+
+def test_completing_a_repeating_node_through_the_api_resets_to_accepted(
+    nodes, roadmaps, store, project
+):
+    roadmap = roadmaps.create("Goal", project_id=project.id)
+    node = nodes.add(roadmap.id, "X", status="accepted", repeat_days=7)
+
+    result = api.handle_update_node(nodes, store, node.id, {"status": "done"})
+
+    # The status-change path (RoadmapNodeStore.set_status) is the single
+    # choke point for both the HTTP API and any future CLI command, so
+    # this exercises the same repeat semantics as tests/test_roadmaps.py
+    # but through handle_update_node, the way the client actually calls it.
+    assert result["status"] == "accepted"
+    assert result["due_date"] != ""
+
+
 # --- depends_on validation --------------------------------------------
 
 

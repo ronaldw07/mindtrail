@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from mindtrail.organize.db import connect, now_iso
 
@@ -45,6 +46,11 @@ class RoadmapNode:
     exactly like depends_on; dangling ids are dropped on the read path in
     web/api.py, not here, since only the caller has a MemoryStore to
     check against."""
+    repeat_days: int = 0
+    """0 means the step does not repeat. A positive value is a day
+    interval (1/7/14/30 for daily/weekly/fortnightly/monthly) - see
+    RoadmapNodeStore.set_status for what happens when a repeating step is
+    marked done."""
 
 
 def _to_roadmap(row) -> Roadmap:
@@ -73,6 +79,7 @@ def _to_node(row) -> RoadmapNode:
         created_at=row["created_at"],
         due_date=row["due_date"] if "due_date" in keys else "",
         linked_entries=tuple(e for e in (raw_linked or "").split(",") if e),
+        repeat_days=row["repeat_days"] if "repeat_days" in keys else 0,
     )
 
 
@@ -136,6 +143,7 @@ class RoadmapNodeStore:
         depends_on: list[str] | None = None,
         due_date: str = "",
         linked_entries: list[str] | None = None,
+        repeat_days: int = 0,
     ) -> RoadmapNode:
         if status not in STATUSES:
             raise ValueError(f"invalid status: {status}")
@@ -145,18 +153,19 @@ class RoadmapNodeStore:
             depends_on=tuple(depends_on or []), created_at=now_iso(),
             due_date=due_date.strip(),
             linked_entries=tuple(linked_entries or []),
+            repeat_days=repeat_days,
         )
         with connect(self._path) as conn:
             conn.execute(
                 "INSERT INTO roadmap_nodes "
                 "(id, roadmap_id, title, detail, status, note, x, y, "
-                "depends_on, created_at, due_date, linked_entries) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "depends_on, created_at, due_date, linked_entries, repeat_days) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     node.id, node.roadmap_id, node.title, node.detail,
                     node.status, node.note, node.x, node.y,
                     ",".join(node.depends_on), node.created_at, node.due_date,
-                    ",".join(node.linked_entries),
+                    ",".join(node.linked_entries), node.repeat_days,
                 ),
             )
         return node
@@ -173,13 +182,13 @@ class RoadmapNodeStore:
             conn.execute(
                 "INSERT INTO roadmap_nodes "
                 "(id, roadmap_id, title, detail, status, note, x, y, "
-                "depends_on, created_at, due_date, linked_entries) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "depends_on, created_at, due_date, linked_entries, repeat_days) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     node.id, node.roadmap_id, node.title, node.detail,
                     node.status, node.note, node.x, node.y,
                     ",".join(node.depends_on), node.created_at, node.due_date,
-                    ",".join(node.linked_entries),
+                    ",".join(node.linked_entries), node.repeat_days,
                 ),
             )
         return node
@@ -196,6 +205,29 @@ class RoadmapNodeStore:
     def set_status(self, node_id: str, status: str) -> None:
         if status not in STATUSES:
             raise ValueError(f"invalid status: {status}")
+        if status == "done":
+            node = self.get(node_id)
+            if node is not None and node.repeat_days > 0:
+                # A repeating step never actually rests at 'done' - it
+                # resets to 'accepted' with its due date pushed forward,
+                # so the one card keeps coming back instead of the canvas
+                # filling up with a clone every week. This is the single
+                # choke point every status change goes through (API and
+                # any future CLI command alike), so neither can bypass it.
+                #
+                # The new due date is anchored on *today*, not on the old
+                # due date - completing an overdue step should not
+                # immediately recreate an overdue step. Anchoring on the
+                # stale due date is the tempting "fix" here; don't.
+                today = datetime.now(timezone.utc).date()
+                next_due = (today + timedelta(days=node.repeat_days)).isoformat()
+                with connect(self._path) as conn:
+                    conn.execute(
+                        "UPDATE roadmap_nodes SET status = ?, due_date = ? "
+                        "WHERE id = ?",
+                        ("accepted", next_due, node_id),
+                    )
+                return
         self._update(node_id, "status", status)
 
     def set_note(self, node_id: str, note: str) -> None:
@@ -203,6 +235,11 @@ class RoadmapNodeStore:
 
     def set_due_date(self, node_id: str, due_date: str) -> None:
         self._update(node_id, "due_date", due_date.strip())
+
+    def set_repeat_days(self, node_id: str, repeat_days: int) -> None:
+        if repeat_days < 0:
+            raise ValueError("repeat_days must not be negative")
+        self._update(node_id, "repeat_days", repeat_days)
 
     def move(self, node_id: str, x: float, y: float) -> None:
         with connect(self._path) as conn:

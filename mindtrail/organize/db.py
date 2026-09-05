@@ -142,6 +142,10 @@ ADDED_COLUMNS = [
     ("projects", "advice_basis_count", "INTEGER NOT NULL DEFAULT 0"),
     ("roadmap_nodes", "due_date", "TEXT NOT NULL DEFAULT ''"),
     ("roadmap_nodes", "linked_entries", "TEXT NOT NULL DEFAULT ''"),
+    # 0 means "does not repeat". A positive value is a day interval
+    # (1/7/14/30 from the UI's daily/weekly/fortnightly/monthly presets),
+    # applied when the node is marked done - see RoadmapNodeStore.set_status.
+    ("roadmap_nodes", "repeat_days", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
