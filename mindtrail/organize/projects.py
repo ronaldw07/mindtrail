@@ -55,6 +55,20 @@ class ProjectStore:
             )
         return project
 
+    def restore(self, project: Project) -> Project:
+        """Re-insert a project exactly as it was, id included.
+
+        Used by `mindtrail import`: a restore has to recognize its own
+        previous run by id on a second pass rather than minting a fresh
+        one and duplicating the project.
+        """
+        with connect(self._path) as conn:
+            conn.execute(
+                "INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)",
+                (project.id, project.name, project.created_at),
+            )
+        return project
+
     def rename(self, project_id: str, name: str) -> None:
         clean = name.strip()
         if not clean:

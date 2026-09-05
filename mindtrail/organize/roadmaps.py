@@ -103,6 +103,20 @@ class RoadmapStore:
             )
         return roadmap
 
+    def restore(self, roadmap: Roadmap) -> Roadmap:
+        """Re-insert a roadmap exactly as it was, id included - same
+        reasoning as RoadmapNodeStore.restore below: `mindtrail import`
+        must recognize its own previous run by id, not duplicate under a
+        fresh one.
+        """
+        with connect(self._path) as conn:
+            conn.execute(
+                "INSERT INTO roadmaps (id, project_id, goal, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (roadmap.id, roadmap.project_id, roadmap.goal, roadmap.created_at),
+            )
+        return roadmap
+
     def get(self, roadmap_id: str) -> Roadmap | None:
         with connect(self._path) as conn:
             row = conn.execute(

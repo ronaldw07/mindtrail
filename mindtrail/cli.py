@@ -20,6 +20,7 @@ from mindtrail.organize.export import export_to_directory
 from mindtrail.organize.migrate import backfill_conversations
 from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import ProjectStore
+from mindtrail.organize.restore_apply import import_from_directory
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.predict.next_query import predict_from_store
 from mindtrail.web.chat_server import Deps, run_chat_server
@@ -211,6 +212,33 @@ def cmd_export(args) -> int:
     return 0
 
 
+def cmd_import(args) -> int:
+    """Restore from a directory written by `mindtrail export`.
+
+    CLI-only by design: restore can overwrite or merge into a live
+    database, and a web button inviting that by accident is the wrong
+    affordance for something this destructive.
+    """
+    initialize()
+    summary = import_from_directory(
+        args.dir,
+        MemoryStore(),
+        ConversationStore(),
+        ProjectStore(),
+        RoadmapStore(),
+        RoadmapNodeStore(),
+        ProfileStore(),
+        overwrite=args.overwrite,
+    )
+    print(
+        f"imported: {summary.created} created, {summary.skipped} skipped, "
+        f"{summary.failed} failed"
+    )
+    for warning in summary.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    return 1 if summary.failed else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mindtrail",
@@ -257,6 +285,14 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--out", required=True)
     export.add_argument("--project", default=None, help="limit to one project's id")
     export.set_defaults(func=cmd_export)
+
+    imp = sub.add_parser("import", help="restore from a directory made by 'export'")
+    imp.add_argument("dir")
+    imp.add_argument(
+        "--overwrite", action="store_true",
+        help="replace existing records instead of skipping them",
+    )
+    imp.set_defaults(func=cmd_import)
 
     chat = sub.add_parser("chat", help="chatbot interface in the browser")
     chat.add_argument("--port", type=int, default=8765)

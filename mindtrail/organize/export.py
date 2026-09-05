@@ -211,6 +211,15 @@ def _step_block(node: RoadmapNode, titles_by_id: dict[str, str]) -> str:
     lines.append(f"- Note: {node.note.strip() or 'none'}")
     lines.append(f"- Due: {node.due_date or 'none'}")
     lines.append(f"- Depends on: {', '.join(dep_titles) if dep_titles else 'none'}")
+    lines.append(f"- Repeat: {node.repeat_days if node.repeat_days else 'none'}")
+    # Linked entries live in Chroma, not this roadmap, so unlike depends_on
+    # there is no per-roadmap scope to resolve a title against - written as
+    # raw ids, same as a conversation's recalled_ids. A restore that can't
+    # find the id again just leaves a dangling link, which the canvas
+    # already tolerates for depends_on pointing at a deleted node.
+    lines.append(
+        f"- Linked entries: {', '.join(node.linked_entries) if node.linked_entries else 'none'}"
+    )
     return "\n".join(lines)
 
 

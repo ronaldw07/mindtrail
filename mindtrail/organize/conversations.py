@@ -71,6 +71,29 @@ class ConversationStore:
             )
         return conversation
 
+    def restore(self, conversation: Conversation) -> Conversation:
+        """Re-insert a conversation exactly as it was, id and timestamps
+        included. Used by `mindtrail import`: re-running an import must
+        find the same id already present, not mint a fresh one and
+        duplicate the conversation.
+        """
+        with connect(self._path) as conn:
+            conn.execute(
+                "INSERT INTO conversations "
+                "(id, title, project_id, pinned, unread, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    conversation.id,
+                    conversation.title,
+                    conversation.project_id,
+                    int(conversation.pinned),
+                    int(conversation.unread),
+                    conversation.created_at,
+                    conversation.updated_at,
+                ),
+            )
+        return conversation
+
     def _update(self, conversation_id: str, column: str, value) -> None:
         """Single-column update. `column` is never user-supplied - callers
         pass a literal - so it is safe to interpolate where a bound

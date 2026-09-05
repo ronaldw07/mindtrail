@@ -36,10 +36,15 @@ class ProfileStore:
             return Profile(content="", updated_at="")
         return Profile(content=row["content"], updated_at=row["updated_at"])
 
-    def save(self, content: str) -> Profile:
-        """Upsert the single row, truncating to keep prompts bounded."""
+    def save(self, content: str, updated_at: str | None = None) -> Profile:
+        """Upsert the single row, truncating to keep prompts bounded.
+
+        `updated_at` defaults to now; `mindtrail import` passes the
+        original timestamp through so a restored profile re-exports
+        byte-identical instead of picking up the moment it was restored.
+        """
         trimmed = content.strip()[:MAX_PROFILE_CHARS]
-        stamp = now_iso()
+        stamp = updated_at or now_iso()
         with connect(self._path) as conn:
             conn.execute(
                 "INSERT INTO profile (id, content, updated_at) VALUES (1, ?, ?) "

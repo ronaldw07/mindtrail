@@ -134,8 +134,14 @@ class MemoryStore:
         kind: str = DEFAULT_KIND,
         conversation_id: str = "",
         recalled_ids: list[str] | None = None,
+        created_at: str | None = None,
     ) -> Entry:
-        """Store one researched question. Returns the created entry."""
+        """Store one researched question. Returns the created entry.
+
+        `created_at` defaults to now; `mindtrail import` passes the
+        original timestamp through explicitly so a restored entry keeps
+        its place in history instead of jumping to the top of `recent`.
+        """
         if not query.strip():
             raise ValueError("query must not be empty")
         if not summary.strip():
@@ -146,7 +152,7 @@ class MemoryStore:
             query=query,
             summary=summary,
             sources=tuple(sources),
-            created_at=_now_iso(),
+            created_at=created_at or _now_iso(),
             topic=topic,
             key_facts=tuple(key_facts or []),
             kind=kind,
