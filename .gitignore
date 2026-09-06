@@ -11,3 +11,5 @@ htmlcov/
 mindtrail_site.html
 mindtrail.db
 graphify-out/
+google_token.json
+google_calendar_cache.json

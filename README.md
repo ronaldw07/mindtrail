@@ -51,11 +51,14 @@ back to it.
 At the top of Today sits the **daily summary** — a single card answering
 "what should I do today", combining roadmap steps due today or overdue,
 steps that just became actionable because their dependencies are done,
-recurring steps coming due within the week, and a count of what's landed
-since yesterday. Like the rest of Today it costs nothing to load: every
-number is read straight from storage, no model call. Click **Brief me**
-to turn that same data into a short paragraph on demand — that's the one
-part of this card that ever calls the model, and only when you ask.
+recurring steps coming due within the week, a count of what's landed
+since yesterday, and (if you've connected it — see below) today's Google
+Calendar events. Like the rest of Today it costs nothing to load: every
+number is read straight from storage or a local cache, no model call.
+Click **Brief me** to turn that same data into a short paragraph on
+demand — that's the one part of this card that ever calls the model, and
+only when you ask. Google Calendar is entirely optional; without it the
+card just shows a "Connect Google Calendar" line where events would go.
 
 Press **Cmd+K** (Ctrl+K on non-Mac) anywhere to open a command palette —
 jump to any project, conversation, or action without touching the
@@ -452,6 +455,57 @@ required. The model is `openai/gpt-oss-120b`; note that Groq removed the
 Llama line from its catalog, so older tutorials naming
 `llama-3.3-70b-versatile` will 404.
 
+## Google Calendar (read-only, optional)
+
+The daily summary works fully without this — skip it and Today just shows
+a "Connect Google Calendar" line instead of your events. To turn it on:
+
+1. Create (or reuse) a project at
+   [console.cloud.google.com](https://console.cloud.google.com/).
+2. **APIs & Services → Library** → enable the **Google Calendar API**.
+3. **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
+   Application type: **Desktop app**. Download or copy the client ID and
+   client secret it gives you.
+4. If your Google account isn't a Workspace account with the app
+   pre-approved, add yourself as a test user under **OAuth consent
+   screen → Test users** — otherwise Google will refuse to authorize it.
+5. Put the two values in `.env`:
+
+   ```bash
+   GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=your-client-secret
+   ```
+
+6. Run the connect flow once:
+
+   ```bash
+   .venv/bin/python -m mindtrail.cli calendar connect
+   ```
+
+   This opens a browser to Google's consent screen and, on approval, spins
+   up a one-shot local server on a loopback address (`127.0.0.1`) to catch
+   the redirect — the modern replacement for the OAuth "copy-paste a code"
+   flow, which Google has retired. Only `calendar.readonly` is requested;
+   mindtrail never writes to your calendar.
+
+The resulting refresh token is written to `google_token.json`, next to
+your database, with file permissions `0600` (owner read/write only) — not
+inside the SQLite database, and never included in `mindtrail export`.
+Both `google_token.json` and its companion event cache,
+`google_calendar_cache.json`, are already in `.gitignore`.
+
+Check the connection any time with:
+
+```bash
+.venv/bin/python -m mindtrail.cli calendar today
+```
+
+If Google is unreachable, the daily summary falls back to the last
+successful fetch (cached for 15 minutes) and says so plainly rather than
+showing nothing. If the refresh token is later revoked or expires, both
+the CLI and the Today view tell you to run `calendar connect` again rather
+than failing silently.
+
 ## CLI reference
 
 ```bash
@@ -466,6 +520,8 @@ Llama line from its catalog, so older tutorials naming
 .venv/bin/python -m mindtrail.cli advice                 # generate a next-steps plan
 .venv/bin/python -m mindtrail.cli export --out DIR       # back up everything to markdown
 .venv/bin/python -m mindtrail.cli import DIR             # restore from a directory 'export' wrote
+.venv/bin/python -m mindtrail.cli calendar connect       # one-time Google Calendar OAuth (optional)
+.venv/bin/python -m mindtrail.cli calendar today         # today's events from the primary calendar
 ```
 
 `web` writes a single HTML file and opens it in your default browser. Each
@@ -582,3 +638,5 @@ shipping (skipped if `node` isn't on `PATH`).
   the overlap rather than exact matching.
 - Entries stored before topic labeling existed have no topic and appear
   under Uncategorized on `mindtrail web` until re-asked.
+- Google Calendar only reads the account's **primary** calendar - a
+  secondary or shared calendar is not fetched.

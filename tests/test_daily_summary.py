@@ -224,3 +224,63 @@ def test_brief_endpoint_surfaces_a_friendly_rate_limit_error(projects, chats, ro
     result = api.handle_daily_brief(projects, chats, roadmaps, nodes, llm)
 
     assert result == {"error": "rate limited"}
+
+
+# --- calendar wiring: a broken or absent Google connection must never --
+# --- break the Today view -----------------------------------------------
+
+
+class StubCalendar:
+    def __init__(self, block):
+        self._block = block
+
+    def snapshot(self):
+        return self._block
+
+
+class ExplodingCalendar:
+    def snapshot(self):
+        raise RuntimeError("boom")
+
+
+def test_no_calendar_client_is_reported_as_not_connected(projects, chats, roadmaps, nodes):
+    data = api.handle_daily_summary(projects, chats, roadmaps, nodes, calendar=None)
+
+    assert data["calendar"] == {"connected": False}
+
+
+def test_a_calendar_client_that_raises_still_degrades_to_not_connected(
+    projects, chats, roadmaps, nodes
+):
+    data = api.handle_daily_summary(projects, chats, roadmaps, nodes, calendar=ExplodingCalendar())
+
+    assert data["calendar"]["connected"] is False
+    assert data["empty"] is True
+
+
+def test_calendar_events_are_embedded_verbatim(projects, chats, roadmaps, nodes):
+    block = {"connected": True, "events": [{"title": "Standup", "all_day": False, "start": "09:00"}],
+             "as_of": "08:00", "stale": False}
+    data = api.handle_daily_summary(projects, chats, roadmaps, nodes, calendar=StubCalendar(block))
+
+    assert data["calendar"] == block
+
+
+def test_calendar_events_alone_make_the_summary_non_empty(projects, chats, roadmaps, nodes):
+    block = {"connected": True, "events": [{"title": "Standup", "all_day": False, "start": "09:00"}],
+             "as_of": "08:00", "stale": False}
+    data = api.handle_daily_summary(projects, chats, roadmaps, nodes, calendar=StubCalendar(block))
+
+    assert data["empty"] is False
+
+
+def test_brief_fires_on_calendar_events_alone_with_no_roadmap_activity(
+    projects, chats, roadmaps, nodes
+):
+    block = {"connected": True, "events": [{"title": "Standup", "all_day": False, "start": "09:00"}],
+             "as_of": "08:00", "stale": False}
+    llm = StubLLM(text="you have standup at 9")
+
+    result = api.handle_daily_brief(projects, chats, roadmaps, nodes, llm, calendar=StubCalendar(block))
+
+    assert result == {"text": "you have standup at 9"}

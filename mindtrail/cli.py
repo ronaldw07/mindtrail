@@ -7,12 +7,15 @@ import sys
 import webbrowser
 from pathlib import Path
 
+from mindtrail import config
 from mindtrail.advice.planner import generate_advice
 from mindtrail.ingest.documents import DocumentError, extract_pdf_text
 from mindtrail.ingest.fetch import FetchError, extract_title, fetch_html, html_to_text
 from mindtrail.ingest.researcher import Researcher
 from mindtrail.ingest.search import SearchError, default_search
 from mindtrail.ingest.topic import TopicExtractor
+from mindtrail.integrations.google_auth import default_token_path, run_oauth_flow, save_credentials
+from mindtrail.integrations.google_calendar import GoogleCalendarClient
 from mindtrail.llm import LLMClient, LLMError
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import ConversationStore
@@ -270,6 +273,49 @@ def cmd_import(args) -> int:
     return 1 if summary.failed else 0
 
 
+def cmd_calendar_connect(args) -> int:
+    """Run the OAuth flow and store a refresh token. Never prints or logs
+    the token itself - only where it landed."""
+    if not config.GOOGLE_CLIENT_ID or not config.GOOGLE_CLIENT_SECRET:
+        print(
+            "error: set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first "
+            "(see README's Google Calendar setup section)",
+            file=sys.stderr,
+        )
+        return 1
+
+    creds = run_oauth_flow(config.GOOGLE_CLIENT_ID, config.GOOGLE_CLIENT_SECRET)
+    path = default_token_path()
+    save_credentials(creds, path)
+    print(f"connected - token stored at {path}")
+    return 0
+
+
+def cmd_calendar_today(args) -> int:
+    snapshot = GoogleCalendarClient().snapshot()
+    if not snapshot.get("connected"):
+        hint = " run 'mindtrail calendar connect' to reconnect." if snapshot.get(
+            "needs_reconnect"
+        ) else " run 'mindtrail calendar connect' first."
+        print(f"not connected to Google Calendar.{hint}")
+        return 0
+
+    if snapshot.get("error"):
+        as_of = snapshot.get("as_of") or "earlier"
+        print(f"warning: {snapshot['error']} - showing cached events from {as_of}", file=sys.stderr)
+    elif snapshot.get("needs_reconnect"):
+        print("warning: Google Calendar needs reconnecting - showing cached events", file=sys.stderr)
+
+    events = snapshot.get("events", [])
+    if not events:
+        print("no events today")
+        return 0
+    for e in events:
+        when = "all day" if e["all_day"] else e["start"]
+        print(f"  {when:>8}  {e['title']}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mindtrail",
@@ -328,6 +374,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="replace existing records instead of skipping them",
     )
     imp.set_defaults(func=cmd_import)
+
+    calendar = sub.add_parser("calendar", help="Google Calendar connection (read-only)")
+    calendar_sub = calendar.add_subparsers(dest="calendar_command", required=True)
+    connect = calendar_sub.add_parser(
+        "connect", help="run the OAuth flow and store a refresh token"
+    )
+    connect.set_defaults(func=cmd_calendar_connect)
+    today_cmd = calendar_sub.add_parser(
+        "today", help="show today's events from the primary calendar"
+    )
+    today_cmd.set_defaults(func=cmd_calendar_today)
 
     chat = sub.add_parser("chat", help="chatbot interface in the browser")
     chat.add_argument("--port", type=int, default=8765)

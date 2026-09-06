@@ -3071,11 +3071,53 @@
     return item;
   }
 
+  // A missing or broken Google connection must never break this card -
+  // every branch here reads calendar.connected/stale/error, which are
+  // already exactly what handle_daily_summary's _calendar_block guarantees
+  // no matter what went wrong (or didn't happen yet) on the server side.
+  function renderCalendarSection(c, calendar) {
+    const cal = calendar || {connected: false};
+    if (!cal.connected) {
+      const hint = document.createElement('div');
+      hint.className = 'dash-summary-meta';
+      hint.textContent = cal.needs_reconnect
+        ? 'Google Calendar needs reconnecting — run: mindtrail calendar connect'
+        : 'Connect Google Calendar — run: mindtrail calendar connect';
+      c.appendChild(hint);
+      return;
+    }
+
+    if (cal.stale || cal.error || cal.needs_reconnect) {
+      const notice = document.createElement('div');
+      notice.className = 'dash-summary-meta';
+      notice.textContent = cal.needs_reconnect
+        ? 'Google Calendar needs reconnecting — showing cached events from ' + (cal.as_of || 'earlier')
+        : 'Showing cached calendar events from ' + (cal.as_of || 'earlier');
+      c.appendChild(notice);
+    }
+
+    const events = cal.events || [];
+    if (!events.length) return;
+    const heading = document.createElement('div');
+    heading.className = 'dash-item-sub';
+    heading.textContent = 'On your calendar today';
+    c.appendChild(heading);
+    events.forEach(e => {
+      const item = dashItem(e.title, null, null);
+      const when = document.createElement('div');
+      when.className = 'node-due';
+      when.textContent = e.all_day ? 'All day' : e.start;
+      item.insertBefore(when, item.firstChild);
+      c.appendChild(item);
+    });
+  }
+
   // The one-card answer to "what should I do today": roadmap steps due
-  // today/overdue, steps newly unblocked, and recurring steps coming due -
-  // all assembled server-side with no model call (see
-  // handle_daily_summary). "Brief me" is the only part of this card that
-  // ever costs a completion, and only fires when clicked.
+  // today/overdue, steps newly unblocked, recurring steps coming due, and
+  // (if connected) today's calendar events - all assembled server-side
+  // with no model call (see handle_daily_summary). "Brief me" is the only
+  // part of this card that ever costs a completion, and only fires when
+  // clicked.
   function dailySummaryCard(summary) {
     const isEmpty = summary.empty;
     const c = card('Daily summary', isEmpty ? null : 'Brief me', null);
@@ -3114,6 +3156,8 @@
         c.appendChild(item);
       });
     }
+
+    renderCalendarSection(c, summary.calendar);
 
     if (summary.new_since_yesterday) {
       const meta = document.createElement('div');

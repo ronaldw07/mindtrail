@@ -18,6 +18,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from mindtrail.ingest.researcher import Researcher
+from mindtrail.integrations.google_calendar import GoogleCalendarClient
 from mindtrail.llm import LLMClient
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import ConversationStore
@@ -62,6 +63,7 @@ class Deps:
         profile: ProfileStore | None = None,
         roadmaps: RoadmapStore | None = None,
         roadmap_nodes: RoadmapNodeStore | None = None,
+        calendar: GoogleCalendarClient | None = None,
     ):
         self.researcher = researcher
         self.store = store
@@ -74,6 +76,11 @@ class Deps:
         self.profile = profile or ProfileStore()
         self.roadmaps = roadmaps or RoadmapStore()
         self.roadmap_nodes = roadmap_nodes or RoadmapNodeStore()
+        # Constructing this never touches the network or requires
+        # credentials - it only records where a token file *would* be, so
+        # a deployment with no Google setup at all still gets a working
+        # Deps object and a "not connected" calendar block for free.
+        self.calendar = calendar or GoogleCalendarClient()
 
 
 def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandler]:
@@ -209,7 +216,8 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
             elif path == "/api/daily-summary":
                 self._json(
                     api.handle_daily_summary(
-                        deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes
+                        deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes,
+                        deps.calendar,
                     )
                 )
             elif path == "/api/search":
@@ -270,7 +278,7 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                 self._json(
                     api.handle_daily_brief(
                         deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes,
-                        deps.llm,
+                        deps.llm, deps.calendar,
                     )
                 )
             elif path == "/api/ask":

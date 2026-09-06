@@ -19,13 +19,14 @@ from mindtrail.llm import LLMClient
 SYSTEM_PROMPT = (
     "You are a planning assistant. You are given a short structured list of "
     "someone's roadmap steps that are due today or overdue, steps that just "
-    "became actionable because their dependencies are now done, and "
-    "recurring steps coming due within the week.\n\n"
+    "became actionable because their dependencies are now done, recurring "
+    "steps coming due within the week, and - if they've connected Google "
+    "Calendar - their calendar events for today.\n\n"
     "Write one short paragraph (2-4 sentences) telling them what to focus "
     "on today, in plain conversational language. Name specific step titles "
-    "rather than vague categories. If anything is overdue, say so plainly "
-    "rather than burying it in the middle. Do not invent anything that "
-    "isn't in the list, and do not pad with generic advice."
+    "and event names rather than vague categories. If anything is overdue, "
+    "say so plainly rather than burying it in the middle. Do not invent "
+    "anything that isn't in the list, and do not pad with generic advice."
 )
 
 # Enough items to cover a busy day without the prompt ballooning - a
@@ -51,6 +52,19 @@ def _format_items(label: str, items: list[dict]) -> str:
     return f"{label}:\n" + "\n".join(lines) + "\n\n"
 
 
+def _format_calendar(calendar: dict) -> str:
+    """Only included when a connection actually produced events - a
+    disconnected or errored calendar contributes nothing here rather than
+    telling the model about its own plumbing."""
+    if not calendar.get("connected") or not calendar.get("events"):
+        return ""
+    lines = [
+        f"- {e['title']}" + ("" if e["all_day"] else f" at {e['start']}")
+        for e in calendar["events"][:MAX_ITEMS_PER_SECTION]
+    ]
+    return "CALENDAR EVENTS TODAY:\n" + "\n".join(lines) + "\n\n"
+
+
 def generate_daily_brief(llm: LLMClient, summary: dict) -> DailyBrief:
     """Raises ValueError if there is nothing worth writing a paragraph
     about - mirrors handle_daily_summary's own "empty" flag rather than
@@ -62,6 +76,7 @@ def generate_daily_brief(llm: LLMClient, summary: dict) -> DailyBrief:
         _format_items("DUE TODAY OR OVERDUE", summary.get("due", []))
         + _format_items("NEWLY UNBLOCKED", summary.get("unblocked", []))
         + _format_items("RECURRING STEPS COMING DUE", summary.get("recurring", []))
+        + _format_calendar(summary.get("calendar") or {})
     )
     completion = llm.complete(SYSTEM_PROMPT, prompt, max_tokens=300)
     return DailyBrief(text=completion.text, tokens=completion.tokens)

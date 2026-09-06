@@ -2,10 +2,13 @@
 
 import pytest
 
+from mindtrail import config
 from mindtrail.cli import (
     build_parser,
     cmd_advice,
     cmd_ask,
+    cmd_calendar_connect,
+    cmd_calendar_today,
     cmd_docs,
     cmd_note,
     cmd_predict,
@@ -149,3 +152,46 @@ def test_interrupt_returns_the_conventional_code(monkeypatch, capsys):
 
     assert code == 130
     assert "interrupted" in err
+
+
+# --- calendar ---------------------------------------------------------
+
+
+def test_calendar_connect_routes_to_its_command():
+    args = build_parser().parse_args(["calendar", "connect"])
+
+    assert args.func is cmd_calendar_connect
+
+
+def test_calendar_today_routes_to_its_command():
+    args = build_parser().parse_args(["calendar", "today"])
+
+    assert args.func is cmd_calendar_today
+
+
+def test_calendar_requires_a_subcommand():
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["calendar"])
+
+
+def test_calendar_connect_fails_fast_with_no_client_credentials(monkeypatch, capsys):
+    # Must not open a browser or touch the network without credentials.
+    monkeypatch.setattr(config, "GOOGLE_CLIENT_ID", "")
+    monkeypatch.setattr(config, "GOOGLE_CLIENT_SECRET", "")
+
+    code = cmd_calendar_connect(None)
+
+    assert code == 1
+    assert "GOOGLE_CLIENT_ID" in capsys.readouterr().err
+
+
+def test_calendar_today_reports_not_connected_with_no_token(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(
+        "mindtrail.cli.GoogleCalendarClient",
+        lambda: type("_C", (), {"snapshot": lambda self: {"connected": False}})(),
+    )
+
+    code = cmd_calendar_today(None)
+
+    assert code == 0
+    assert "not connected" in capsys.readouterr().out

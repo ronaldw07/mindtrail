@@ -305,11 +305,29 @@ def _local_date(iso_timestamp: str) -> date | None:
         return None
 
 
+def _calendar_block(calendar) -> dict:
+    """Never lets a broken or absent Google connection break the Today
+    view. `calendar` is None whenever the caller has nothing to offer
+    (most tests, and any deployment with no Google setup at all) - that
+    is just "not connected", not an error. A calendar client is expected
+    to catch its own failures (see GoogleCalendarClient.snapshot), but
+    this is the second layer: any exception escaping it still degrades to
+    "not connected" rather than a broken dashboard.
+    """
+    if calendar is None:
+        return {"connected": False}
+    try:
+        return calendar.snapshot()
+    except Exception:  # noqa: BLE001 - see docstring: must never propagate
+        return {"connected": False, "error": "calendar unavailable"}
+
+
 def handle_daily_summary(
     projects: ProjectStore,
     chats: ConversationStore,
     roadmaps: RoadmapStore,
     nodes: RoadmapNodeStore,
+    calendar=None,
 ) -> dict:
     """Everything the Today view needs to answer "what should I do today",
     assembled entirely from already-stored data - no LLM call. The
@@ -326,7 +344,9 @@ def handle_daily_summary(
     within the week that isn't already due today/overdue, so a weekly
     habit doesn't arrive as a surprise the day it lands. "new_since_yesterday"
     counts conversations started since yesterday, a cheap proxy for "what
-    landed" that needs no Chroma lookup.
+    landed" that needs no Chroma lookup. "calendar" is optional - `calendar`
+    is None in most tests and in any deployment with no Google connection,
+    and that is a fully supported, first-class state, not a degraded one.
     """
     today = datetime.now().date()
     yesterday = today - timedelta(days=NEW_SINCE_DAYS)
@@ -389,12 +409,16 @@ def handle_daily_summary(
         if (created := _local_date(c.created_at)) is not None and created >= yesterday
     )
 
+    calendar_block = _calendar_block(calendar)
+    calendar_events = calendar_block.get("events") or []
+
     return {
         "due": due,
         "unblocked": unblocked[:DAILY_SUMMARY_UNBLOCKED_LIMIT],
         "recurring": recurring[:DAILY_SUMMARY_RECURRING_LIMIT],
         "new_since_yesterday": new_since_yesterday,
-        "empty": not due and not unblocked and not recurring,
+        "calendar": calendar_block,
+        "empty": not due and not unblocked and not recurring and not calendar_events,
     }
 
 
@@ -414,13 +438,14 @@ def handle_daily_brief(
     roadmaps: RoadmapStore,
     nodes: RoadmapNodeStore,
     llm: LLMClient,
+    calendar=None,
 ) -> dict:
     """The "Brief me" button: an on-demand LLM paragraph over the same
     data handle_daily_summary already assembled for free. Recomputes the
     summary itself rather than trusting one the client might send, so the
     prose can never drift from what is actually on screen.
     """
-    summary = handle_daily_summary(projects, chats, roadmaps, nodes)
+    summary = handle_daily_summary(projects, chats, roadmaps, nodes, calendar)
     try:
         brief = generate_daily_brief(llm, summary)
     except (LLMError, ValueError) as exc:

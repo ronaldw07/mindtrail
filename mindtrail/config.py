@@ -8,6 +8,13 @@ load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
+# From a user's own Google Cloud project (see README's Google Calendar
+# setup section) - read from the environment or .env, never hardcoded or
+# committed. Empty means the calendar feature has never been configured;
+# `mindtrail calendar connect` checks for that before opening a browser.
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
 # Verified available on the free tier as of 2026-08-31. The Llama line was
 # removed from Groq's catalog, so do not reintroduce llama-3.3-* here.
 SYNTHESIS_MODEL = "openai/gpt-oss-120b"

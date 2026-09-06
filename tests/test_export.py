@@ -326,3 +326,25 @@ def test_write_export_creates_the_directory_tree(tmp_path):
 
     assert count == 1
     assert (out_dir / "a" / "b" / "c.md").read_text() == "content"
+
+
+# --- the Google refresh token must never appear in an export --------------
+
+
+def test_export_never_writes_or_mentions_the_google_token(
+    store, chats, projects, roadmaps, nodes, profile, tmp_path
+):
+    """The token lives in its own file (see integrations/google_auth.py),
+    entirely outside anything export.py knows how to read - this pins
+    that invariant rather than trusting it stays true by omission."""
+    project = projects.create("Career")
+    roadmaps.create("Goal", project_id=project.id)
+    profile.save("secret-refresh-token-should-never-appear-here")
+
+    out_dir = tmp_path / "export_out"
+    export_to_directory(store, chats, projects, roadmaps, nodes, profile, str(out_dir))
+
+    for path in out_dir.rglob("*"):
+        if path.is_file():
+            assert "google_token" not in path.name
+            assert "refresh_token" not in path.read_text(encoding="utf-8")

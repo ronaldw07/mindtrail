@@ -1,5 +1,7 @@
 chromadb>=1.5,<2
 ddgs>=9.16,<10
+google-auth>=2,<3
+google-auth-oauthlib>=1,<2
 groq>=1.7,<2
 python-dotenv>=1.2,<2
 pypdf>=6.0,<7
