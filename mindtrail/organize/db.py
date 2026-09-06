@@ -156,11 +156,41 @@ def _add_missing_columns(conn) -> None:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
-def initialize(path: str | None = None) -> None:
+# Full-text index over memory entries (query + summary), kept in sync by
+# MemoryStore on every add/update/delete - see mindtrail/memory/store.py.
+# `id` is UNINDEXED: it is a lookup key back to the Chroma entry, not text
+# to search over. Deliberately NOT folded into SCHEMA above and run
+# through the same executescript() call: that call has no per-statement
+# error isolation, so a SQLite build without the FTS5 extension compiled
+# in (rare, but real - e.g. some distro-packaged Pythons) would raise
+# partway through and abort every *other* table's creation along with it.
+# Created and guarded separately so a missing FTS5 module degrades hybrid
+# search to vector-only instead of breaking the whole database.
+ENTRIES_FTS_SCHEMA = """
+CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
+    id UNINDEXED, query, summary
+);
+"""
+
+
+def _create_fts_table(conn) -> bool:
+    """Returns whether the FTS5 virtual table exists (or already did)."""
+    try:
+        conn.executescript(ENTRIES_FTS_SCHEMA)
+        return True
+    except sqlite3.OperationalError:
+        return False
+
+
+def initialize(path: str | None = None) -> bool:
     """Create tables if they do not exist, then apply later columns.
 
-    Safe to call repeatedly; both halves are no-ops once current.
+    Safe to call repeatedly; every part is a no-op once current. Returns
+    whether the FTS5 full-text table is available, so MemoryStore can
+    decide once, at construction time, whether to fall back to
+    vector-only search.
     """
     with connect(path) as conn:
         conn.executescript(SCHEMA)
         _add_missing_columns(conn)
+        return _create_fts_table(conn)

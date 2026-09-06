@@ -3,6 +3,7 @@
 import pytest
 
 from mindtrail.memory.store import CHUNK_CHARS, MemoryStore, _chunk_text
+from mindtrail.organize import db
 from mindtrail.web import api
 
 
@@ -510,3 +511,104 @@ def test_handle_update_entry_rejects_blank_text(store):
     result = api.handle_update_entry(store, entry.id, {"summary": "   "})
 
     assert "error" in result
+
+
+# --- hybrid search (keyword + semantic, RRF-fused) -------------------------
+
+
+def test_fts_finds_an_exact_term_a_semantic_match_would_miss(store):
+    # "ORA-01017" has no meaningful embedding neighborhood - a vector
+    # search for it has nothing semantically close to key off. FTS is
+    # the only path that can find it.
+    store.add(
+        "database login failure", "The error code was ORA-01017 during connect.", []
+    )
+    store.add("unrelated entry", "Notes about baking sourdough bread.", [])
+
+    found = store.search("ORA-01017", k=5)
+
+    assert any(e.query == "database login failure" for e in found)
+
+
+def test_vector_search_still_finds_a_semantic_match_with_no_literal_overlap(store):
+    store.add("how do I bake sourdough bread", "Use a starter and a long proof.", [])
+    store.add("what is a vector database", "A store for embeddings.", [])
+
+    found = store.search("embedding storage for retrieval", k=2)
+
+    assert found[0].query == "what is a vector database"
+
+
+def test_a_result_strong_in_both_lists_ranks_at_the_top(store):
+    # Shares exact wording with the query (wins FTS) *and* is the closest
+    # semantic match (wins vector search) - RRF should put it first even
+    # though a purely-vector-strong and a purely-FTS-strong distractor
+    # are also in the store.
+    store.add(
+        "vector database basics",
+        "A vector database stores embeddings for similarity search.",
+        [],
+    )
+    store.add("unrelated filler one", "Notes about gardening tools.", [])
+    store.add("unrelated filler two", "Notes about grocery shopping lists.", [])
+
+    found = store.search("vector database embeddings similarity search", k=3)
+
+    assert found[0].query == "vector database basics"
+
+
+def test_fts_index_stays_in_sync_after_add(store):
+    store.add("sync check", "contains the token zylotrope", [])
+
+    with db.connect(store._db_path) as conn:
+        rows = conn.execute(
+            "SELECT query FROM entries_fts WHERE entries_fts MATCH ?", ('"zylotrope"',)
+        ).fetchall()
+    assert any(r["query"] == "sync check" for r in rows)
+
+
+def test_fts_index_stays_in_sync_after_update(store):
+    entry = store.add("old query", "old summary text", [])
+
+    store.update_entry(entry.id, summary="brand new wording entirely")
+
+    found = store.search("brand new wording", k=5)
+    assert any(e.id == entry.id for e in found)
+
+    with db.connect(store._db_path) as conn:
+        rows = conn.execute(
+            "SELECT summary FROM entries_fts WHERE id = ?", (entry.id,)
+        ).fetchall()
+    assert len(rows) == 1
+    assert rows[0]["summary"] == "brand new wording entirely"
+
+
+def test_fts_index_stays_in_sync_after_delete(store):
+    entry = store.add("doomed entry", "contains the token quixolate", [])
+
+    store.delete_entry(entry.id)
+
+    found = store.search("quixolate", k=5)
+    assert found == []
+    with db.connect(store._db_path) as conn:
+        rows = conn.execute(
+            "SELECT id FROM entries_fts WHERE id = ?", (entry.id,)
+        ).fetchall()
+    assert rows == []
+
+
+def test_deleting_a_conversation_removes_its_entries_from_fts(store):
+    store.add("conv entry", "contains the token wibbledash", [], conversation_id="c1")
+
+    store.delete_conversation_entries("c1")
+
+    assert store.search("wibbledash", k=5) == []
+
+
+def test_search_falls_back_to_vector_only_when_fts_is_unavailable(store):
+    store._fts_available = False
+    store.add("only entry", "some text about apples", [])
+
+    found = store.search("apples", k=5)
+
+    assert len(found) == 1

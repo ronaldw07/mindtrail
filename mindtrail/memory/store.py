@@ -6,13 +6,16 @@ needs no API key, so the store works offline and costs nothing.
 
 from __future__ import annotations
 
+import sqlite3
 import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from pathlib import Path
 
 import chromadb
 
 from mindtrail import config
+from mindtrail.organize import db
 
 
 UNCATEGORIZED = "Uncategorized"
@@ -30,6 +33,18 @@ CHUNK_CHARS = 800
 # needs headroom or a real match can get crowded out before the
 # collapse step runs.
 CHUNK_OVERFETCH = 4
+
+# How many candidates to pull from *each* ranked list (vector, FTS)
+# before fusing - reciprocal rank fusion needs headroom too: a result
+# that's #1 in one list but #15 in the other should still have a shot at
+# beating a mediocre-in-both result, which it can't if either list was
+# truncated to exactly `k` first.
+SEARCH_OVERFETCH = 4
+
+# Standard RRF constant (see Cormack, Clarke & Buettcher 2009). Large
+# enough that a #1-vs-#2 rank difference barely moves the score, so one
+# list's top pick doesn't automatically dominate the fused ranking.
+RRF_K = 60
 
 
 @dataclass(frozen=True)
@@ -106,8 +121,43 @@ def _to_entry(meta: dict, entry_id: str, doc: str = "") -> Entry:
     )
 
 
+def _fts_match_query(text: str) -> str:
+    """Build a safe FTS5 MATCH expression from free-form user text.
+
+    Unescaped, FTS5's query syntax includes operators an ordinary search
+    box shouldn't accidentally trigger: AND/OR/NOT, `-exclude`, `column:`
+    filters, `*` prefix matching. A user typing any of those as plain
+    words (or an unbalanced quote) would otherwise get a syntax error
+    instead of a search. Each whitespace-separated token is wrapped in its
+    own double-quoted phrase (embedded quotes doubled per FTS5's escaping
+    rule), then joined with FTS5's default implicit AND, so the result is
+    always a well-formed "every token must appear" query.
+    """
+    tokens = text.split()
+    if not tokens:
+        return '""'
+    return " ".join('"' + t.replace('"', '""') + '"' for t in tokens)
+
+
+def _reciprocal_rank_fusion(ranked_lists: list[list[str]]) -> list[str]:
+    """Merge ranked id lists into one ranking by reciprocal rank fusion.
+
+    score(id) = sum(1 / (RRF_K + rank)) over every list the id appears in
+    (rank counted from 1; absence from a list contributes nothing). RRF is
+    used specifically because cosine similarity and BM25 live on scales
+    that cannot be compared or averaged directly - RRF only looks at each
+    list's *ordering*, never its raw scores, so no calibration is needed.
+    """
+    scores: dict[str, float] = {}
+    for ranked in ranked_lists:
+        for rank, entry_id in enumerate(ranked, start=1):
+            scores[entry_id] = scores.get(entry_id, 0.0) + 1.0 / (RRF_K + rank)
+    return [entry_id for entry_id, _ in sorted(scores.items(), key=lambda kv: kv[1], reverse=True)]
+
+
 class MemoryStore:
-    """Thin wrapper over a persistent Chroma collection.
+    """Thin wrapper over a persistent Chroma collection, plus a SQLite
+    FTS5 index kept in sync alongside it for hybrid search.
 
     Each entry is stored as one or more chunk vectors (see _chunk_text),
     all sharing metadata and a parent_id equal to the entry's real id.
@@ -115,14 +165,38 @@ class MemoryStore:
     suffixed. Methods that enumerate entries (all, recent, by_conversation,
     topics, count) read only primary rows (is_chunk="0") so a long entry
     isn't counted or returned once per chunk.
+
+    search() additionally queries a `entries_fts` SQLite table (see
+    organize/db.py) indexed on the same query+summary text, and fuses the
+    two ranked lists with reciprocal rank fusion - vector search alone
+    misses exact strings (error codes, function names, proper nouns)
+    embeddings are bad at distinguishing from their neighbors.
     """
 
-    def __init__(self, path: str | None = None, collection: str | None = None):
-        self._client = chromadb.PersistentClient(path=path or config.CHROMA_DIR)
+    def __init__(
+        self,
+        path: str | None = None,
+        collection: str | None = None,
+        db_path: str | None = None,
+    ):
+        chroma_path = path or config.CHROMA_DIR
+        self._client = chromadb.PersistentClient(path=chroma_path)
         self._collection = self._client.get_or_create_collection(
             name=collection or config.COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"},
         )
+        # Sits beside the Chroma directory by default, mirroring
+        # organize/db.py's own default_db_path() convention, so a
+        # MemoryStore built against a custom `path` (every test does
+        # this) gets its own isolated SQLite file too, instead of
+        # colliding with - or silently depending on - whatever the
+        # process's real default database happens to be.
+        self._db_path = db_path or str(Path(chroma_path).parent / "mindtrail.db")
+        # FTS5 ships with essentially every SQLite build Python uses, but
+        # is technically an optional compile-time extension. If it's
+        # missing here, hybrid search quietly degrades to vector-only
+        # rather than crashing every search.
+        self._fts_available = db.initialize(self._db_path)
 
     def add(
         self,
@@ -198,31 +272,103 @@ class MemoryStore:
                 for i in range(len(chunks))
             ],
         )
+        self._sync_fts(entry)
 
-    def search(self, query: str, k: int = 3) -> list[Entry]:
-        """Semantically closest past entries, nearest first."""
-        if not query.strip():
-            return []
+    def _sync_fts(self, entry: Entry) -> None:
+        """Keep the entries_fts row for this entry in step with Chroma.
+
+        Delete-then-insert rather than an FTS5 UPDATE: `id` is an
+        UNINDEXED column here, not FTS5's implicit rowid, so there's no
+        single-statement upsert on it - and delete-then-insert is correct
+        whether or not a row for this id already exists, which is exactly
+        what every caller (add, update_entry's re-add, reindex) needs.
+        """
+        if not self._fts_available:
+            return
+        with db.connect(self._db_path) as conn:
+            conn.execute("DELETE FROM entries_fts WHERE id = ?", (entry.id,))
+            conn.execute(
+                "INSERT INTO entries_fts (id, query, summary) VALUES (?, ?, ?)",
+                (entry.id, entry.query, entry.summary),
+            )
+
+    def _delete_fts(self, entry_ids: list[str]) -> None:
+        """The delete-side sibling of _sync_fts, for delete_entry and
+        delete_conversation_entries - an entry removed from Chroma must
+        stop surfacing in FTS results too, or a deleted entry could keep
+        satisfying an old query shape forever."""
+        if not self._fts_available or not entry_ids:
+            return
+        with db.connect(self._db_path) as conn:
+            conn.executemany(
+                "DELETE FROM entries_fts WHERE id = ?", [(eid,) for eid in entry_ids]
+            )
+
+    def _vector_search_ids(self, query: str, limit: int) -> list[str]:
+        """Entry ids ranked by cosine similarity, nearest first, deduped
+        from chunk rows down to their parent entry (see class docstring)."""
         available = self._collection.count()
         if available == 0:
+            return []
+        result = self._collection.query(
+            query_texts=[query], n_results=min(limit * CHUNK_OVERFETCH, available)
+        )
+        seen: set[str] = set()
+        ids = []
+        for meta, doc_id in zip(result["metadatas"][0], result["ids"][0]):
+            parent_id = meta.get("parent_id", doc_id)
+            if parent_id in seen:
+                continue
+            seen.add(parent_id)
+            ids.append(parent_id)
+            if len(ids) >= limit:
+                break
+        return ids
+
+    def _fts_search_ids(self, query: str, limit: int) -> list[str]:
+        """Entry ids ranked by BM25 (FTS5's `rank`, best match first)."""
+        if not self._fts_available:
+            return []
+        try:
+            with db.connect(self._db_path) as conn:
+                rows = conn.execute(
+                    "SELECT id FROM entries_fts WHERE entries_fts MATCH ? "
+                    "ORDER BY rank LIMIT ?",
+                    (_fts_match_query(query), limit),
+                ).fetchall()
+        except sqlite3.OperationalError:
+            # Belt-and-braces: table creation already proved FTS5 works,
+            # but a query-time failure should degrade to vector-only
+            # rather than take the whole search down with it.
+            return []
+        return [row["id"] for row in rows]
+
+    def search(self, query: str, k: int = 3) -> list[Entry]:
+        """Hybrid search: SQLite FTS5 (exact terms - error codes, function
+        names, proper nouns) merged with Chroma's vector search (meaning
+        and paraphrase matches) via reciprocal rank fusion. Falls back to
+        vector-only if this SQLite build lacks FTS5 (see __init__).
+        """
+        if not query.strip():
             return []
 
         # A non-positive n_results reaches Chroma as a malformed query, so
         # the floor is applied here rather than trusted from the caller.
         wanted = max(1, k)
-        result = self._collection.query(
-            query_texts=[query], n_results=min(wanted * CHUNK_OVERFETCH, available)
-        )
-        seen: set[str] = set()
+        overfetch = wanted * SEARCH_OVERFETCH
+        vector_ids = self._vector_search_ids(query, overfetch)
+        fts_ids = self._fts_search_ids(query, overfetch)
+
         entries = []
-        for doc, meta, doc_id in zip(
-            result["documents"][0], result["metadatas"][0], result["ids"][0]
-        ):
-            parent_id = meta.get("parent_id", doc_id)
-            if parent_id in seen:
-                continue
-            seen.add(parent_id)
-            entries.append(_to_entry(meta, parent_id, doc))
+        # One extra get() per candidate id, rather than reusing the
+        # documents/metadata already fetched above - RRF has to reconcile
+        # ids from two different sources before it knows the final order,
+        # so there is no ranked, deduped (doc, meta) pair to carry through
+        # until after fusion runs. Fine at this store's scale.
+        for entry_id in _reciprocal_rank_fusion([vector_ids, fts_ids]):
+            entry = self.get(entry_id)
+            if entry is not None:
+                entries.append(entry)
             if len(entries) >= wanted:
                 break
         return entries
@@ -300,6 +446,7 @@ class MemoryStore:
         doomed = [e.id for e in self.all() if e.conversation_id == conversation_id]
         if doomed:
             self._collection.delete(ids=self._all_chunk_ids(doomed))
+            self._delete_fts(doomed)
         return len(doomed)
 
     def delete_entry(self, entry_id: str) -> bool:
@@ -314,6 +461,7 @@ class MemoryStore:
         if not ids:
             return False
         self._collection.delete(ids=ids)
+        self._delete_fts([entry_id])
         return True
 
     def update_entry(
