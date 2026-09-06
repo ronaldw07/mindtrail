@@ -128,10 +128,11 @@ def build_notes_file(orphaned_entries: list[Entry]) -> ExportFile:
     else:
         sections = []
         for e in sorted(orphaned_entries, key=lambda e: e.created_at):
+            summary_text = e.summary.strip() or NONE_YET
             sections.append(
                 f"## {e.query or '(untitled)'}\n\n"
-                f"*{e.created_at} - {e.kind}*\n\n"
-                f"{e.summary.strip() or NONE_YET}"
+                f"{_meta_line(e.created_at, e.kind, summary_text)}\n\n"
+                f"{summary_text}"
             )
         body = "\n\n".join(sections)
     return ExportFile("notes.md", _render(frontmatter, body))
@@ -144,13 +145,32 @@ def _bullet_list(items: list[str]) -> list[str]:
     return [f"- {item}" for item in items] if items else ["- none"]
 
 
+def _meta_line(created_at: str, kind: str, summary_text: str) -> str:
+    """The `*timestamp - kind - N*` line that precedes a summary.
+
+    N is the summary's exact character count. A summary is LLM prose -
+    it routinely contains markdown headings, tables, and `---` rules
+    that are indistinguishable, by shape alone, from this file's own
+    entry-boundary and frontmatter syntax (a summary that opens a
+    "## Core Components" subsection, for instance, used to look exactly
+    like the start of the *next* entry). Recording the length here means
+    the reader never has to guess where a summary ends by scanning its
+    content for a delimiter - it just consumes exactly N characters,
+    whatever they are, and resumes parsing right after. Do not go back
+    to inferring the boundary from blank lines or heading markers; that
+    is precisely the bug this replaced.
+    """
+    return f"*{created_at} - {kind} - {len(summary_text)}*"
+
+
 def _entry_section(entry: Entry) -> str:
+    summary_text = entry.summary.strip() or NONE_YET
     lines = [
         f"## {entry.query or '(untitled)'}",
         "",
-        f"*{entry.created_at} - {entry.kind}*",
+        _meta_line(entry.created_at, entry.kind, summary_text),
         "",
-        entry.summary.strip() or NONE_YET,
+        summary_text,
         "",
         "**Sources**",
         *_bullet_list(list(entry.sources)),

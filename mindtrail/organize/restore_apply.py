@@ -32,6 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from mindtrail.advice.highlights import Highlight, highlights_to_json
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import Conversation, ConversationStore
 from mindtrail.organize.profile import ProfileStore
@@ -103,6 +104,12 @@ def _import_projects(
                                       created_at=parsed.created_at))
             if parsed.instructions:
                 projects.set_instructions(parsed.id, parsed.instructions)
+        if parsed.highlights:
+            highlights = [
+                Highlight(headline=h.headline, detail=h.detail, source="", priority=h.priority)
+                for h in parsed.highlights
+            ]
+            projects.save_advice(parsed.id, highlights_to_json(highlights), len(highlights))
         created += 1
 
     return ImportSummary(created, skipped, failed, tuple(warnings)), slug_to_id, name_to_id

@@ -22,9 +22,19 @@ from dataclasses import dataclass, field
 
 from mindtrail.organize.export import NONE_YET, ROADMAP_STATUS_ORDER
 
-_META_LINE = re.compile(r"^\*(.*) - (.*)\*$")
+_META_LINE = re.compile(r"^\*(.*) - (.*) - (\d+)\*$")
 _SOURCES_MARKER = "\n\n**Sources**\n"
 _RECALLED_MARKER = "\n\n**Recalled entries**\n"
+_RECALLED_HEADER = "**Recalled entries**\n"
+
+# Exports written before the length-prefixed meta line (see export.py's
+# `_meta_line`) end their meta line right after the kind, with no count.
+# Both forms are handled: the legacy path keeps the old scan-for-the-next
+# "## " heuristic, which is unreliable against a summary containing
+# markdown of its own - that is exactly the bug the new format fixes -
+# but there is no way to recover a length that was never written, so a
+# legacy file gets the best-effort behavior it always had.
+_META_LINE_LEGACY = re.compile(r"^\*(.*) - (.*)\*$")
 _STEP_FIELD_PREFIXES = (
     "- Note: ",
     "- Due: ",
@@ -57,11 +67,19 @@ class ParsedConversation:
 
 
 @dataclass(frozen=True)
+class ParsedHighlight:
+    headline: str
+    priority: str
+    detail: str
+
+
+@dataclass(frozen=True)
 class ParsedProject:
     id: str
     name: str
     created_at: str
     instructions: str = ""
+    highlights: tuple[ParsedHighlight, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -121,22 +139,138 @@ def _parse_bullets(text: str) -> tuple[str, ...]:
 
 
 # --- entries -----------------------------------------------------------
+#
+# A summary is LLM prose, not this file's own syntax, and it routinely
+# contains markdown headings, tables, and "---" rules that look exactly
+# like an entry boundary or a frontmatter fence. Splitting the body into
+# entries first (by scanning for the next "## ") and only then parsing
+# each piece - the original approach - breaks the moment a summary
+# contains one of those constructs, because the scan cannot tell "the
+# next entry starts here" from "this summary has a heading in it".
+#
+# The fix is to never scan the summary for a boundary at all. Every
+# meta line now names the summary's exact character count (see
+# export.py's `_meta_line`), so parsing walks the body positionally:
+# read the heading, read the meta line, consume precisely that many
+# characters as the summary regardless of what they contain, and
+# whatever is left is either empty or the next entry's heading.
 
 
-def _parse_meta_line(line: str, path: str) -> tuple[str, str]:
+def _parse_meta_line(line: str, path: str) -> tuple[str, str, int]:
     match = _META_LINE.match(line)
+    if not match:
+        raise ValueError(f"{path}: malformed entry metadata line: {line!r}")
+    created_at, kind, length = match.groups()
+    return created_at, kind, int(length)
+
+
+def _parse_meta_line_legacy(line: str, path: str) -> tuple[str, str]:
+    match = _META_LINE_LEGACY.match(line)
     if not match:
         raise ValueError(f"{path}: malformed entry metadata line: {line!r}")
     return match.group(1), match.group(2)
 
 
-def _parse_entry_block(block: str, path: str) -> ParsedEntry:
-    """A conversation turn: query, timestamp/kind, summary, sources,
-    and recalled ids. See export.py's `_entry_section`."""
+def _is_legacy_format(body: str) -> bool:
+    """True if `body` was written before summaries carried a length.
+
+    Looking only at the first entry is enough: one file is always
+    written by one version of export.py, so the format is consistent
+    within it.
+    """
+    _, _, after_heading = body.partition("\n\n")
+    meta, _, _ = after_heading.partition("\n\n")
+    return bool(_META_LINE_LEGACY.match(meta)) and not _META_LINE.match(meta)
+
+
+def _take_bullets(text: str) -> tuple[str, str]:
+    """Consume the run of "- " bullet lines at the front of `text`,
+    plus the blank line that follows them, returning (bullets, rest).
+
+    Sources and recalled-entry ids are the app's own data - urls and
+    uuids, one per line - never LLM prose, so unlike a summary they can
+    safely be located by shape instead of needing a length prefix.
+    """
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines) and lines[i].startswith("- "):
+        i += 1
+    bullets = "\n".join(lines[:i])
+    tail = lines[i:]
+    if tail and tail[0] == "":
+        tail = tail[1:]
+    return bullets, "\n".join(tail)
+
+
+def _consume_entry(text: str, path: str) -> tuple[ParsedEntry, str]:
+    """Parse one conversation entry off the front of `text`. Returns the
+    entry and whatever remains - empty, or the next entry's heading."""
+    heading, sep, after_heading = text.partition("\n\n")
+    if not sep or not heading.startswith("## "):
+        raise ValueError(f"{path}: expected entry heading, got {heading!r}")
+    meta, sep, after_meta = after_heading.partition("\n\n")
+    if not sep:
+        raise ValueError(f"{path}: malformed entry metadata line: {meta!r}")
+    created_at, kind, length = _parse_meta_line(meta, path)
+    if len(after_meta) < length:
+        raise ValueError(
+            f"{path}: entry summary shorter than its declared length "
+            f"({len(after_meta)} < {length})"
+        )
+    summary, rest = after_meta[:length], after_meta[length:]
+
+    if not rest.startswith(_SOURCES_MARKER):
+        raise ValueError(f"{path}: expected sources section after summary, got {rest[:40]!r}")
+    rest = rest[len(_SOURCES_MARKER):]
+    sources_text, rest = _take_bullets(rest)
+
+    if not rest.startswith(_RECALLED_HEADER):
+        raise ValueError(f"{path}: expected recalled-entries section, got {rest[:40]!r}")
+    rest = rest[len(_RECALLED_HEADER):]
+    recalled_text, rest = _take_bullets(rest)
+
+    entry = ParsedEntry(
+        query=heading.removeprefix("## "),
+        summary=summary,
+        created_at=created_at,
+        kind=kind,
+        sources=_parse_bullets(sources_text),
+        recalled_ids=_parse_bullets(recalled_text),
+    )
+    return entry, rest
+
+
+def _consume_note(text: str, path: str) -> tuple[ParsedEntry, str]:
+    """Parse one notes.md entry off the front of `text` - same idea as
+    `_consume_entry` but without a sources/recalled section."""
+    heading, sep, after_heading = text.partition("\n\n")
+    if not sep or not heading.startswith("## "):
+        raise ValueError(f"{path}: expected entry heading, got {heading!r}")
+    meta, sep, after_meta = after_heading.partition("\n\n")
+    if not sep:
+        raise ValueError(f"{path}: malformed entry metadata line: {meta!r}")
+    created_at, kind, length = _parse_meta_line(meta, path)
+    if len(after_meta) < length:
+        raise ValueError(
+            f"{path}: entry summary shorter than its declared length "
+            f"({len(after_meta)} < {length})"
+        )
+    summary, rest = after_meta[:length], after_meta[length:]
+    rest = rest.removeprefix("\n\n") if rest else rest
+    entry = ParsedEntry(query=heading.removeprefix("## "), summary=summary,
+                         created_at=created_at, kind=kind)
+    return entry, rest
+
+
+def _parse_entry_block_legacy(block: str, path: str) -> ParsedEntry:
+    """Pre-length-prefix format. Kept only so an export made before this
+    fix can still be imported; still vulnerable to a summary containing
+    markdown that looks like a boundary - there is no length recorded to
+    fall back on."""
     before_sources, _, after_sources = block.partition(_SOURCES_MARKER)
     sources_block, _, recalled_block = after_sources.partition(_RECALLED_MARKER)
     heading, meta, summary = before_sources.split("\n\n", 2)
-    created_at, kind = _parse_meta_line(meta, path)
+    created_at, kind = _parse_meta_line_legacy(meta, path)
     return ParsedEntry(
         query=heading.removeprefix("## "),
         summary=summary,
@@ -147,20 +281,40 @@ def _parse_entry_block(block: str, path: str) -> ParsedEntry:
     )
 
 
-def _parse_note_block(block: str, path: str) -> ParsedEntry:
-    """An orphaned entry in notes.md - no sources/recalled section, see
-    export.py's `build_notes_file`."""
+def _parse_note_block_legacy(block: str, path: str) -> ParsedEntry:
     heading, meta, summary = block.split("\n\n", 2)
-    created_at, kind = _parse_meta_line(meta, path)
+    created_at, kind = _parse_meta_line_legacy(meta, path)
     return ParsedEntry(query=heading.removeprefix("## "), summary=summary,
                         created_at=created_at, kind=kind)
+
+
+def _parse_entries(body: str, path: str) -> tuple[ParsedEntry, ...]:
+    if _is_legacy_format(body):
+        return tuple(_parse_entry_block_legacy(b, path) for b in _split_sections(body, "## "))
+    entries: list[ParsedEntry] = []
+    rest = body
+    while rest:
+        entry, rest = _consume_entry(rest, path)
+        entries.append(entry)
+    return tuple(entries)
+
+
+def _parse_notes(body: str, path: str) -> tuple[ParsedEntry, ...]:
+    if _is_legacy_format(body):
+        return tuple(_parse_note_block_legacy(b, path) for b in _split_sections(body, "## "))
+    entries: list[ParsedEntry] = []
+    rest = body
+    while rest:
+        entry, rest = _consume_note(rest, path)
+        entries.append(entry)
+    return tuple(entries)
 
 
 def parse_notes_file(content: str, path: str = "notes.md") -> tuple[ParsedEntry, ...]:
     _, body = _parse_frontmatter(content)
     if body == NONE_YET:
         return ()
-    return tuple(_parse_note_block(b, path) for b in _split_sections(body, "## "))
+    return _parse_notes(body, path)
 
 
 def parse_profile_file(content: str) -> ParsedProfile:
@@ -173,11 +327,7 @@ def parse_profile_file(content: str) -> ParsedProfile:
 
 def parse_conversation_file(content: str, path: str = "") -> ParsedConversation:
     fm, body = _parse_frontmatter(content)
-    entries = (
-        ()
-        if body == NONE_YET
-        else tuple(_parse_entry_block(b, path) for b in _split_sections(body, "## "))
-    )
+    entries = () if body == NONE_YET else _parse_entries(body, path)
     return ParsedConversation(
         id=fm["id"],
         title=fm["title"],
@@ -193,15 +343,35 @@ def parse_conversation_file(content: str, path: str = "") -> ParsedConversation:
 # --- projects and roadmaps -----------------------------------------------
 
 
+# Matches export.py's `- **{headline}** ({priority}) - {detail}` line.
+# `h.source` never made it into the export in the first place (only
+# headline/priority/detail are rendered), so there is nothing to parse
+# it back from - a restored highlight always carries an empty source.
+_HIGHLIGHT_LINE = re.compile(r"^- \*\*(.*?)\*\* \((\w+)\) - (.*)$")
+
+
+def _parse_highlights(text: str) -> tuple[ParsedHighlight, ...]:
+    if text == NONE_YET:
+        return ()
+    parsed = []
+    for line in text.splitlines():
+        match = _HIGHLIGHT_LINE.match(line)
+        if match:
+            headline, priority, detail = match.groups()
+            parsed.append(ParsedHighlight(headline=headline, priority=priority, detail=detail))
+    return tuple(parsed)
+
+
 def parse_project_index_file(content: str) -> ParsedProject:
     fm, body = _parse_frontmatter(content)
-    instructions_block, _, _ = body.partition("\n\n## Highlights")
+    instructions_block, _, highlights_block = body.partition("\n\n## Highlights\n\n")
     instructions = instructions_block.removeprefix("## Instructions\n\n")
     return ParsedProject(
         id=fm["id"],
         name=fm["title"],
         created_at=fm["created_at"],
         instructions="" if instructions == NONE_YET else instructions,
+        highlights=_parse_highlights(highlights_block),
     )
 
 

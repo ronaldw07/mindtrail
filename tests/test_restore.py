@@ -3,14 +3,17 @@ overwrite, and graceful handling of a hand-broken export."""
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
-from mindtrail.memory.store import MemoryStore
+from mindtrail.memory.store import Entry, MemoryStore
 from mindtrail.organize.conversations import ConversationStore
 from mindtrail.organize.db import initialize
-from mindtrail.organize.export import export_to_directory
+from mindtrail.organize.export import NONE_YET, build_conversation_file, export_to_directory
 from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import ProjectStore
+from mindtrail.organize.restore import parse_conversation_file
 from mindtrail.organize.restore_apply import import_from_directory
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 
@@ -122,6 +125,13 @@ def test_export_import_export_is_byte_identical(
     summary = import_from_directory(
         str(first_dir), store2, chats2, projects2, roadmaps2, nodes2, profile2
     )
+    # Into a genuinely empty database - anything less than every record
+    # created would mean the "identical" export below is trivially true
+    # because nothing was actually restored. An import that skips
+    # everything and calls the resulting no-op export a match proves
+    # nothing about round-trip fidelity.
+    assert summary.created > 0
+    assert summary.skipped == 0
     assert summary.failed == 0
 
     second_dir = tmp_path / "export2"
@@ -247,3 +257,101 @@ def test_restored_entry_is_findable_by_semantic_search(
 
     hits = store2.search("container orchestration platform", k=1)
     assert hits and hits[0].query == "What is Kubernetes?"
+
+
+# --- summaries containing markdown that looks like this format's own
+# syntax ---------------------------------------------------------------
+#
+# A research summary is LLM prose, not something mindtrail wrote itself,
+# and it routinely contains headings, tables, and fenced code with `---`
+# and `|` in it. Against a real database, `mindtrail import` mistook
+# these for entry boundaries and frontmatter fences and failed to parse
+# 3 of 20 files outright - this is the regression suite for that.
+
+ADVERSARIAL_SUMMARIES = {
+    "table": "A quick table.\n\n| A | B |\n|---|---|\n| 1 | 2 |",
+    "fenced code with dashes and pipes": (
+        "Some code:\n\n```text\n--- not frontmatter ---\nif a | b:\n    pass\n```"
+    ),
+    "yaml-looking line": 'Notes below.\n\nid: "not-real-frontmatter"\ntitle: "nope"',
+    "embedded heading": "Intro line.\n\n## Looks Like Another Entry\n\nMore text after it.",
+    "unicode": "Unicode check: caf\u00e9 \u2014 \u4f60\u597d \U0001f600 \u2705",
+}
+
+
+def test_entries_with_adversarial_markdown_survive_export_import_export(
+    tmp_path, store, chats, projects, roadmaps, nodes, profile
+):
+    conversation = chats.create("Adversarial content")
+    for label, summary in ADVERSARIAL_SUMMARIES.items():
+        store.add(label, summary, [], conversation_id=conversation.id)
+
+    first_dir = tmp_path / "export1"
+    export_to_directory(store, chats, projects, roadmaps, nodes, profile, str(first_dir))
+
+    store2, chats2, projects2, roadmaps2, nodes2, profile2 = _fresh_stores(tmp_path, "b")
+    summary = import_from_directory(
+        str(first_dir), store2, chats2, projects2, roadmaps2, nodes2, profile2
+    )
+    assert summary.created > 0
+    assert summary.failed == 0
+
+    restored_conversation = chats2.all()[0]
+    restored = {e.query: e.summary for e in store2.by_conversation(restored_conversation.id)}
+    assert restored == ADVERSARIAL_SUMMARIES
+
+    second_dir = tmp_path / "export2"
+    export_to_directory(store2, chats2, projects2, roadmaps2, nodes2, profile2, str(second_dir))
+    first_files = {p.relative_to(first_dir): p.read_bytes() for p in first_dir.rglob("*") if p.is_file()}
+    second_files = {
+        p.relative_to(second_dir): p.read_bytes() for p in second_dir.rglob("*") if p.is_file()
+    }
+    assert first_files == second_files
+
+
+def test_entry_with_empty_summary_round_trips_at_the_format_level(chats):
+    """MemoryStore.add refuses an empty summary, so this can only be
+    exercised through the pure build/parse functions directly - exactly
+    the split export.py's own docstring describes them for."""
+    conversation = chats.create("Empty")
+    entry = Entry(
+        id="e1", query="anything", summary="", sources=(),
+        created_at="2026-01-01T00:00:00+00:00",
+    )
+    file1 = build_conversation_file(conversation, [entry], None, "empty")
+    parsed = parse_conversation_file(file1.content, file1.path)
+
+    assert len(parsed.entries) == 1
+    assert parsed.entries[0].summary == NONE_YET
+
+    restored_entry = entry.with_summary(parsed.entries[0].summary)
+    file2 = build_conversation_file(conversation, [restored_entry], None, "empty")
+    assert file1.content == file2.content
+
+
+def test_legacy_export_without_length_prefixed_summaries_still_imports(
+    tmp_path, store, chats, projects, roadmaps, nodes, profile
+):
+    """Exports written before summaries carried an explicit length (see
+    export.py's `_meta_line`) must still import - restore.py detects the
+    older `*created_at - kind*` meta line and falls back to the old
+    parsing path for that file."""
+    conversation = chats.create("Legacy")
+    store.add("old question", "old answer", ["http://a"], conversation_id=conversation.id)
+    out = tmp_path / "export"
+    export_to_directory(store, chats, projects, roadmaps, nodes, profile, str(out))
+
+    conv_file = next((out / "conversations").glob("*.md"))
+    # Strip the trailing " - N" the current format adds, reproducing the
+    # meta line as it looked before this fix.
+    legacy_text = re.sub(r"^(\*.+) - \d+\*$", r"\1*", conv_file.read_text(), flags=re.MULTILINE)
+    conv_file.write_text(legacy_text)
+
+    store2, chats2, projects2, roadmaps2, nodes2, profile2 = _fresh_stores(tmp_path, "b")
+    summary = import_from_directory(str(out), store2, chats2, projects2, roadmaps2, nodes2, profile2)
+
+    assert summary.failed == 0
+    assert summary.created > 0
+    restored = store2.by_conversation(chats2.all()[0].id)
+    assert restored[0].query == "old question"
+    assert restored[0].summary == "old answer"
