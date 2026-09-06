@@ -10,6 +10,7 @@ import tempfile
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from mindtrail.advice.daily_brief import generate_daily_brief
 from mindtrail.advice.highlights import (
     generate_highlights,
     highlights_from_json,
@@ -148,6 +149,19 @@ def _agenda_bucket(due: date, today: date) -> str:
     return "later"
 
 
+def _is_unblocked(node, by_id: dict) -> bool:
+    """True if every dependency of `node` is marked done.
+
+    Shared by the "Next up" dashboard card and the daily summary's
+    unblocked-steps section, so a step's actionability is judged
+    identically in both places rather than reimplemented twice.
+    """
+    return all(
+        by_id.get(dep_id) is not None and by_id[dep_id].status == "done"
+        for dep_id in node.depends_on
+    )
+
+
 def handle_dashboard(
     projects: ProjectStore,
     chats: ConversationStore,
@@ -201,10 +215,7 @@ def handle_dashboard(
         accepted = [n for n in all_nodes if n.status == NEXT_UP_STATUS]
 
         def is_unblocked(n) -> bool:
-            return all(
-                by_id.get(dep_id) is not None and by_id[dep_id].status == "done"
-                for dep_id in n.depends_on
-            )
+            return _is_unblocked(n, by_id)
 
         # Genuinely unblocked steps (every dependency already done) lead.
         # Within that, a real due date beats the x-position guess - sorts
@@ -266,6 +277,155 @@ def handle_dashboard(
     return {
         "highlights": highlights, "next_up": next_up, "recent": recent, "agenda": agenda
     }
+
+
+DAILY_SUMMARY_UNBLOCKED_LIMIT = 5
+DAILY_SUMMARY_RECURRING_LIMIT = 5
+# "Landed since yesterday" is a rolling two-day local window (yesterday's
+# date through today's), not "the last 24 hours" - a conversation started
+# at 8am yesterday should still count this morning, and a strict 24h
+# window would drop it a few hours before most people check the dashboard.
+NEW_SINCE_DAYS = 1
+
+
+def _local_date(iso_timestamp: str) -> date | None:
+    """A stored UTC timestamp (organize/db.now_iso) converted to the
+    server's local date.
+
+    Conversations are timestamped in UTC, but "since yesterday" here has
+    to mean the same local calendar day _agenda_bucket already reasons
+    about - comparing a UTC timestamp against a local "yesterday" boundary
+    directly would misclassify anything created near local midnight for
+    roughly half the day, exactly like the bug _agenda_bucket's own
+    comment warns against.
+    """
+    try:
+        return datetime.fromisoformat(iso_timestamp).astimezone().date()
+    except ValueError:
+        return None
+
+
+def handle_daily_summary(
+    projects: ProjectStore,
+    chats: ConversationStore,
+    roadmaps: RoadmapStore,
+    nodes: RoadmapNodeStore,
+) -> dict:
+    """Everything the Today view needs to answer "what should I do today",
+    assembled entirely from already-stored data - no LLM call. The
+    dashboard renders on every visit, so a model call here would add cost
+    and latency to something that is mostly counting; see
+    mindtrail.advice.daily_brief for the on-demand prose version of this
+    same data, generated only when the user asks for it.
+
+    "due" covers roadmap steps that are overdue or due today (reusing
+    _agenda_bucket's local-time bucketing, see its comment above for why
+    that matters). "unblocked" is accepted steps whose dependencies are
+    all done, excluding anything already listed in "due" so a step is
+    never named twice. "recurring" surfaces a repeating step coming due
+    within the week that isn't already due today/overdue, so a weekly
+    habit doesn't arrive as a surprise the day it lands. "new_since_yesterday"
+    counts conversations started since yesterday, a cheap proxy for "what
+    landed" that needs no Chroma lookup.
+    """
+    today = datetime.now().date()
+    yesterday = today - timedelta(days=NEW_SINCE_DAYS)
+
+    due: list[dict] = []
+    unblocked: list[dict] = []
+    recurring: list[dict] = []
+    due_ids: set[str] = set()
+
+    for project in projects.all():
+        roadmap = roadmaps.for_project(project.id)
+        if roadmap is None:
+            continue
+        all_nodes = nodes.for_roadmap(roadmap.id)
+        by_id = {n.id: n for n in all_nodes}
+
+        for n in all_nodes:
+            if n.status not in AGENDA_STATUSES or not n.due_date:
+                continue
+            due_date = _parse_due_date(n.due_date)
+            if due_date is None:
+                continue
+            bucket = _agenda_bucket(due_date, today)
+            item = {
+                "project_id": project.id,
+                "project_name": project.name,
+                "node_id": n.id,
+                "title": n.title,
+                "due_date": n.due_date,
+                "is_recurring": n.repeat_days > 0,
+            }
+            if bucket in ("overdue", "today"):
+                due.append({**item, "bucket": bucket})
+                due_ids.add(n.id)
+            elif bucket == "this_week" and n.repeat_days > 0:
+                recurring.append(item)
+
+        for n in all_nodes:
+            if (
+                n.status == NEXT_UP_STATUS
+                and n.id not in due_ids
+                and _is_unblocked(n, by_id)
+            ):
+                unblocked.append(
+                    {
+                        "project_id": project.id,
+                        "project_name": project.name,
+                        "node_id": n.id,
+                        "title": n.title,
+                        "due_date": n.due_date,
+                    }
+                )
+
+    due.sort(key=lambda item: (item["bucket"] != "overdue", item["due_date"], item["project_name"]))
+    unblocked.sort(key=lambda item: (item["due_date"] or "9999-99-99", item["title"]))
+    recurring.sort(key=lambda item: item["due_date"])
+
+    new_since_yesterday = sum(
+        1 for c in chats.all()
+        if (created := _local_date(c.created_at)) is not None and created >= yesterday
+    )
+
+    return {
+        "due": due,
+        "unblocked": unblocked[:DAILY_SUMMARY_UNBLOCKED_LIMIT],
+        "recurring": recurring[:DAILY_SUMMARY_RECURRING_LIMIT],
+        "new_since_yesterday": new_since_yesterday,
+        "empty": not due and not unblocked and not recurring,
+    }
+
+
+def _friendly_brief_error(exc: Exception) -> str:
+    """A short reason, matching _friendly_highlight_error's shape - a
+    ValueError here (nothing to brief on) already reads fine verbatim, it
+    is only LLMError's raw text that needs softening."""
+    if isinstance(exc, LLMError):
+        text = str(exc)
+        return "rate limited" if "rate limited" in text else "the model was unavailable"
+    return str(exc)
+
+
+def handle_daily_brief(
+    projects: ProjectStore,
+    chats: ConversationStore,
+    roadmaps: RoadmapStore,
+    nodes: RoadmapNodeStore,
+    llm: LLMClient,
+) -> dict:
+    """The "Brief me" button: an on-demand LLM paragraph over the same
+    data handle_daily_summary already assembled for free. Recomputes the
+    summary itself rather than trusting one the client might send, so the
+    prose can never drift from what is actually on screen.
+    """
+    summary = handle_daily_summary(projects, chats, roadmaps, nodes)
+    try:
+        brief = generate_daily_brief(llm, summary)
+    except (LLMError, ValueError) as exc:
+        return {"error": _friendly_brief_error(exc)}
+    return {"text": brief.text}
 
 
 def _friendly_highlight_error(exc: Exception) -> str:

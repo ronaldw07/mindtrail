@@ -206,6 +206,12 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                         deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes
                     )
                 )
+            elif path == "/api/daily-summary":
+                self._json(
+                    api.handle_daily_summary(
+                        deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes
+                    )
+                )
             elif path == "/api/search":
                 params = parse_qs(urlparse(self.path).query)
                 self._json(
@@ -260,7 +266,14 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                     self._unauthorized()
                     return
 
-            if path == "/api/ask":
+            if path == "/api/daily-summary/brief":
+                self._json(
+                    api.handle_daily_brief(
+                        deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes,
+                        deps.llm,
+                    )
+                )
+            elif path == "/api/ask":
                 body = self._json_body()
                 if body is None:
                     self._json({"error": "malformed request body"}, 400)

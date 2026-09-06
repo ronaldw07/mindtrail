@@ -48,6 +48,15 @@ Nothing on it triggers a model call; it only reads what's already stored,
 so opening it costs nothing. Click the mindtrail logo any time to come
 back to it.
 
+At the top of Today sits the **daily summary** — a single card answering
+"what should I do today", combining roadmap steps due today or overdue,
+steps that just became actionable because their dependencies are done,
+recurring steps coming due within the week, and a count of what's landed
+since yesterday. Like the rest of Today it costs nothing to load: every
+number is read straight from storage, no model call. Click **Brief me**
+to turn that same data into a short paragraph on demand — that's the one
+part of this card that ever calls the model, and only when you ask.
+
 Press **Cmd+K** (Ctrl+K on non-Mac) anywhere to open a command palette —
 jump to any project, conversation, or action without touching the
 sidebar. Press **?** to see every keyboard shortcut in an overlay.

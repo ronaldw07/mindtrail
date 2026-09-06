@@ -3071,6 +3071,91 @@
     return item;
   }
 
+  // The one-card answer to "what should I do today": roadmap steps due
+  // today/overdue, steps newly unblocked, and recurring steps coming due -
+  // all assembled server-side with no model call (see
+  // handle_daily_summary). "Brief me" is the only part of this card that
+  // ever costs a completion, and only fires when clicked.
+  function dailySummaryCard(summary) {
+    const isEmpty = summary.empty;
+    const c = card('Daily summary', isEmpty ? null : 'Brief me', null);
+
+    if (isEmpty) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'Nothing due, overdue, or newly unblocked today.';
+      c.appendChild(p);
+    } else {
+      (summary.due || []).forEach(n => {
+        const item = dashItem(n.title, n.project_name,
+                               () => openRoadmapView(n.project_id, n.project_name));
+        const due = document.createElement('div');
+        due.className = 'node-due' + (n.bucket === 'overdue' ? ' overdue' : '');
+        due.textContent = (n.bucket === 'overdue' ? '⚠ Overdue: ' : '⏱ Due today: ')
+          + n.due_date + (n.is_recurring ? ' · recurring' : '');
+        item.insertBefore(due, item.firstChild);
+        c.appendChild(item);
+      });
+
+      (summary.unblocked || []).forEach(n => {
+        const sub = n.project_name + (n.due_date ? ' · due ' + n.due_date : '')
+          + ' · unblocked';
+        c.appendChild(dashItem(n.title, sub,
+                                () => openRoadmapView(n.project_id, n.project_name)));
+      });
+
+      (summary.recurring || []).forEach(n => {
+        const item = dashItem(n.title, n.project_name,
+                               () => openRoadmapView(n.project_id, n.project_name));
+        const due = document.createElement('div');
+        due.className = 'node-due';
+        due.textContent = '🔁 Coming up ' + n.due_date;
+        item.insertBefore(due, item.firstChild);
+        c.appendChild(item);
+      });
+    }
+
+    if (summary.new_since_yesterday) {
+      const meta = document.createElement('div');
+      meta.className = 'dash-summary-meta';
+      meta.textContent = summary.new_since_yesterday + ' new since yesterday';
+      c.appendChild(meta);
+    }
+
+    if (!isEmpty) {
+      const brief = document.createElement('div');
+      brief.className = 'dash-summary-brief';
+      brief.style.display = 'none';
+      c.appendChild(brief);
+
+      const btn = c.querySelector('.card-btn');
+      btn.onclick = async () => {
+        btn.disabled = true;
+        btn.textContent = 'Thinking…';
+        brief.style.display = '';
+        brief.classList.remove('muted');
+        brief.textContent = '';
+        try {
+          const res = await jsonSend('/api/daily-summary/brief', {});
+          if (res.error) {
+            brief.classList.add('muted');
+            brief.textContent = 'Could not generate a brief: ' + res.error;
+          } else {
+            brief.textContent = res.text;
+          }
+        } catch (err) {
+          brief.classList.add('muted');
+          brief.textContent = 'Could not generate a brief: request failed';
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Brief me';
+        }
+      };
+    }
+
+    return c;
+  }
+
   async function openDashboardView() {
     currentProject = null;
     current = null;
@@ -3081,13 +3166,17 @@
     const view = $('dashboard-view');
     view.innerHTML = '';
     view.appendChild(skeletonBlock(6));
-    const data = await api('/api/dashboard');
+    const [data, summary] = await Promise.all([
+      api('/api/dashboard'), api('/api/daily-summary'),
+    ]);
     view.innerHTML = '';
 
     const title = document.createElement('div');
     title.className = 'proj-title';
     title.textContent = 'Today';
     view.appendChild(title);
+
+    view.appendChild(dailySummaryCard(summary));
 
     const grid = document.createElement('div');
     grid.className = 'dash-grid';
