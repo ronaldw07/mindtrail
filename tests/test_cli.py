@@ -9,6 +9,7 @@ from mindtrail.cli import (
     cmd_docs,
     cmd_note,
     cmd_predict,
+    cmd_save_url,
     cmd_search,
     main,
 )
@@ -88,6 +89,13 @@ def test_docs_routes_with_a_path():
 
     assert args.func is cmd_docs
     assert args.path == "resume.pdf"
+
+
+def test_save_url_routes_with_its_url():
+    args = build_parser().parse_args(["save-url", "http://example.com/article"])
+
+    assert args.func is cmd_save_url
+    assert args.url == "http://example.com/article"
 
 
 def test_advice_takes_no_arguments():

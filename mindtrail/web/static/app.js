@@ -976,7 +976,9 @@
     data.entries.forEach(e => {
       const t = turn();
       userLine(t, e.query);
-      assistantText(t, e.summary, e.kind, {plain: e.kind === 'document' || e.kind === 'note'});
+      assistantText(t, e.summary, e.kind, {
+        plain: e.kind === 'document' || e.kind === 'note' || e.kind === 'link',
+      });
       metaBlock(t, e.recalled, e.sources);
 
       const actions = document.createElement('div');
@@ -2891,6 +2893,28 @@
   }
   $('add-note').onclick = addNote;
 
+  // Same shape as addNote above: search and PDF upload were the only two
+  // ways a page's content reached memory before this - a URL a user
+  // already has open can now be handed straight to the server instead of
+  // being re-typed into a note.
+  //
+  // A named function, matching addNote, so the palette's "Save a link"
+  // action (below) reuses this instead of simulating a click.
+  async function saveUrl() {
+    const url = await modal({
+      title: 'Save a link', input: true, inputType: 'url',
+      placeholder: 'https://…', confirmLabel: 'Save',
+    });
+    if (!url) return;
+    const res = await jsonSend('/api/save-url', {url});
+    if (res.error) { toast(res.error, {error: true}); return; }
+    await loadSidebar();
+    showChatView();
+    await openConversation(res.conversation_id);
+    toast('Link saved');
+  }
+  $('save-url').onclick = saveUrl;
+
   // Backs up the whole database plus profile to plain markdown on disk -
   // the CLI's `mindtrail export` had no browser entry point until now, so
   // the backup story was invisible to anyone who never reads --help.
@@ -3357,6 +3381,7 @@
     const actions = [
       {label: 'New chat', run: () => { closePalette(); newChat(); }},
       {label: 'New note', run: () => { closePalette(); addNote(); }},
+      {label: 'Save a link', run: () => { closePalette(); saveUrl(); }},
       {label: 'New project', run: () => { closePalette(); createProject(); }},
       {label: 'Go to Today', run: () => { closePalette(); openDashboardView(); }},
       {label: 'Go to Profile', run: () => { closePalette(); openProfileView(); }},

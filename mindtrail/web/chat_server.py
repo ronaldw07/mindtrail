@@ -388,6 +388,15 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                         deps.topic_extractor,
                     )
                 )
+            elif path == "/api/save-url":
+                body = self._json_body() or {}
+                self._json(
+                    api.handle_save_url(
+                        deps.store, deps.chats, str(body.get("url", "")),
+                        str(body.get("conversation_id", "") or ""),
+                        deps.topic_extractor,
+                    )
+                )
             elif path == "/api/transcribe":
                 self._json(api.handle_transcribe(deps.llm, self._body()))
             elif path == "/api/upload":

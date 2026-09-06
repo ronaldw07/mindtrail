@@ -753,6 +753,124 @@ def test_note_labeling_failure_still_stores_the_note(store, chats):
     assert len(store.by_conversation(response["conversation_id"])) == 1
 
 
+# --- save url -----------------------------------------------------------
+
+
+def test_saving_a_url_creates_a_conversation_titled_from_the_page(store, chats, monkeypatch):
+    monkeypatch.setattr(
+        api, "fetch_html",
+        lambda url: "<html><head><title>Great Article</title></head>"
+        "<body><p>Some readable content.</p></body></html>",
+    )
+
+    response = api.handle_save_url(store, chats, "http://example.com/article")
+
+    assert response["ok"] is True
+    conversation = chats.get(response["conversation_id"])
+    assert conversation.title == "Great Article"
+
+
+def test_saved_url_is_stored_as_a_link_entry_with_the_url_as_a_source(store, chats, monkeypatch):
+    monkeypatch.setattr(
+        api, "fetch_html",
+        lambda url: "<html><head><title>T</title></head><body>Body text.</body></html>",
+    )
+
+    response = api.handle_save_url(store, chats, "http://example.com/page")
+
+    entries = store.by_conversation(response["conversation_id"])
+    assert len(entries) == 1
+    assert entries[0].kind == "link"
+    assert entries[0].sources == ("http://example.com/page",)
+    assert "Body text." in entries[0].summary
+
+
+def test_saving_a_url_with_no_title_falls_back_to_the_url(store, chats, monkeypatch):
+    monkeypatch.setattr(
+        api, "fetch_html", lambda url: "<html><body>Untitled content.</body></html>"
+    )
+
+    response = api.handle_save_url(store, chats, "http://example.com/no-title")
+
+    entries = store.by_conversation(response["conversation_id"])
+    assert entries[0].query == "http://example.com/no-title"
+
+
+def test_saving_a_url_can_attach_to_an_existing_conversation(store, chats, monkeypatch):
+    existing = chats.create("Research chat")
+    monkeypatch.setattr(
+        api, "fetch_html",
+        lambda url: "<html><head><title>T</title></head><body>Body.</body></html>",
+    )
+
+    response = api.handle_save_url(
+        store, chats, "http://example.com", conversation_id=existing.id
+    )
+
+    assert response["conversation_id"] == existing.id
+    assert len(store.by_conversation(existing.id)) == 1
+
+
+def test_saving_a_url_for_a_missing_conversation_errors(store, chats, monkeypatch):
+    monkeypatch.setattr(
+        api, "fetch_html",
+        lambda url: "<html><head><title>T</title></head><body>Body.</body></html>",
+    )
+
+    response = api.handle_save_url(store, chats, "http://example.com", conversation_id="nope")
+
+    assert "error" in response
+
+
+def test_blank_url_is_rejected(store, chats):
+    assert "error" in api.handle_save_url(store, chats, "   ")
+
+
+def test_an_unreachable_url_errors_without_crashing(store, chats, monkeypatch):
+    from mindtrail.ingest.fetch import FetchError
+
+    def explode(url):
+        raise FetchError(f"could not fetch {url}: connection refused")
+
+    monkeypatch.setattr(api, "fetch_html", explode)
+
+    response = api.handle_save_url(store, chats, "http://unreachable.example.com")
+
+    assert "error" in response
+
+
+def test_a_page_with_no_readable_content_errors(store, chats, monkeypatch):
+    # e.g. a non-HTML binary response decodes to markup html_to_text
+    # strips down to nothing readable at all.
+    monkeypatch.setattr(
+        api, "fetch_html", lambda url: "<html><script>var x = 1;</script></html>"
+    )
+
+    response = api.handle_save_url(store, chats, "http://example.com/not-html")
+
+    assert "error" in response
+
+
+def test_save_url_topic_labeling_uses_the_topic_extractor_when_given(store, chats, monkeypatch):
+    monkeypatch.setattr(
+        api, "fetch_html",
+        lambda url: "<html><head><title>T</title></head><body>Body.</body></html>",
+    )
+
+    class StubExtractor:
+        def extract(self, headline, body, existing_topics):
+            from mindtrail.ingest.topic import TopicAssignment
+            return TopicAssignment(topic="Reading List", key_facts=["fact one"])
+
+    response = api.handle_save_url(
+        store, chats, "http://example.com", topic_extractor=StubExtractor()
+    )
+
+    entry = store.by_conversation(response["conversation_id"])[0]
+    assert entry.topic == "Reading List"
+    assert entry.key_facts == ("fact one",)
+
+
 # --- ui ---------------------------------------------------------------
 
 

@@ -21,6 +21,7 @@ from mindtrail.advice.project_chat import chat_about_project
 from mindtrail.advice.roadmap_chat import chat_about_roadmap
 from mindtrail.advice.roadmap_gen import generate_roadmap
 from mindtrail.ingest.documents import DocumentError, extract_pdf_text
+from mindtrail.ingest.fetch import FetchError, extract_title, fetch_html, html_to_text
 from mindtrail.ingest.researcher import Researcher
 from mindtrail.llm import LLMClient, LLMError
 from mindtrail.memory.store import MemoryStore
@@ -810,6 +811,61 @@ def handle_add_note(
     store.add(
         headline, text, [], topic=topic, key_facts=facts,
         kind="note", conversation_id=conversation_id,
+    )
+    chats.touch(conversation_id)
+
+    return {"ok": True, "conversation_id": conversation_id}
+
+
+def handle_save_url(
+    store: MemoryStore,
+    chats: ConversationStore,
+    url: str,
+    conversation_id: str = "",
+    topic_extractor=None,
+) -> dict:
+    """Fetch a URL and store it as a link entry - topic-labeled,
+    searchable, and attached to a conversation, the same shape as
+    handle_add_note and handle_upload. Previously the only way to get a
+    page into memory was through search or a PDF upload; this lets a
+    user hand mindtrail a URL directly.
+
+    fetch_html does the actual network call and carries the SSRF guard
+    (see mindtrail/ingest/fetch.py) - a URL here comes straight from a
+    browser form, unlike the URLs researcher.py fetches, which only ever
+    come from a search provider's own results.
+    """
+    url = url.strip()
+    if not url:
+        return {"error": "url must not be empty"}
+
+    try:
+        page_html = fetch_html(url)
+    except FetchError as exc:
+        return {"error": str(exc)}
+
+    text = html_to_text(page_html).strip()
+    if not text:
+        return {"error": "no readable content found at that url"}
+
+    headline = extract_title(page_html) or url
+
+    if not conversation_id:
+        conversation_id = chats.create(title=headline).id
+    elif chats.get(conversation_id) is None:
+        return {"error": "no such conversation"}
+
+    topic, facts = "", []
+    if topic_extractor is not None:
+        try:
+            assignment = topic_extractor.extract(headline, text, store.topics())
+            topic, facts = assignment.topic, list(assignment.key_facts)
+        except (LLMError, ValueError):
+            pass  # labeling is a nicety; the link still gets stored
+
+    store.add(
+        headline, text, [url], topic=topic, key_facts=facts,
+        kind="link", conversation_id=conversation_id,
     )
     chats.touch(conversation_id)
 

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from mindtrail.advice.planner import generate_advice
 from mindtrail.ingest.documents import DocumentError, extract_pdf_text
+from mindtrail.ingest.fetch import FetchError, extract_title, fetch_html, html_to_text
 from mindtrail.ingest.researcher import Researcher
 from mindtrail.ingest.search import SearchError, default_search
 from mindtrail.ingest.topic import TopicExtractor
@@ -117,6 +118,36 @@ def cmd_note(args) -> int:
         kind="note", conversation_id=conversation.id,
     )
     print(f"saved note under topic: {topic or 'Uncategorized'}")
+    return 0
+
+
+def cmd_save_url(args) -> int:
+    store = MemoryStore()
+    url = args.url.strip()
+    try:
+        page_html = fetch_html(url)
+    except FetchError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    text = html_to_text(page_html).strip()
+    if not text:
+        print("error: no readable content found at that url", file=sys.stderr)
+        return 1
+
+    headline = extract_title(page_html) or url
+    topic, facts = _assign_topic(LLMClient(), store, headline, text)
+
+    # Attached to a conversation, same as the browser's Save a link
+    # button - an unattached entry has no way to appear in the sidebar.
+    initialize()
+    chats = ConversationStore()
+    conversation = chats.create(title=headline)
+    store.add(
+        headline, text, [url], topic=topic, key_facts=facts,
+        kind="link", conversation_id=conversation.id,
+    )
+    print(f"saved link under topic: {topic or 'Uncategorized'}")
     return 0
 
 
@@ -270,6 +301,10 @@ def build_parser() -> argparse.ArgumentParser:
     docs = sub.add_parser("docs", help="parse a PDF and store its content")
     docs.add_argument("path")
     docs.set_defaults(func=cmd_docs)
+
+    save_url = sub.add_parser("save-url", help="fetch a url and remember its content")
+    save_url.add_argument("url")
+    save_url.set_defaults(func=cmd_save_url)
 
     advice = sub.add_parser(
         "advice", help="generate a next-steps plan from everything stored"
