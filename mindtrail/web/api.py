@@ -412,12 +412,20 @@ def handle_daily_summary(
     calendar_block = _calendar_block(calendar)
     calendar_events = calendar_block.get("events") or []
 
+    # The single item the "push your work forward" card leads with: the
+    # most urgent due/overdue step, or - if nothing is due - the first
+    # unblocked one. `due` is already sorted overdue-first; `unblocked` is
+    # already sorted by due date. None when there's simply nothing to lead
+    # with, which the client treats as "no hero card" rather than an error.
+    top_priority = (due[0] if due else None) or (unblocked[0] if unblocked else None)
+
     return {
         "due": due,
         "unblocked": unblocked[:DAILY_SUMMARY_UNBLOCKED_LIMIT],
         "recurring": recurring[:DAILY_SUMMARY_RECURRING_LIMIT],
         "new_since_yesterday": new_since_yesterday,
         "calendar": calendar_block,
+        "top_priority": top_priority,
         "empty": not due and not unblocked and not recurring and not calendar_events,
     }
 

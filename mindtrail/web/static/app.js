@@ -3071,132 +3071,232 @@
     return item;
   }
 
-  // A missing or broken Google connection must never break this card -
-  // every branch here reads calendar.connected/stale/error, which are
-  // already exactly what handle_daily_summary's _calendar_block guarantees
-  // no matter what went wrong (or didn't happen yet) on the server side.
-  function renderCalendarSection(c, calendar) {
-    const cal = calendar || {connected: false};
-    if (!cal.connected) {
-      const hint = document.createElement('div');
-      hint.className = 'dash-summary-meta';
-      hint.textContent = cal.needs_reconnect
-        ? 'Google Calendar needs reconnecting — run: mindtrail calendar connect'
-        : 'Connect Google Calendar — run: mindtrail calendar connect';
-      c.appendChild(hint);
-      return;
-    }
-
-    if (cal.stale || cal.error || cal.needs_reconnect) {
-      const notice = document.createElement('div');
-      notice.className = 'dash-summary-meta';
-      notice.textContent = cal.needs_reconnect
-        ? 'Google Calendar needs reconnecting — showing cached events from ' + (cal.as_of || 'earlier')
-        : 'Showing cached calendar events from ' + (cal.as_of || 'earlier');
-      c.appendChild(notice);
-    }
-
-    const events = cal.events || [];
-    if (!events.length) return;
-    const heading = document.createElement('div');
-    heading.className = 'dash-item-sub';
-    heading.textContent = 'On your calendar today';
-    c.appendChild(heading);
-    events.forEach(e => {
-      const item = dashItem(e.title, null, null);
-      const when = document.createElement('div');
-      when.className = 'node-due';
-      when.textContent = e.all_day ? 'All day' : e.start;
-      item.insertBefore(when, item.firstChild);
-      c.appendChild(item);
-    });
+  // Greeting text only - never a clock/date computed here elsewhere, so
+  // this is the one place "what time is it" turns into words.
+  function greetingWord() {
+    const h = new Date().getHours();
+    if (h < 5) return 'Good night';
+    if (h < 12) return 'Good morning';
+    if (h < 18) return 'Good afternoon';
+    return 'Good evening';
   }
 
-  // The one-card answer to "what should I do today": roadmap steps due
-  // today/overdue, steps newly unblocked, recurring steps coming due, and
-  // (if connected) today's calendar events - all assembled server-side
-  // with no model call (see handle_daily_summary). "Brief me" is the only
-  // part of this card that ever costs a completion, and only fires when
-  // clicked.
-  function dailySummaryCard(summary) {
-    const isEmpty = summary.empty;
-    const c = card('Daily summary', isEmpty ? null : 'Brief me', null);
+  // Header: date/time, greeting, and the on-demand LLM paragraph (see
+  // handle_daily_brief) behind a button rather than run automatically -
+  // the Today view has to stay a free, instant page load.
+  function briefHeader() {
+    const now = new Date();
+    const header = document.createElement('div');
+    header.className = 'brief-header';
 
-    if (isEmpty) {
+    const meta = document.createElement('div');
+    meta.className = 'brief-header-meta';
+    const dateEl = document.createElement('span');
+    dateEl.textContent = now.toLocaleDateString(undefined,
+      {weekday: 'long', month: 'short', day: 'numeric'});
+    const timeEl = document.createElement('span');
+    timeEl.textContent = now.toLocaleTimeString(undefined,
+      {hour: 'numeric', minute: '2-digit'});
+    meta.appendChild(dateEl);
+    meta.appendChild(timeEl);
+    header.appendChild(meta);
+
+    const greet = document.createElement('div');
+    greet.className = 'brief-greeting';
+    greet.textContent = greetingWord();
+    header.appendChild(greet);
+
+    const briefRow = document.createElement('div');
+    briefRow.className = 'brief-text';
+    const btn = document.createElement('button');
+    btn.className = 'brief-text-btn';
+    btn.textContent = 'Write my brief →';
+    briefRow.appendChild(btn);
+    header.appendChild(briefRow);
+
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = 'Thinking…';
+      try {
+        const res = await jsonSend('/api/daily-summary/brief', {});
+        briefRow.innerHTML = '';
+        briefRow.className = 'brief-text' + (res.error ? ' muted' : '');
+        briefRow.textContent = res.error
+          ? 'Could not generate a brief: ' + res.error
+          : res.text;
+      } catch (err) {
+        briefRow.innerHTML = '';
+        briefRow.className = 'brief-text muted';
+        briefRow.textContent = 'Could not generate a brief: request failed';
+      }
+    };
+
+    return header;
+  }
+
+  // "Push your work forward": the single most urgent item (handle_daily_
+  // summary's top_priority), pulled out of the to-do list into its own
+  // lead card so there's always one obvious next action, not a list to
+  // triage first. Null when there's nothing due or unblocked.
+  function pushForwardCard(item) {
+    if (!item) return null;
+    const c = document.createElement('div');
+    c.className = 'card brief-hero';
+    const label = document.createElement('div');
+    label.className = 'brief-section-label';
+    label.textContent = 'Push your work forward';
+    c.appendChild(label);
+
+    const title = document.createElement('div');
+    title.className = 'brief-hero-title';
+    title.textContent = item.title;
+    c.appendChild(title);
+
+    const sub = document.createElement('div');
+    sub.className = 'brief-hero-sub';
+    sub.textContent = item.project_name +
+      (item.due_date ? ' · due ' + item.due_date : '');
+    c.appendChild(sub);
+
+    const btn = document.createElement('button');
+    btn.className = 'brief-hero-btn';
+    btn.textContent = 'Let’s do it →';
+    btn.onclick = () => openRoadmapView(item.project_id, item.project_name);
+    c.appendChild(btn);
+
+    return c;
+  }
+
+  // Checklist merging due/overdue, newly unblocked, and recurring steps
+  // coming due - the three sections the old daily-summary card kept
+  // separate, folded into one list the way the to-do section in the
+  // reference brief reads.
+  function topTodosCard(summary) {
+    const items = [
+      ...(summary.due || []).map(n =>
+        ({...n, tag: n.bucket === 'overdue' ? 'Overdue' : 'Due today'})),
+      ...(summary.unblocked || []).map(n => ({...n, tag: 'Unblocked'})),
+      ...(summary.recurring || []).map(n => ({...n, tag: 'Coming up ' + n.due_date})),
+    ];
+    const c = card('Top to-dos', null, null);
+    if (!items.length) {
       const p = document.createElement('div');
       p.className = 'muted';
       p.textContent = 'Nothing due, overdue, or newly unblocked today.';
       c.appendChild(p);
-    } else {
-      (summary.due || []).forEach(n => {
-        const item = dashItem(n.title, n.project_name,
-                               () => openRoadmapView(n.project_id, n.project_name));
-        const due = document.createElement('div');
-        due.className = 'node-due' + (n.bucket === 'overdue' ? ' overdue' : '');
-        due.textContent = (n.bucket === 'overdue' ? '⚠ Overdue: ' : '⏱ Due today: ')
-          + n.due_date + (n.is_recurring ? ' · recurring' : '');
-        item.insertBefore(due, item.firstChild);
-        c.appendChild(item);
-      });
-
-      (summary.unblocked || []).forEach(n => {
-        const sub = n.project_name + (n.due_date ? ' · due ' + n.due_date : '')
-          + ' · unblocked';
-        c.appendChild(dashItem(n.title, sub,
-                                () => openRoadmapView(n.project_id, n.project_name)));
-      });
-
-      (summary.recurring || []).forEach(n => {
-        const item = dashItem(n.title, n.project_name,
-                               () => openRoadmapView(n.project_id, n.project_name));
-        const due = document.createElement('div');
-        due.className = 'node-due';
-        due.textContent = '🔁 Coming up ' + n.due_date;
-        item.insertBefore(due, item.firstChild);
-        c.appendChild(item);
-      });
+      return c;
     }
+    items.forEach(n => {
+      const row = document.createElement('div');
+      row.className = 'brief-todo' + (n.tag === 'Overdue' ? ' overdue' : '');
+      const dot = document.createElement('div');
+      dot.className = 'brief-todo-dot';
+      row.appendChild(dot);
+      const body = document.createElement('div');
+      const title = document.createElement('div');
+      title.className = 'brief-todo-title';
+      title.textContent = n.title;
+      const sub = document.createElement('div');
+      sub.className = 'brief-todo-sub';
+      sub.textContent = n.project_name + ' · ' + n.tag;
+      body.appendChild(title);
+      body.appendChild(sub);
+      row.appendChild(body);
+      makeClickable(row, () => openRoadmapView(n.project_id, n.project_name));
+      c.appendChild(row);
+    });
+    return c;
+  }
 
-    renderCalendarSection(c, summary.calendar);
-
-    if (summary.new_since_yesterday) {
-      const meta = document.createElement('div');
-      meta.className = 'dash-summary-meta';
-      meta.textContent = summary.new_since_yesterday + ' new since yesterday';
-      c.appendChild(meta);
+  // "New updates": cached project highlights, numbered like a feed -
+  // the only cross-project "what changed" signal mindtrail has without
+  // a model call (see handle_dashboard).
+  function newUpdatesCard(highlights) {
+    const c = card('New updates', null, null);
+    if (!highlights.length) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'Nothing yet — project highlights show up here.';
+      c.appendChild(p);
+      return c;
     }
+    highlights.forEach((h, i) => {
+      const row = document.createElement('div');
+      row.className = 'brief-update';
+      const num = document.createElement('div');
+      num.className = 'brief-update-num';
+      num.textContent = String(i + 1).padStart(2, '0');
+      row.appendChild(num);
+      const body = document.createElement('div');
+      const title = document.createElement('div');
+      title.className = 'brief-update-title';
+      title.textContent = h.headline;
+      const sub = document.createElement('div');
+      sub.className = 'brief-update-sub';
+      sub.textContent = h.project_name;
+      body.appendChild(title);
+      body.appendChild(sub);
+      row.appendChild(body);
+      makeClickable(row, () => openProject(h.project_id));
+      c.appendChild(row);
+    });
+    return c;
+  }
 
-    if (!isEmpty) {
-      const brief = document.createElement('div');
-      brief.className = 'dash-summary-brief';
-      brief.style.display = 'none';
-      c.appendChild(brief);
-
-      const btn = c.querySelector('.card-btn');
-      btn.onclick = async () => {
-        btn.disabled = true;
-        btn.textContent = 'Thinking…';
-        brief.style.display = '';
-        brief.classList.remove('muted');
-        brief.textContent = '';
-        try {
-          const res = await jsonSend('/api/daily-summary/brief', {});
-          if (res.error) {
-            brief.classList.add('muted');
-            brief.textContent = 'Could not generate a brief: ' + res.error;
-          } else {
-            brief.textContent = res.text;
-          }
-        } catch (err) {
-          brief.classList.add('muted');
-          brief.textContent = 'Could not generate a brief: request failed';
-        } finally {
-          btn.disabled = false;
-          btn.textContent = 'Brief me';
-        }
-      };
+  // "Your day": today's calendar timeline. Every branch here reads
+  // calendar.connected/stale/error/needs_reconnect, which is exactly what
+  // handle_daily_summary's _calendar_block guarantees regardless of what
+  // went wrong (or never happened) on the Google side.
+  function yourDayCard(calendar) {
+    const cal = calendar || {connected: false};
+    const c = card('Your day', null, null);
+    if (!cal.connected) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = cal.needs_reconnect
+        ? 'Google Calendar needs reconnecting — run: mindtrail calendar connect'
+        : 'Connect Google Calendar — run: mindtrail calendar connect';
+      c.appendChild(p);
+      return c;
     }
-
+    if (cal.stale || cal.error || cal.needs_reconnect) {
+      const notice = document.createElement('div');
+      notice.className = 'dash-summary-meta';
+      notice.textContent = cal.needs_reconnect
+        ? 'Needs reconnecting — showing cached events from ' + (cal.as_of || 'earlier')
+        : 'Showing cached events from ' + (cal.as_of || 'earlier');
+      c.appendChild(notice);
+    }
+    const events = cal.events || [];
+    if (!events.length) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'Nothing on your calendar today.';
+      c.appendChild(p);
+      return c;
+    }
+    // "Happening now" is a loose +/-30min window around the event's start,
+    // not a real duration match - events here carry no end time, so this
+    // is a light cue rather than a precise "in progress" indicator.
+    const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+    events.forEach(e => {
+      let current = false;
+      if (!e.all_day && e.start) {
+        const [h, m] = e.start.split(':').map(Number);
+        current = Math.abs(h * 60 + m - nowMinutes) < 30;
+      }
+      const row = document.createElement('div');
+      row.className = 'brief-day-row' + (current ? ' current' : '');
+      const time = document.createElement('div');
+      time.className = 'brief-day-time';
+      time.textContent = e.all_day ? 'All day' : e.start;
+      const title = document.createElement('div');
+      title.className = 'brief-day-title';
+      title.textContent = e.title;
+      row.appendChild(time);
+      row.appendChild(title);
+      c.appendChild(row);
+    });
     return c;
   }
 
@@ -3215,69 +3315,38 @@
     ]);
     view.innerHTML = '';
 
-    const title = document.createElement('div');
-    title.className = 'proj-title';
-    title.textContent = 'Today';
-    view.appendChild(title);
+    const wrap = document.createElement('div');
+    wrap.className = 'brief-wrap';
+    wrap.appendChild(briefHeader());
 
-    view.appendChild(dailySummaryCard(summary));
+    const hero = pushForwardCard(summary.top_priority);
+    if (hero) wrap.appendChild(hero);
 
+    wrap.appendChild(topTodosCard(summary));
+    wrap.appendChild(newUpdatesCard(data.highlights));
+    wrap.appendChild(yourDayCard(summary.calendar));
+    view.appendChild(wrap);
+
+    // Secondary grid: agenda items further out than today (today/overdue
+    // already lead in Top to-dos above) and recent activity - detail that
+    // doesn't fit the brief's lead sections but shouldn't disappear.
     const grid = document.createElement('div');
-    grid.className = 'dash-grid';
+    grid.className = 'dash-grid dash-grid-2';
 
-    // Next up leads - accepted roadmap steps are the most actionable
-    // thing on this screen, so they get first position, not third.
-    const nextCard = card('Next up', null, null);
-    if (!data.next_up.length) {
-      const p = document.createElement('div');
-      p.className = 'muted';
-      p.textContent = 'No accepted roadmap steps waiting yet.';
-      nextCard.appendChild(p);
-    }
-    data.next_up.forEach(n => {
-      let sub = n.project_name + (n.due_date ? ' \u00b7 due ' + n.due_date : '') +
-                (n.note ? ' \u2014 ' + n.note : '');
-      if (!n.unblocked) sub += ' \u00b7 waiting on a dependency';
-      const item = dashItem(n.title, sub, () => openRoadmapView(n.project_id, n.project_name));
-      if (!n.unblocked) item.style.opacity = '0.7';
-      nextCard.appendChild(item);
-    });
-    grid.appendChild(nextCard);
-
-    const hlCard = card('Across your projects', null, null);
-    if (!data.highlights.length) {
-      const p = document.createElement('div');
-      p.className = 'muted';
-      p.textContent = 'Nothing yet \u2014 project highlights show up here.';
-      hlCard.appendChild(p);
-    }
-    data.highlights.forEach(h => {
-      hlCard.appendChild(dashItem(h.headline, h.project_name,
-                                  () => openProject(h.project_id)));
-    });
-    grid.appendChild(hlCard);
-
-    // Due this week - across every project, not just the one open right
-    // now. Bucketing (overdue/today/this_week/later) and the "today"
-    // boundary itself are computed server-side in handle_dashboard; see
-    // the comment there for why local time, not UTC, is what decides
-    // the boundary.
-    const agendaCard = card('Due this week', null, null);
-    const AGENDA_BUCKETS = [
-      {key: 'overdue', label: 'Overdue'},
-      {key: 'today', label: 'Today'},
+    const agendaCard = card('Later this week', null, null);
+    const LATER_BUCKETS = [
       {key: 'this_week', label: 'This week'},
       {key: 'later', label: 'Later'},
     ];
     const agenda = data.agenda || {};
-    const agendaIsEmpty = AGENDA_BUCKETS.every(b => !(agenda[b.key] || []).length);
+    const agendaIsEmpty = LATER_BUCKETS.every(b => !(agenda[b.key] || []).length);
     if (agendaIsEmpty) {
       const p = document.createElement('div');
       p.className = 'muted';
       p.textContent = 'Nothing due.';
       agendaCard.appendChild(p);
     } else {
-      AGENDA_BUCKETS.forEach(b => {
+      LATER_BUCKETS.forEach(b => {
         const items = agenda[b.key] || [];
         if (!items.length) return;
         const heading = document.createElement('div');
@@ -3288,8 +3357,8 @@
           const item = dashItem(n.title, n.project_name,
                                  () => openRoadmapView(n.project_id, n.project_name));
           const due = document.createElement('div');
-          due.className = 'node-due' + (b.key === 'overdue' ? ' overdue' : '');
-          due.textContent = (b.key === 'overdue' ? '⚠ Overdue: ' : '⏱ Due ') + n.due_date;
+          due.className = 'node-due';
+          due.textContent = '⏱ Due ' + n.due_date;
           item.insertBefore(due, item.firstChild);
           agendaCard.appendChild(item);
         });
@@ -3301,11 +3370,11 @@
     if (!data.recent.length) {
       const p = document.createElement('div');
       p.className = 'muted';
-      p.textContent = 'Nothing yet \u2014 start a chat to see it here.';
+      p.textContent = 'Nothing yet — start a chat to see it here.';
       recentCard.appendChild(p);
     }
     data.recent.forEach(c => {
-      const sub = (c.project_name ? c.project_name + ' \u00b7 ' : '') + relTime(c.updated_at);
+      const sub = (c.project_name ? c.project_name + ' · ' : '') + relTime(c.updated_at);
       recentCard.appendChild(dashItem(c.title, sub,
                                       () => { showChatView(); openConversation(c.id); }));
     });
