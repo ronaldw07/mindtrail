@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
-from mindtrail.web import jobs_api, life_api
+from mindtrail.web import jobs_api, life_api, review
 
 ROUTES: list[tuple[str, re.Pattern, object]] = []
 
@@ -168,6 +168,24 @@ def _log_focus(deps, args, body, query):
 @route("GET", "/api/focus/week")
 def _focus_week(deps, args, body, query):
     return life_api.handle_focus_week(deps.focus)
+
+
+# --- weekly review ------------------------------------------------------------
+
+
+@route("GET", "/api/week")
+def _week(deps, args, body, query):
+    return review.handle_week(deps, query)
+
+
+@route("POST", "/api/week/priorities")
+def _week_priorities(deps, args, body, query):
+    return review.handle_save_priorities(deps.state, body)
+
+
+@route("POST", "/api/week/summary")
+def _week_summary(deps, args, body, query):
+    return review.handle_week_summary(deps, body)
 
 
 # --- artwork ----------------------------------------------------------------

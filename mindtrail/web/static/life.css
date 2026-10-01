@@ -416,3 +416,24 @@
     .t-bar { fill: #3987e5; }
     .t-axis { fill: var(--text-muted); font-size: 10px; text-anchor: middle; }
     .t-axis.today { fill: var(--text-bright); font-weight: 600; }
+
+    /* --- weekly review --- */
+    #week-view { flex: 1; overflow-y: auto; display: none; padding: 1.75rem 2rem; }
+    #week-view.open { display: block; }
+    .week-head { display: flex; align-items: center; justify-content: center; gap: 1.5rem;
+                 margin: 1rem 0 0.5rem; }
+    .week-title { margin: 0; text-align: center; font-family: var(--font-serif); font-weight: 500;
+                  color: var(--brief-yellow); line-height: 1; }
+    .week-title .t-title-the { font-size: 1.8rem; }
+    .week-range { display: block; font-size: clamp(2.4rem, 5vw, 4rem); }
+    .week-rate { font-size: var(--fs-md); font-weight: 600; color: var(--text); margin-bottom: 0.5rem; }
+    .week-bar-row { display: grid; grid-template-columns: minmax(90px, 160px) 1fr auto; gap: 0.75rem;
+                    align-items: center; padding: 0.3rem 0; }
+    .week-bar-label { font-size: var(--fs-base); color: var(--text-2); overflow: hidden;
+                      text-overflow: ellipsis; white-space: nowrap; }
+    .week-bar-track { height: 10px; background: var(--surface-hover); border-radius: 4px; overflow: hidden; }
+    .week-bar-fill { height: 100%; border-radius: 4px; }
+    .week-bar-value { font-size: var(--fs-sm); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .week-priorities { display: flex; flex-direction: column; align-items: stretch; gap: 0.45rem; max-width: 520px;
+                       margin: 0; background: none; border: none; padding: 0; border-radius: 0; }
+    .week-priorities .btn-primary { align-self: flex-start; }

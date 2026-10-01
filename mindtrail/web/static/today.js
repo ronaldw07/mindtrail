@@ -663,6 +663,12 @@
     page.appendChild(section('Your day', dayTimeline(summary.calendar)));
     page.appendChild(section('New updates', updatesList(data.highlights || [])));
     if (!isEvening()) page.appendChild(section('Journal', journalPrompt(summary.journal)));
+    // Sunday is review day.
+    if (new Date().getDay() === 0) {
+      const go = tEl('button', 't-link', 'Look back on this week and set next week’s top three →');
+      go.onclick = () => openWeekView();
+      page.appendChild(section('Weekly review', go));
+    }
     const later = laterList(data);
     if (later) page.appendChild(section('Later & recent', later));
     page.appendChild(footer(summary));

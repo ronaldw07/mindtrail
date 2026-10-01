@@ -59,6 +59,7 @@ STATIC_FILES = {
     "/static/life.js": ("life.js", "application/javascript; charset=utf-8"),
     "/static/today.js": ("today.js", "application/javascript; charset=utf-8"),
     "/static/focus.js": ("focus.js", "application/javascript; charset=utf-8"),
+    "/static/review.js": ("review.js", "application/javascript; charset=utf-8"),
 }
 
 
