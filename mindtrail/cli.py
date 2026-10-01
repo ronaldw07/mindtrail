@@ -14,7 +14,16 @@ from mindtrail.ingest.fetch import FetchError, extract_title, fetch_html, html_t
 from mindtrail.ingest.researcher import Researcher
 from mindtrail.ingest.search import SearchError, default_search
 from mindtrail.ingest.topic import TopicExtractor
-from mindtrail.integrations.google_auth import default_token_path, run_oauth_flow, save_credentials
+from mindtrail.integrations.google_auth import (
+    CALENDAR_SCOPE,
+    GMAIL_SCOPE,
+    SHEETS_SCOPE,
+    default_token_path,
+    has_scope,
+    load_credentials,
+    run_oauth_flow,
+    save_credentials,
+)
 from mindtrail.integrations.google_calendar import GoogleCalendarClient
 from mindtrail.llm import LLMClient, LLMError
 from mindtrail.memory.store import MemoryStore
@@ -291,6 +300,17 @@ def cmd_calendar_connect(args) -> int:
     return 0
 
 
+def cmd_google_status(args) -> int:
+    creds = load_credentials(default_token_path())
+    if creds is None:
+        print("not connected - run: mindtrail google connect")
+        return 0
+    for label, scope in (("Calendar", CALENDAR_SCOPE), ("Gmail", GMAIL_SCOPE),
+                         ("Sheets", SHEETS_SCOPE)):
+        print(f"  {label:<9}{'allowed' if has_scope(creds, scope) else 'not allowed - reconnect'}")
+    return 0
+
+
 def cmd_calendar_today(args) -> int:
     snapshot = GoogleCalendarClient().snapshot()
     if not snapshot.get("connected"):
@@ -385,6 +405,15 @@ def build_parser() -> argparse.ArgumentParser:
         "today", help="show today's events from the primary calendar"
     )
     today_cmd.set_defaults(func=cmd_calendar_today)
+
+    google = sub.add_parser("google", help="Google connection (Calendar, Gmail, Sheets; read-only)")
+    google_sub = google.add_subparsers(dest="google_command", required=True)
+    google_connect = google_sub.add_parser(
+        "connect", help="sign in to Google and store a refresh token"
+    )
+    google_connect.set_defaults(func=cmd_calendar_connect)
+    google_status = google_sub.add_parser("status", help="show what Google access is granted")
+    google_status.set_defaults(func=cmd_google_status)
 
     jobs_cli.register(sub)
 

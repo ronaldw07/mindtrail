@@ -8,8 +8,14 @@ google_calendar.py is a plain urllib request instead of pulling in the
 full google-api-python-client, which would be a large, mostly-unused
 dependency for one read-only endpoint.
 
-Scope is calendar.readonly, always - this feature only ever reads a
-calendar, and a broader scope would be a standing risk for no benefit.
+Every scope is read-only: calendar events, Gmail messages (for the job
+scan), and spreadsheets (for importing a job tracker sheet). Nothing here
+can send mail, edit a calendar, or change a sheet.
+
+A token only ever carries the scopes it was granted. One connected
+before Gmail existed - or where the Gmail box was unticked on Google's
+consent screen - keeps working for Calendar, and has_scope() lets each
+feature ask for a reconnect instead of failing at refresh time.
 """
 
 from __future__ import annotations
@@ -24,7 +30,10 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 from mindtrail import config
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
+SCOPES = [CALENDAR_SCOPE, GMAIL_SCOPE, SHEETS_SCOPE]
 
 # google-auth-oauthlib's InstalledAppFlow.run_local_server implements the
 # RFC 8252 "loopback interface redirect" for installed apps: it starts a
@@ -68,10 +77,27 @@ def run_oauth_flow(client_id: str, client_secret: str) -> Credentials:
             "redirect_uris": ["http://localhost"],
         }
     }
+    # Google's consent screen lets a user untick individual scopes, and
+    # oauthlib raises on a token whose scopes differ from the request
+    # unless this is set. A partial grant is fine - see has_scope.
+    os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
     flow = InstalledAppFlow.from_client_config(
         client_config, scopes=SCOPES, autogenerate_code_verifier=True
     )
     return flow.run_local_server(port=0)
+
+
+def _granted(creds) -> list[str]:
+    """What Google actually granted, falling back to what was requested.
+    oauthlib reports it as a space-separated string or a list."""
+    granted = getattr(creds, "granted_scopes", None)
+    if isinstance(granted, str):
+        granted = granted.split()
+    return list(granted or getattr(creds, "scopes", None) or [])
+
+
+def has_scope(creds, scope: str) -> bool:
+    return scope in _granted(creds)
 
 
 def save_credentials(creds: Credentials, path: str) -> None:
@@ -81,7 +107,13 @@ def save_credentials(creds: Credentials, path: str) -> None:
     world-readable.
     """
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    payload = creds.to_json()
+    data = json.loads(creds.to_json())
+    # to_json records the *requested* scopes; store the granted ones so a
+    # later load (and refresh) never claims a scope the user declined.
+    granted = _granted(creds)
+    if granted:
+        data["scopes"] = granted
+    payload = json.dumps(data)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(payload)
@@ -96,8 +128,10 @@ def load_credentials(path: str) -> Credentials | None:
             data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return None
+    # The token's own recorded scopes, never SCOPES: refreshing with a
+    # scope the token was never granted fails with invalid_scope.
     try:
-        return Credentials.from_authorized_user_info(data, SCOPES)
+        return Credentials.from_authorized_user_info(data)
     except ValueError:
         return None
 
