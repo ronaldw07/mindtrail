@@ -23,6 +23,8 @@ LIFE_TABLES = (
     "tasks",
     "gmail_seen",
     "app_state",
+    "habits",
+    "habit_logs",
 )
 
 

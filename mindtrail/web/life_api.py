@@ -7,8 +7,17 @@ stores, returning dicts, with bad input as {"error": ...}.
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import date, timedelta
 
 from mindtrail.organize.areas import AreaStore
+from mindtrail.organize.habits import (
+    DAILY,
+    Habit,
+    HabitStore,
+    streak,
+    this_week_count,
+    week_start,
+)
 
 
 def handle_list_areas(areas: AreaStore) -> dict:
@@ -48,3 +57,71 @@ def handle_set_project_area(areas: AreaStore, project_id: str, body: dict) -> di
     except ValueError as exc:
         return {"error": str(exc)}
     return {"ok": True}
+
+
+# --- habits -----------------------------------------------------------------
+
+HEATMAP_WEEKS = 52
+# Long enough that a long streak is counted in full, not cut at the heatmap.
+STREAK_LOOKBACK_DAYS = 730
+
+
+def habit_json(h: Habit, done: set[date], today: date) -> dict:
+    heat_from = week_start(today) - timedelta(weeks=HEATMAP_WEEKS - 1)
+    return {
+        **asdict(h),
+        "streak": streak(done, h.target_per_week, today),
+        "unit": "day" if h.target_per_week >= DAILY else "week",
+        "this_week": this_week_count(done, today),
+        "done_today": today in done,
+        "logs": sorted(d.isoformat() for d in done if d >= heat_from),
+    }
+
+
+def handle_list_habits(habits: HabitStore, include_archived: bool = False,
+                       today: date | None = None) -> dict:
+    today = today or date.today()
+    logs = habits.logs_since(today - timedelta(days=STREAK_LOOKBACK_DAYS))
+    return {
+        "today": today.isoformat(),
+        "heatmap_weeks": HEATMAP_WEEKS,
+        "habits": [habit_json(h, logs.get(h.id, set()), today)
+                   for h in habits.all(include_archived)],
+    }
+
+
+def handle_create_habit(habits: HabitStore, body: dict) -> dict:
+    try:
+        habit = habits.create(str(body.get("name", "")),
+                              int(body.get("target_per_week", DAILY) or DAILY),
+                              str(body.get("area_id", "") or ""))
+    except (ValueError, TypeError) as exc:
+        return {"error": str(exc)}
+    return {"habit": asdict(habit)}
+
+
+def handle_update_habit(habits: HabitStore, habit_id: str, body: dict) -> dict:
+    try:
+        habit = habits.update(habit_id, body)
+    except (ValueError, TypeError) as exc:
+        return {"error": str(exc)}
+    return {"habit": asdict(habit)}
+
+
+def handle_delete_habit(habits: HabitStore, habit_id: str) -> dict:
+    try:
+        habits.delete(habit_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"ok": True}
+
+
+def handle_toggle_habit(habits: HabitStore, habit_id: str, body: dict,
+                        today: date | None = None) -> dict:
+    today = today or date.today()
+    try:
+        day = date.fromisoformat(str(body.get("date") or today.isoformat()))
+        logged = habits.toggle(habit_id, day, today)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"logged": logged, "date": day.isoformat()}

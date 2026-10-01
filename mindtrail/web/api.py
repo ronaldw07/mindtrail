@@ -332,6 +332,7 @@ def handle_daily_summary(
     calendar=None,
     tasks=None,
     jobs=None,
+    habits=None,
 ) -> dict:
     """Everything the Today view needs to answer "what should I do today",
     assembled entirely from already-stored data - no LLM call. The
@@ -426,6 +427,9 @@ def handle_daily_summary(
         "recurring": recurring[:DAILY_SUMMARY_RECURRING_LIMIT],
         "tasks": task_items,
         "deadlines": deadlines,
+        # Not part of "empty" or the brief's input: a habit list is always
+        # there, and checking one off shouldn't trigger a brief rewrite.
+        "habits": today_view.habits_today(habits, today) if habits is not None else [],
         "new_since_yesterday": new_since_yesterday,
         "calendar": calendar_block,
         "empty": not (due or unblocked or recurring or calendar_events

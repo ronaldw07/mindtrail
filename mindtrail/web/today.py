@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+from mindtrail.organize.habits import DAILY, HabitStore, streak, this_week_count
 from mindtrail.organize.jobs import JobStore
 from mindtrail.organize.tasks import TaskStore
 
@@ -72,6 +73,22 @@ def upcoming_deadlines(jobs: JobStore, today: date) -> list[dict]:
             "bucket": _bucket(due, today),
         })
     items.sort(key=lambda i: i["due_date"])
+    return items
+
+
+def habits_today(habits: HabitStore, today: date) -> list[dict]:
+    """Each active habit with whether it's done today and its streak."""
+    logs = habits.logs_since(today - timedelta(days=730))
+    items = []
+    for h in habits.all():
+        done = logs.get(h.id, set())
+        items.append({
+            "id": h.id, "name": h.name, "area_id": h.area_id,
+            "target_per_week": h.target_per_week, "done_today": today in done,
+            "streak": streak(done, h.target_per_week, today),
+            "unit": "day" if h.target_per_week >= DAILY else "week",
+            "this_week": this_week_count(done, today),
+        })
     return items
 
 

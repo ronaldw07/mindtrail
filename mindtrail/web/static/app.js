@@ -1162,7 +1162,7 @@
     return c;
   }
 
-  const VIEW_NAMES = ['project', 'roadmap', 'profile', 'dashboard', 'jobs', 'tasks'];
+  const VIEW_NAMES = ['project', 'roadmap', 'profile', 'dashboard', 'jobs', 'tasks', 'habits'];
 
   function setActiveView(name) {
     VIEW_NAMES.forEach(v => $(v + '-view').classList.toggle('open', name === v));
@@ -2874,6 +2874,7 @@
   $('open-profile').onclick = () => openProfileView();
   $('open-jobs').onclick = () => openJobsView();
   $('open-tasks').onclick = () => openTasksView();
+  $('open-habits').onclick = () => openHabitsView();
 
   // Notes were CLI-only until now, and the CLI version stores them with
   // no conversation attached - unreachable from the browser even after
@@ -3388,6 +3389,7 @@
     if (hero) wrap.appendChild(hero);
 
     wrap.appendChild(topTodosCard(summary));
+    wrap.appendChild(habitsTodayCard(summary.habits || []));
     wrap.appendChild(newUpdatesCard(data.highlights));
     wrap.appendChild(yourDayCard(summary.calendar));
     view.appendChild(wrap);
@@ -3653,6 +3655,7 @@
       {label: 'Go to Today', run: () => { closePalette(); openDashboardView(); }},
       {label: 'Go to Jobs', run: () => { closePalette(); openJobsView(); }},
       {label: 'Go to To-dos', run: () => { closePalette(); openTasksView(); }},
+      {label: 'Go to Habits', run: () => { closePalette(); openHabitsView(); }},
       {label: 'Go to Profile', run: () => { closePalette(); openProfileView(); }},
       {label: 'Add a to-do', run: () => { closePalette(); quickAddTask(); }},
       {label: 'Add a job application', run: async () => {
@@ -3963,6 +3966,7 @@
     if (last.type === 'profile') { await openProfileView(); return; }
     if (last.type === 'jobs') { await openJobsView(); return; }
     if (last.type === 'tasks') { await openTasksView(); return; }
+    if (last.type === 'habits') { await openHabitsView(); return; }
     openDashboardView();
   }
 

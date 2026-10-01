@@ -28,6 +28,7 @@ from mindtrail.organize.app_state import AppState
 from mindtrail.organize.areas import AreaStore
 from mindtrail.organize.conversations import ConversationStore
 from mindtrail.organize.email_log import EmailLog
+from mindtrail.organize.habits import HabitStore
 from mindtrail.organize.jobs import JobStore
 from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.tasks import TaskStore
@@ -99,6 +100,7 @@ class Deps:
         self.state = AppState(db_path)
         self.areas = AreaStore(db_path)
         self.areas.ensure_seeded()
+        self.habits = HabitStore(db_path)
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)
         self.job_emails = self.email_log.for_application
@@ -260,7 +262,7 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                 self._json(
                     api.handle_daily_summary(
                         deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes,
-                        deps.calendar, deps.tasks, deps.jobs,
+                        deps.calendar, deps.tasks, deps.jobs, deps.habits,
                     )
                 )
             elif path == "/api/search":

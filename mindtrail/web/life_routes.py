@@ -105,6 +105,34 @@ def _set_project_area(deps, args, body, query):
     return life_api.handle_set_project_area(deps.areas, args[0], body)
 
 
+# --- habits -----------------------------------------------------------------
+
+
+@route("GET", "/api/habits")
+def _list_habits(deps, args, body, query):
+    return life_api.handle_list_habits(deps.habits, query.get("archived", [""])[0] == "1")
+
+
+@route("POST", "/api/habits")
+def _create_habit(deps, args, body, query):
+    return life_api.handle_create_habit(deps.habits, body)
+
+
+@route("PATCH", f"/api/habits/{_ID}")
+def _update_habit(deps, args, body, query):
+    return life_api.handle_update_habit(deps.habits, args[0], body)
+
+
+@route("DELETE", f"/api/habits/{_ID}")
+def _delete_habit(deps, args, body, query):
+    return life_api.handle_delete_habit(deps.habits, args[0])
+
+
+@route("POST", f"/api/habits/{_ID}/toggle")
+def _toggle_habit(deps, args, body, query):
+    return life_api.handle_toggle_habit(deps.habits, args[0], body)
+
+
 # --- tasks ------------------------------------------------------------------
 
 

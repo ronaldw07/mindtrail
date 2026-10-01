@@ -228,3 +228,247 @@
       }},
     ]);
   }
+
+  // ---------- habits view ----------
+
+  const HABIT_TARGETS = [7, 6, 5, 4, 3, 2, 1];
+  const targetLabel = n => n >= 7 ? 'Every day' : n + '× a week';
+  // Same first slot as the area palette (see organize/areas.py).
+  const HABIT_DEFAULT_COLOR = '#3987e5';
+  const habitColor = h => (areaById(h.area_id) || {}).color || HABIT_DEFAULT_COLOR;
+
+  function habitMeta(h) {
+    const unit = h.unit === 'day' ? 'day' : 'week';
+    const s = h.streak ? h.streak + '-' + unit + ' streak' : 'No streak yet';
+    return h.unit === 'day' ? s : s + ' · ' + h.this_week + ' of ' + h.target_per_week + ' this week';
+  }
+
+  async function toggleHabit(h, day) {
+    const res = await jsonSend('/api/habits/' + h.id + '/toggle', day ? {date: day} : {});
+    if (res.error) toast(res.error, {error: true});
+    return res;
+  }
+
+  async function openHabitsView() {
+    currentProject = null;
+    current = null;
+    setActiveView('habits');
+    prefs.set('lastView', {type: 'habits'});
+    $('breadcrumb').textContent = 'Habits';
+    await renderHabitsView();
+  }
+
+  async function renderHabitsView() {
+    const showArchived = prefs.get('habitsShowArchived', false);
+    const data = await api('/api/habits' + (showArchived ? '?archived=1' : ''));
+    const view = $('habits-view');
+    view.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'brief-wrap habits-wrap';
+    const title = document.createElement('div');
+    title.className = 'proj-title';
+    title.textContent = 'Habits';
+    wrap.appendChild(title);
+    wrap.appendChild(habitAddForm());
+
+    data.habits.forEach(h => wrap.appendChild(habitCard(h, data)));
+    if (!data.habits.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'No habits yet. Add one above — “Read 20 min”, “ARC 3× a week”.';
+      wrap.appendChild(empty);
+    }
+    const toggle = document.createElement('button');
+    toggle.className = 'btn-ghost jobs-closed-toggle';
+    toggle.textContent = showArchived ? 'Hide archived' : 'Show archived';
+    toggle.onclick = () => { prefs.set('habitsShowArchived', !showArchived); renderHabitsView(); };
+    wrap.appendChild(toggle);
+    view.appendChild(wrap);
+  }
+
+  function habitAddForm() {
+    const form = document.createElement('form');
+    form.className = 'task-add task-add-wide habit-add';
+    const name = document.createElement('input');
+    name.className = 'jobs-link-input';
+    name.placeholder = 'New habit';
+    name.setAttribute('aria-label', 'Habit name');
+    const target = document.createElement('select');
+    target.className = 'job-field-input habit-select';
+    target.setAttribute('aria-label', 'How often');
+    HABIT_TARGETS.forEach(n => {
+      const o = document.createElement('option');
+      o.value = String(n);
+      o.textContent = targetLabel(n);
+      target.appendChild(o);
+    });
+    const area = document.createElement('select');
+    area.className = 'job-field-input habit-select';
+    area.setAttribute('aria-label', 'Life area');
+    [{id: '', name: 'No area'}].concat(lifeAreas).forEach(a => {
+      const o = document.createElement('option');
+      o.value = a.id;
+      o.textContent = a.name;
+      area.appendChild(o);
+    });
+    const add = document.createElement('button');
+    add.className = 'btn-primary jobs-btn';
+    add.type = 'submit';
+    add.textContent = 'Add';
+    [name, target, area, add].forEach(el => form.appendChild(el));
+    form.onsubmit = async e => {
+      e.preventDefault();
+      if (!name.value.trim()) return;
+      const res = await jsonSend('/api/habits', {
+        name: name.value, target_per_week: Number(target.value), area_id: area.value});
+      if (res.error) { toast(res.error, {error: true}); return; }
+      await renderHabitsView();
+    };
+    return form;
+  }
+
+  function habitCard(h, data) {
+    const c = document.createElement('div');
+    c.className = 'card habit-card' + (h.archived ? ' archived' : '');
+    const head = document.createElement('div');
+    head.className = 'habit-head';
+    const check = document.createElement('button');
+    check.className = 'task-check habit-check';
+    check.setAttribute('aria-pressed', h.done_today ? 'true' : 'false');
+    check.setAttribute('aria-label', (h.done_today ? 'Undo today: ' : 'Done today: ') + h.name);
+    check.onclick = async () => { await toggleHabit(h); renderHabitsView(); };
+    head.appendChild(check);
+    const body = document.createElement('div');
+    body.className = 'habit-body';
+    const name = document.createElement('div');
+    name.className = 'habit-name';
+    const dot = areaDot(h.area_id);
+    if (dot) name.appendChild(dot);
+    name.appendChild(document.createTextNode(h.name));
+    body.appendChild(name);
+    const meta = document.createElement('div');
+    meta.className = 'habit-meta';
+    meta.textContent = targetLabel(h.target_per_week) + ' · ' + habitMeta(h);
+    body.appendChild(meta);
+    head.appendChild(body);
+    const more = document.createElement('button');
+    more.className = 'menu-btn task-more';
+    more.textContent = '⋯';
+    more.setAttribute('aria-label', 'Habit options');
+    more.onclick = e => openHabitMenu(e, h);
+    head.appendChild(more);
+    c.appendChild(head);
+    c.appendChild(habitHeatmap(h, data));
+    return c;
+  }
+
+  // 52 weeks × 7 days, Monday on top, one column per week - the GitHub
+  // contribution layout. One hue per habit (its area's), so it's a single
+  // series: no legend, the card title names it. Cells in the last week
+  // are clickable to backfill a missed check-in; the server enforces the
+  // same window.
+  function habitHeatmap(h, data) {
+    const done = new Set(h.logs);
+    const today = data.today;
+    const first = addDays(today, -((new Date(today + 'T12:00:00').getDay() + 6) % 7)
+                                 - 7 * (data.heatmap_weeks - 1));
+    const grid = document.createElement('div');
+    grid.className = 'heatmap';
+    grid.style.setProperty('--habit-color', habitColor(h));
+    grid.setAttribute('role', 'img');
+    grid.setAttribute('aria-label', h.name + ': done ' + h.logs.length + ' times in the last '
+      + data.heatmap_weeks + ' weeks');
+    const editableFrom = addDays(today, -7);
+    for (let w = 0; w < data.heatmap_weeks; w++) {
+      for (let d = 0; d < 7; d++) {
+        const day = addDays(first, w * 7 + d);
+        const cell = document.createElement('div');
+        cell.className = 'heat-cell';
+        cell.style.gridColumn = String(w + 1);
+        cell.style.gridRow = String(d + 1);
+        if (day > today) { cell.classList.add('future'); grid.appendChild(cell); continue; }
+        const isDone = done.has(day);
+        if (isDone) cell.classList.add('on');
+        if (day === today) cell.classList.add('today');
+        cell.title = fmtShortDate(day) + (isDone ? ' — done' : '');
+        if (day >= editableFrom) {
+          cell.classList.add('editable');
+          cell.onclick = async () => { await toggleHabit(h, day); renderHabitsView(); };
+        }
+        grid.appendChild(cell);
+      }
+    }
+    return grid;
+  }
+
+  function openHabitMenu(e, h) {
+    const update = async fields => {
+      const res = await jsonSend('/api/habits/' + h.id, fields, 'PATCH');
+      if (res.error) toast(res.error, {error: true});
+      await renderHabitsView();
+    };
+    showMenu(e, [
+      {label: 'Rename', run: async () => {
+        const name = await askText('Rename habit', h.name);
+        if (name) await update({name});
+      }},
+      {label: 'How often…', run: async () => {
+        const n = await modal({title: 'How often', confirmLabel: 'Save', value: h.target_per_week,
+          select: HABIT_TARGETS.map(t => ({value: t, label: targetLabel(t)}))});
+        if (n !== null) await update({target_per_week: Number(n)});
+      }},
+      {label: 'Set life area…', run: async () => {
+        const areaId = await pickArea('Life area', h.area_id);
+        if (areaId !== null) await update({area_id: areaId});
+      }},
+      {label: h.archived ? 'Unarchive' : 'Archive', run: () => update({archived: !h.archived})},
+      {divider: true},
+      {label: 'Delete', danger: true, run: async () => {
+        if (!await askConfirm('Delete habit', 'Delete "' + h.name
+            + '" and its whole history? Archive keeps the history.', 'Delete')) return;
+        await api('/api/habits/' + h.id, {method: 'DELETE'});
+        await renderHabitsView();
+      }},
+    ]);
+  }
+
+  // Today's compact version: one tap per habit, streak alongside.
+  function habitsTodayCard(habits) {
+    const c = card('Habits', 'All habits', () => openHabitsView());
+    if (!habits.length) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'No habits yet — add one from the Habits page.';
+      c.appendChild(p);
+      return c;
+    }
+    const list = document.createElement('div');
+    list.className = 'habit-today-list';
+    habits.forEach(h => {
+      const row = document.createElement('div');
+      row.className = 'habit-today' + (h.done_today ? ' done' : '');
+      const check = document.createElement('button');
+      check.className = 'task-check';
+      check.setAttribute('aria-pressed', h.done_today ? 'true' : 'false');
+      check.setAttribute('aria-label', (h.done_today ? 'Undo today: ' : 'Done today: ') + h.name);
+      check.onclick = async () => {
+        const res = await toggleHabit(h);
+        if (res.error) return;
+        h.done_today = res.logged;
+        check.setAttribute('aria-pressed', res.logged ? 'true' : 'false');
+        row.classList.toggle('done', res.logged);
+      };
+      row.appendChild(check);
+      const name = document.createElement('div');
+      name.className = 'habit-today-name';
+      name.textContent = h.name;
+      row.appendChild(name);
+      const meta = document.createElement('div');
+      meta.className = 'habit-today-meta';
+      meta.textContent = h.streak ? h.streak + (h.unit === 'day' ? 'd' : 'w') : '';
+      row.appendChild(meta);
+      list.appendChild(row);
+    });
+    c.appendChild(list);
+    return c;
+  }

@@ -156,3 +156,41 @@
     .task-job-chip { cursor: pointer; }
     .task-more { opacity: 0; }
     .task-row:hover .task-more, .task-more:focus-visible { opacity: 1; }
+
+    /* --- habits --- */
+    .habit-add { display: flex; gap: 0.4rem; }
+    .habit-add .jobs-link-input { flex: 1; }
+    .habit-select { width: auto; }
+    .habit-card { padding: 0.9rem 1rem; }
+    .habit-card.archived { opacity: 0.6; }
+    .habit-head { display: flex; gap: 0.7rem; align-items: center; margin-bottom: 0.75rem; }
+    .habit-head .task-check { margin-top: 0; }
+    .habit-check { width: 22px; height: 22px; }
+    .habit-check[aria-pressed="true"]::after { left: 6px; top: 2px; width: 5px; height: 11px; }
+    .habit-body { flex: 1; min-width: 0; }
+    .habit-name { display: flex; align-items: center; font-size: var(--fs-lg); font-weight: 600;
+                  color: var(--text); }
+    .habit-meta { font-size: var(--fs-sm); color: var(--text-muted); margin-top: 0.1rem; }
+    .habit-card:hover .task-more { opacity: 1; }
+
+    /* 2px surface gaps between fills, per the dataviz mark spec. */
+    .heatmap { display: grid; grid-template-rows: repeat(7, 10px);
+               grid-auto-columns: 10px; grid-auto-flow: column; gap: 2px;
+               overflow-x: auto; }
+    .heat-cell { border-radius: 2px; background: var(--surface-hover); }
+    .heat-cell.on { background: var(--habit-color); }
+    .heat-cell.future { background: transparent; }
+    .heat-cell.today { box-shadow: 0 0 0 1px var(--text-muted); }
+    .heat-cell.editable { cursor: pointer; }
+    @media (hover: hover) and (pointer: fine) {
+      .heat-cell.editable:hover { box-shadow: 0 0 0 1px var(--text); }
+    }
+
+    .habit-today-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                        gap: 0.35rem 1rem; }
+    .habit-today { display: flex; align-items: center; gap: 0.55rem; padding: 0.3rem 0; }
+    .habit-today .task-check { margin-top: 0; }
+    .habit-today-name { flex: 1; font-size: var(--fs-base); color: var(--text); }
+    .habit-today.done .habit-today-name { color: var(--text-muted); }
+    .habit-today-meta { font-size: var(--fs-xs); color: var(--text-muted);
+                        font-variant-numeric: tabular-nums; }

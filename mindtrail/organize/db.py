@@ -153,6 +153,24 @@ CREATE TABLE IF NOT EXISTS areas (
     sort  INTEGER NOT NULL DEFAULT 0
 );
 
+-- target_per_week 7 means daily; 1-6 means "N times a week" (gym 3x),
+-- where the streak counts weeks that hit the target instead of days.
+CREATE TABLE IF NOT EXISTS habits (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    area_id         TEXT NOT NULL DEFAULT '',
+    target_per_week INTEGER NOT NULL DEFAULT 7,
+    archived        INTEGER NOT NULL DEFAULT 0,
+    sort            INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS habit_logs (
+    habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+    date     TEXT NOT NULL,
+    PRIMARY KEY (habit_id, date)
+);
+
 -- Small named values that don't deserve a table each: last scan time,
 -- the linked sheet, the cached brief. Values are JSON text.
 CREATE TABLE IF NOT EXISTS app_state (
