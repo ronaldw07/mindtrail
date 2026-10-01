@@ -194,3 +194,39 @@
     .habit-today.done .habit-today-name { color: var(--text-muted); }
     .habit-today-meta { font-size: var(--fs-xs); color: var(--text-muted);
                         font-variant-numeric: tabular-nums; }
+
+    /* --- journal --- */
+    .journal-nav { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+    .journal-date { margin: 0; flex: 1; }
+    .rating-row { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;
+                  margin-bottom: 0.55rem; }
+    .rating-label { width: 4.5rem; font-size: var(--fs-sm); color: var(--text-muted); }
+    .rating-btn { border: 1px solid var(--border); background: transparent; color: var(--text-2);
+                  border-radius: 999px; padding: 0.25rem 0.75rem; font-size: var(--fs-sm);
+                  cursor: pointer;
+                  transition: background-color 0.12s ease, color 0.12s ease,
+                              border-color 0.12s ease, transform 160ms var(--ease-out); }
+    .rating-btn:hover { border-color: var(--border-strong); color: var(--text); }
+    .rating-btn:active { transform: scale(0.97); }
+    .rating-btn[aria-checked="true"] { background: var(--accent); border-color: var(--accent);
+                                       color: var(--text-bright); }
+    .journal-prompts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.9rem 0 0.6rem; }
+    .journal-prompt { border: none; background: var(--surface-chip); color: var(--text-3);
+                      border-radius: var(--r); padding: 0.35rem 0.65rem; font-size: var(--fs-sm);
+                      cursor: pointer; transition: background-color 0.12s ease, color 0.12s ease; }
+    .journal-prompt:hover { background: var(--surface-hover); color: var(--text-bright); }
+    .journal-box { width: 100%; min-height: 46vh; resize: vertical; background: var(--surface-sunken);
+                   color: var(--text); border: 1px solid var(--border); border-radius: var(--r-lg);
+                   padding: 1rem 1.1rem; font: inherit; font-size: var(--fs-lg);
+                   line-height: var(--lh-relaxed); outline: none;
+                   transition: border-color 0.14s ease; }
+    .journal-box:focus { border-color: var(--accent); }
+    .journal-status { font-size: var(--fs-xs); color: var(--text-faint); margin-top: 0.4rem;
+                      min-height: 1em; }
+    .journal-past { padding: 0.5rem 0; border-bottom: 1px solid var(--border-subtle); cursor: pointer; }
+    .journal-past:last-child { border-bottom: none; }
+    .journal-past.current .journal-past-date { color: var(--text-bright); }
+    .journal-past-date { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
+    .journal-past-preview { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 0.15rem;
+                            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    @media (prefers-reduced-motion: reduce) { .rating-btn:active { transform: none; } }

@@ -92,6 +92,22 @@ def habits_today(habits: HabitStore, today: date) -> list[dict]:
     return items
 
 
+MOOD_DAYS = 14
+
+
+def journal_today(journal, today: date) -> dict:
+    """Whether today's entry exists, plus the last two weeks of ratings
+    for the mood/energy trend."""
+    start = (today - timedelta(days=MOOD_DAYS - 1)).isoformat()
+    entries = journal.between(start, today.isoformat())
+    by_day = {e.date: e for e in entries}
+    return {
+        "written_today": bool(by_day.get(today.isoformat()) and by_day[today.isoformat()].body.strip()),
+        "trend": [{"date": e.date, "mood": e.mood, "energy": e.energy}
+                  for e in entries if e.mood or e.energy],
+    }
+
+
 def pick_top_priority(summary: dict, today: date) -> dict | None:
     """Overdue first, then due today, then a deadline within three days,
     then the next unblocked roadmap step, then anything else this week.

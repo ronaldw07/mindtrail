@@ -472,3 +472,193 @@
     c.appendChild(list);
     return c;
   }
+
+  // ---------- journal view ----------
+
+  const MOOD_LABELS = ['Rough', 'Low', 'Okay', 'Good', 'Great'];
+  const ENERGY_LABELS = ['Drained', 'Low', 'Steady', 'Good', 'Charged'];
+  const JOURNAL_SAVE_DELAY_MS = 900;
+  let journalDay = null;
+  let journalPending = null;  // {timer, flush} for the unsaved edit, if any
+
+  async function openJournalView(day) {
+    currentProject = null;
+    current = null;
+    setActiveView('journal');
+    prefs.set('lastView', {type: 'journal'});
+    $('breadcrumb').textContent = 'Journal';
+    if (journalPending) await journalPending.flush();
+    journalDay = day || null;
+    await renderJournalView();
+  }
+
+  async function renderJournalView() {
+    const data = await api('/api/journal' + (journalDay ? '?date=' + journalDay : ''));
+    if (data.error) { toast(data.error, {error: true}); journalDay = null; return renderJournalView(); }
+    const entry = data.entry;
+    journalDay = entry.date;
+    const view = $('journal-view');
+    view.innerHTML = '';
+    const layout = document.createElement('div');
+    layout.className = 'proj-layout';
+    const main = document.createElement('div');
+    main.className = 'proj-main journal-main';
+
+    const nav = document.createElement('div');
+    nav.className = 'journal-nav';
+    const prev = document.createElement('button');
+    prev.className = 'nav-btn';
+    prev.textContent = '←';
+    prev.setAttribute('aria-label', 'Previous day');
+    prev.onclick = () => openJournalView(addDays(entry.date, -1));
+    const next = document.createElement('button');
+    next.className = 'nav-btn';
+    next.textContent = '→';
+    next.setAttribute('aria-label', 'Next day');
+    next.disabled = entry.date >= data.today;
+    next.onclick = () => openJournalView(addDays(entry.date, 1));
+    const heading = document.createElement('div');
+    heading.className = 'proj-title journal-date';
+    heading.textContent = entry.date === data.today ? 'Today'
+      : new Date(entry.date + 'T12:00:00').toLocaleDateString(undefined,
+          {weekday: 'long', month: 'long', day: 'numeric'});
+    nav.appendChild(prev);
+    nav.appendChild(heading);
+    nav.appendChild(next);
+    if (entry.date !== data.today) {
+      const back = document.createElement('button');
+      back.className = 'btn-ghost jobs-btn';
+      back.textContent = 'Today';
+      back.onclick = () => openJournalView(null);
+      nav.appendChild(back);
+    }
+    main.appendChild(nav);
+
+    const state = {body: entry.body, mood: entry.mood, energy: entry.energy};
+    const status = document.createElement('div');
+    status.className = 'journal-status';
+
+    const save = async () => {
+      journalPending = null;
+      status.textContent = 'Saving…';
+      const res = await jsonSend('/api/journal', {date: entry.date, ...state});
+      status.textContent = res.error ? 'Not saved: ' + res.error : 'Saved';
+    };
+    const schedule = () => {
+      status.textContent = 'Editing…';
+      if (journalPending) clearTimeout(journalPending.timer);
+      journalPending = {timer: setTimeout(save, JOURNAL_SAVE_DELAY_MS),
+                        flush: async () => { clearTimeout(journalPending.timer); await save(); }};
+    };
+
+    main.appendChild(ratingRow('Mood', MOOD_LABELS, state.mood, v => { state.mood = v; schedule(); }));
+    main.appendChild(ratingRow('Energy', ENERGY_LABELS, state.energy, v => { state.energy = v; schedule(); }));
+
+    const prompts = document.createElement('div');
+    prompts.className = 'journal-prompts';
+    data.prompts.forEach(p => {
+      const b = document.createElement('button');
+      b.className = 'journal-prompt';
+      b.textContent = p;
+      b.onclick = () => {
+        const sep = box.value && !box.value.endsWith('\n') ? '\n\n' : '';
+        box.value += sep + p + '\n';
+        box.focus();
+        box.setSelectionRange(box.value.length, box.value.length);
+        state.body = box.value;
+        schedule();
+      };
+      prompts.appendChild(b);
+    });
+    main.appendChild(prompts);
+
+    const box = document.createElement('textarea');
+    box.className = 'journal-box';
+    box.value = entry.body;
+    box.placeholder = 'Write anything. It saves as you type, and chat can find it later.';
+    box.setAttribute('aria-label', 'Journal entry');
+    box.addEventListener('input', () => { state.body = box.value; schedule(); });
+    box.addEventListener('blur', () => { if (journalPending) journalPending.flush(); });
+    main.appendChild(box);
+    main.appendChild(status);
+    layout.appendChild(main);
+
+    const rail = document.createElement('div');
+    rail.className = 'proj-rail';
+    const past = card('Past entries', null, null);
+    if (!data.recent.length) {
+      const p = document.createElement('div');
+      p.className = 'muted';
+      p.textContent = 'Nothing yet.';
+      past.appendChild(p);
+    }
+    data.recent.forEach(e => {
+      const row = document.createElement('div');
+      row.className = 'journal-past' + (e.date === entry.date ? ' current' : '');
+      const top = document.createElement('div');
+      top.className = 'journal-past-date';
+      top.textContent = fmtShortDate(e.date) + (e.mood ? ' · ' + MOOD_LABELS[e.mood - 1] : '');
+      row.appendChild(top);
+      if (e.preview) {
+        const prev = document.createElement('div');
+        prev.className = 'journal-past-preview';
+        prev.textContent = e.preview;
+        row.appendChild(prev);
+      }
+      makeClickable(row, () => openJournalView(e.date));
+      past.appendChild(row);
+    });
+    rail.appendChild(past);
+    layout.appendChild(rail);
+    view.appendChild(layout);
+    if (!entry.body) box.focus();
+  }
+
+  // A radiogroup of five buttons; clicking the selected one clears it.
+  function ratingRow(label, labels, value, onChange) {
+    const row = document.createElement('div');
+    row.className = 'rating-row';
+    row.setAttribute('role', 'radiogroup');
+    row.setAttribute('aria-label', label);
+    const name = document.createElement('span');
+    name.className = 'rating-label';
+    name.textContent = label;
+    row.appendChild(name);
+    let current = value;
+    const buttons = labels.map((text, i) => {
+      const b = document.createElement('button');
+      b.className = 'rating-btn';
+      b.textContent = text;
+      b.setAttribute('role', 'radio');
+      b.onclick = () => {
+        current = current === i + 1 ? 0 : i + 1;
+        paint();
+        onChange(current);
+      };
+      row.appendChild(b);
+      return b;
+    });
+    const paint = () => buttons.forEach((b, i) => {
+      b.setAttribute('aria-checked', current === i + 1 ? 'true' : 'false');
+    });
+    paint();
+    return row;
+  }
+
+  function journalTodayCard(journal) {
+    const c = card('Journal', journal && journal.written_today ? 'Open' : null,
+                   () => openJournalView(null));
+    const p = document.createElement('div');
+    if (journal && journal.written_today) {
+      p.className = 'muted';
+      p.textContent = 'Written today.';
+      c.appendChild(p);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'btn-primary jobs-btn';
+      btn.textContent = 'Write today’s entry';
+      btn.onclick = () => openJournalView(null);
+      c.appendChild(btn);
+    }
+    return c;
+  }

@@ -133,6 +133,19 @@ def _toggle_habit(deps, args, body, query):
     return life_api.handle_toggle_habit(deps.habits, args[0], body)
 
 
+# --- journal ----------------------------------------------------------------
+
+
+@route("GET", "/api/journal")
+def _get_journal(deps, args, body, query):
+    return life_api.handle_get_journal(deps.journal, query.get("date", [""])[0])
+
+
+@route("POST", "/api/journal")
+def _save_journal(deps, args, body, query):
+    return life_api.handle_save_journal(deps.journal, body)
+
+
 # --- tasks ------------------------------------------------------------------
 
 

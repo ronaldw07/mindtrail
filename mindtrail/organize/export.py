@@ -25,6 +25,7 @@ from mindtrail import config
 from mindtrail.advice.highlights import highlights_from_json
 from mindtrail.memory.store import Entry, MemoryStore
 from mindtrail.organize.conversations import Conversation, ConversationStore
+from mindtrail.organize.journal import JOURNAL_KIND
 from mindtrail.organize.life_data import LIFE_FILE, dump_tables
 from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import Project, ProjectStore
@@ -312,7 +313,10 @@ def collect_export_files(
 
     if project_id is None:
         files.append(build_profile_file(profile))
-        files.append(build_notes_file(by_conversation.get("", [])))
+        # Journal copies in memory are derived from life.json's journal
+        # rows - exporting them here too would restore every day twice.
+        files.append(build_notes_file(
+            [e for e in by_conversation.get("", []) if e.kind != JOURNAL_KIND]))
         files.append(build_life_file(projects.path))
         target_projects = projects.all()
         conversations = chats.all()

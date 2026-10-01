@@ -171,6 +171,18 @@ CREATE TABLE IF NOT EXISTS habit_logs (
     PRIMARY KEY (habit_id, date)
 );
 
+-- One entry per local day. mood/energy are 1-5, 0 for "not rated".
+-- entry_id points at this day's copy in memory (kind "journal") so chat
+-- can recall it; it's derived, rebuilt on import, never exported.
+CREATE TABLE IF NOT EXISTS journal (
+    date       TEXT PRIMARY KEY,
+    body       TEXT NOT NULL DEFAULT '',
+    mood       INTEGER NOT NULL DEFAULT 0,
+    energy     INTEGER NOT NULL DEFAULT 0,
+    entry_id   TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
+
 -- Small named values that don't deserve a table each: last scan time,
 -- the linked sheet, the cached brief. Values are JSON text.
 CREATE TABLE IF NOT EXISTS app_state (

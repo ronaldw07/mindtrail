@@ -48,6 +48,13 @@ CHAT_HTML = """<!doctype html>
           <rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/><path d="M8 14h2"/><path d="M14 14h2"/>
         </svg>Habits
       </button>
+      <button class="side-btn" id="open-journal">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             style="vertical-align:-2px;margin-right:0.4rem;">
+          <path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8"/><path d="M8 13h6"/>
+        </svg>Journal
+      </button>
       <button class="side-btn" id="open-jobs">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -99,6 +106,7 @@ CHAT_HTML = """<!doctype html>
       <div id="jobs-view"></div>
       <div id="tasks-view"></div>
       <div id="habits-view"></div>
+      <div id="journal-view"></div>
       <div id="composer">
         <form id="form">
           <button type="button" class="icon-btn" id="attach" title="Upload a PDF"

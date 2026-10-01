@@ -18,6 +18,7 @@ from mindtrail.organize.habits import (
     this_week_count,
     week_start,
 )
+from mindtrail.organize.journal import JournalEntry, JournalStore
 
 
 def handle_list_areas(areas: AreaStore) -> dict:
@@ -125,3 +126,66 @@ def handle_toggle_habit(habits: HabitStore, habit_id: str, body: dict,
     except ValueError as exc:
         return {"error": str(exc)}
     return {"logged": logged, "date": day.isoformat()}
+
+
+# --- journal ----------------------------------------------------------------
+
+JOURNAL_PROMPTS = (
+    "What went well today?",
+    "What's taking up space in your head?",
+    "What would make tomorrow better?",
+    "What drained you, and what gave you energy?",
+    "What are you glad you did?",
+    "What did you learn about yourself?",
+    "Who did you enjoy time with?",
+)
+PROMPTS_PER_DAY = 2
+JOURNAL_RECENT = 60
+PREVIEW_CHARS = 120
+
+
+def prompts_for(day: date) -> list[str]:
+    """Two prompts, rotating daily, so the page doesn't ask the same
+    thing every night."""
+    start = day.toordinal() % len(JOURNAL_PROMPTS)
+    return [JOURNAL_PROMPTS[(start + i) % len(JOURNAL_PROMPTS)] for i in range(PROMPTS_PER_DAY)]
+
+
+def _journal_json(entry: JournalEntry | None, day: str) -> dict:
+    if entry is None:
+        return {"date": day, "body": "", "mood": 0, "energy": 0, "updated_at": ""}
+    return {"date": entry.date, "body": entry.body, "mood": entry.mood,
+            "energy": entry.energy, "updated_at": entry.updated_at}
+
+
+def handle_get_journal(journal: JournalStore, day: str, today: date | None = None) -> dict:
+    today = today or date.today()
+    try:
+        when = date.fromisoformat(day) if day else today
+    except ValueError:
+        return {"error": "date must be YYYY-MM-DD"}
+    if when > today:
+        return {"error": "can't write in the future"}
+    return {
+        "entry": _journal_json(journal.get(when.isoformat()), when.isoformat()),
+        "today": today.isoformat(),
+        "prompts": prompts_for(when),
+        "recent": [
+            {"date": e.date, "mood": e.mood, "energy": e.energy,
+             "preview": " ".join(e.body.split())[:PREVIEW_CHARS]}
+            for e in journal.recent(JOURNAL_RECENT)
+        ],
+    }
+
+
+def handle_save_journal(journal: JournalStore, body: dict, today: date | None = None) -> dict:
+    today = today or date.today()
+    day = str(body.get("date") or today.isoformat())
+    try:
+        if date.fromisoformat(day) > today:
+            return {"error": "can't write in the future"}
+        entry = journal.save(day, str(body.get("body", "")),
+                             body.get("mood", 0), body.get("energy", 0))
+    except (ValueError, TypeError) as exc:
+        return {"error": str(exc)}
+    return {"entry": _journal_json(entry, day)}

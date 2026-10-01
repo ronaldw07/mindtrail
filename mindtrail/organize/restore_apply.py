@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mindtrail.advice.highlights import Highlight, highlights_to_json
+from mindtrail.organize.journal import JOURNAL_KIND, JournalStore
 from mindtrail.organize.life_data import LIFE_FILE, load_tables
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import Conversation, ConversationStore
@@ -269,7 +270,7 @@ def _import_notes(root: Path, store: MemoryStore, overwrite: bool) -> ImportSumm
     if not entries:
         return ImportSummary(skipped=1)
 
-    orphaned = [e for e in store.all() if not e.conversation_id]
+    orphaned = [e for e in store.all() if not e.conversation_id and e.kind != JOURNAL_KIND]
     if orphaned:
         if not overwrite:
             return ImportSummary(skipped=1)
@@ -319,4 +320,5 @@ def import_from_directory(
     total += _import_profile(root, profile, overwrite)
     total += _import_notes(root, store, overwrite)
     total += _import_life(root, projects.path, overwrite)
+    JournalStore(projects.path, store).reindex_all()
     return total

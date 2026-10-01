@@ -25,13 +25,22 @@ LIFE_TABLES = (
     "app_state",
     "habits",
     "habit_logs",
+    "journal",
 )
+
+# Derived columns rebuilt on import rather than carried over: a journal
+# row's entry_id points into this install's memory index, meaningless in
+# another one (see JournalStore.reindex_all).
+EXCLUDED_COLUMNS = {"journal": ("entry_id",)}
 
 
 def dump_tables(db_path: str | None) -> dict[str, list[dict]]:
     with connect(db_path) as conn:
         return {
-            table: [dict(r) for r in conn.execute(f"SELECT * FROM {table}")]
+            table: [
+                {k: v for k, v in dict(r).items() if k not in EXCLUDED_COLUMNS.get(table, ())}
+                for r in conn.execute(f"SELECT * FROM {table}")
+            ]
             for table in LIFE_TABLES
         }
 

@@ -1162,7 +1162,7 @@
     return c;
   }
 
-  const VIEW_NAMES = ['project', 'roadmap', 'profile', 'dashboard', 'jobs', 'tasks', 'habits'];
+  const VIEW_NAMES = ['project', 'roadmap', 'profile', 'dashboard', 'jobs', 'tasks', 'habits', 'journal'];
 
   function setActiveView(name) {
     VIEW_NAMES.forEach(v => $(v + '-view').classList.toggle('open', name === v));
@@ -2875,6 +2875,7 @@
   $('open-jobs').onclick = () => openJobsView();
   $('open-tasks').onclick = () => openTasksView();
   $('open-habits').onclick = () => openHabitsView();
+  $('open-journal').onclick = () => openJournalView();
 
   // Notes were CLI-only until now, and the CLI version stores them with
   // no conversation attached - unreachable from the browser even after
@@ -3003,6 +3004,7 @@
         item.appendChild(sub);
 
         const actions = document.createElement('div');
+        if (r.kind === 'journal') actions.style.display = 'none';
         const editBtn = document.createElement('button');
         editBtn.className = 'card-btn';
         editBtn.textContent = 'Edit';
@@ -3025,7 +3027,8 @@
         makeClickable(item, () => {
           closeResults();
           input.value = '';
-          if (r.conversation_id) {
+          if (r.kind === 'journal') openJournalView(r.topic);
+          else if (r.conversation_id) {
             showChatView();
             openConversation(r.conversation_id);
           }
@@ -3390,6 +3393,7 @@
 
     wrap.appendChild(topTodosCard(summary));
     wrap.appendChild(habitsTodayCard(summary.habits || []));
+    wrap.appendChild(journalTodayCard(summary.journal));
     wrap.appendChild(newUpdatesCard(data.highlights));
     wrap.appendChild(yourDayCard(summary.calendar));
     view.appendChild(wrap);
@@ -3656,6 +3660,7 @@
       {label: 'Go to Jobs', run: () => { closePalette(); openJobsView(); }},
       {label: 'Go to To-dos', run: () => { closePalette(); openTasksView(); }},
       {label: 'Go to Habits', run: () => { closePalette(); openHabitsView(); }},
+      {label: 'Write in journal', run: () => { closePalette(); openJournalView(); }},
       {label: 'Go to Profile', run: () => { closePalette(); openProfileView(); }},
       {label: 'Add a to-do', run: () => { closePalette(); quickAddTask(); }},
       {label: 'Add a job application', run: async () => {
@@ -3787,7 +3792,12 @@
       })));
       group('Memory entries', memoryResults.slice(0, PALETTE_MAX_PER_GROUP).map(r => ({
         label: r.query,
-        run: () => { closePalette(); showChatView(); openConversation(r.conversation_id); },
+        run: () => {
+          closePalette();
+          if (r.kind === 'journal') { openJournalView(r.topic); return; }
+          showChatView();
+          openConversation(r.conversation_id);
+        },
       })));
       group('Actions', actions);
 
@@ -3967,6 +3977,7 @@
     if (last.type === 'jobs') { await openJobsView(); return; }
     if (last.type === 'tasks') { await openTasksView(); return; }
     if (last.type === 'habits') { await openHabitsView(); return; }
+    if (last.type === 'journal') { await openJournalView(); return; }
     openDashboardView();
   }
 
