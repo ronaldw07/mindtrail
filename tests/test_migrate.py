@@ -78,3 +78,10 @@ def test_advice_entries_are_not_given_conversations(store, chats):
 
 def test_empty_store_is_a_no_op(store, chats):
     assert backfill_conversations(store, chats) == 0
+
+
+def test_journal_copies_are_never_turned_into_chats(store, chats):
+    store.add("Journal - Thursday, October 1, 2026", "tired", [], topic="2026-10-01",
+              kind="journal")
+    assert backfill_conversations(store, chats) == 0
+    assert chats.all() == []

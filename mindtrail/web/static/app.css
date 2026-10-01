@@ -68,6 +68,12 @@
       --r-lg: 10px;
       --r-xl: 12px;
 
+      /* editorial type and the brief's highlight - Today's masthead and
+         section labels. Charter/Iowan ship with macOS; ui-serif is New
+         York in Safari. Nothing to download. */
+      --font-serif: ui-serif, Charter, "Iowan Old Style", Georgia, serif;
+      --brief-yellow: #ffd21f;
+
       /* easing - custom curves only; the CSS built-ins (ease, ease-out)
          are too weak to read as deliberate on a 100-300ms UI transition */
       --ease-out: cubic-bezier(0.23, 1, 0.32, 1);

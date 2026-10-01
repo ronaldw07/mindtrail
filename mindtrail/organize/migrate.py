@@ -12,8 +12,11 @@ from __future__ import annotations
 
 from mindtrail.memory.store import UNCATEGORIZED, MemoryStore
 from mindtrail.organize.conversations import ConversationStore
+from mindtrail.organize.journal import JOURNAL_KIND
 
-SKIPPED_KINDS = frozenset({"advice"})
+# Journal copies belong to no chat on purpose (the journal table owns
+# them); filing them would turn every journaled day into a sidebar chat.
+SKIPPED_KINDS = frozenset({"advice", JOURNAL_KIND})
 
 
 def backfill_conversations(

@@ -432,47 +432,6 @@
     ]);
   }
 
-  // Today's compact version: one tap per habit, streak alongside.
-  function habitsTodayCard(habits) {
-    const c = card('Habits', 'All habits', () => openHabitsView());
-    if (!habits.length) {
-      const p = document.createElement('div');
-      p.className = 'muted';
-      p.textContent = 'No habits yet — add one from the Habits page.';
-      c.appendChild(p);
-      return c;
-    }
-    const list = document.createElement('div');
-    list.className = 'habit-today-list';
-    habits.forEach(h => {
-      const row = document.createElement('div');
-      row.className = 'habit-today' + (h.done_today ? ' done' : '');
-      const check = document.createElement('button');
-      check.className = 'task-check';
-      check.setAttribute('aria-pressed', h.done_today ? 'true' : 'false');
-      check.setAttribute('aria-label', (h.done_today ? 'Undo today: ' : 'Done today: ') + h.name);
-      check.onclick = async () => {
-        const res = await toggleHabit(h);
-        if (res.error) return;
-        h.done_today = res.logged;
-        check.setAttribute('aria-pressed', res.logged ? 'true' : 'false');
-        row.classList.toggle('done', res.logged);
-      };
-      row.appendChild(check);
-      const name = document.createElement('div');
-      name.className = 'habit-today-name';
-      name.textContent = h.name;
-      row.appendChild(name);
-      const meta = document.createElement('div');
-      meta.className = 'habit-today-meta';
-      meta.textContent = h.streak ? h.streak + (h.unit === 'day' ? 'd' : 'w') : '';
-      row.appendChild(meta);
-      list.appendChild(row);
-    });
-    c.appendChild(list);
-    return c;
-  }
-
   // ---------- journal view ----------
 
   const MOOD_LABELS = ['Rough', 'Low', 'Okay', 'Good', 'Great'];
@@ -643,22 +602,4 @@
     });
     paint();
     return row;
-  }
-
-  function journalTodayCard(journal) {
-    const c = card('Journal', journal && journal.written_today ? 'Open' : null,
-                   () => openJournalView(null));
-    const p = document.createElement('div');
-    if (journal && journal.written_today) {
-      p.className = 'muted';
-      p.textContent = 'Written today.';
-      c.appendChild(p);
-    } else {
-      const btn = document.createElement('button');
-      btn.className = 'btn-primary jobs-btn';
-      btn.textContent = 'Write today’s entry';
-      btn.onclick = () => openJournalView(null);
-      c.appendChild(btn);
-    }
-    return c;
   }

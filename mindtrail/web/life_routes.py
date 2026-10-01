@@ -12,10 +12,21 @@ Each handler takes (deps, path_args, body, query) and returns a dict.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
+from datetime import date
 
 from mindtrail.web import jobs_api, life_api
 
 ROUTES: list[tuple[str, re.Pattern, object]] = []
+
+
+@dataclass(frozen=True)
+class RawBody:
+    """A non-JSON response (the cached artwork image)."""
+
+    body: bytes
+    content_type: str
+    status: int = 200
 
 
 def route(method: str, pattern: str):
@@ -144,6 +155,28 @@ def _get_journal(deps, args, body, query):
 @route("POST", "/api/journal")
 def _save_journal(deps, args, body, query):
     return life_api.handle_save_journal(deps.journal, body)
+
+
+# --- artwork ----------------------------------------------------------------
+
+
+@route("GET", "/api/artwork")
+def _artwork(deps, args, body, query):
+    return deps.artwork.today()
+
+
+@route("GET", "/api/artwork/image")
+def _artwork_image(deps, args, body, query):
+    # Validated as a real date before it touches a path: the filename is
+    # built from it.
+    try:
+        day = date.fromisoformat(query.get("day", [""])[0]).isoformat()
+    except ValueError:
+        return RawBody(b"", "text/plain", 404)
+    path = deps.artwork.image_path(day)
+    if path is None:
+        return RawBody(b"", "text/plain", 404)
+    return RawBody(path.read_bytes(), "image/jpeg")
 
 
 # --- tasks ------------------------------------------------------------------

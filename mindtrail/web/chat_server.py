@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from mindtrail.advice.job_scan import JobScanner, ScanTimer
 from mindtrail.ingest.researcher import Researcher
+from mindtrail.integrations.artwork import ArtworkClient
 from mindtrail.integrations.gmail import GmailClient
 from mindtrail.integrations.google_calendar import GoogleCalendarClient
 from mindtrail.integrations.google_sheets import SheetsClient
@@ -55,6 +56,7 @@ STATIC_FILES = {
     "/static/life.css": ("life.css", "text/css; charset=utf-8"),
     "/static/jobs.js": ("jobs.js", "application/javascript; charset=utf-8"),
     "/static/life.js": ("life.js", "application/javascript; charset=utf-8"),
+    "/static/today.js": ("today.js", "application/javascript; charset=utf-8"),
 }
 
 
@@ -103,6 +105,7 @@ class Deps:
         self.areas.ensure_seeded()
         self.habits = HabitStore(db_path)
         self.journal = JournalStore(db_path, store)
+        self.artwork = ArtworkClient(self.state)
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)
         self.job_emails = self.email_log.for_application
@@ -210,7 +213,16 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                 if body is None:
                     self._json({"error": "malformed request body"}, 400)
                     return True
-            self._json(handler(deps, args, body, parse_qs(parsed.query)))
+            result = handler(deps, args, body, parse_qs(parsed.query))
+            if isinstance(result, life_routes.RawBody):
+                self.send_response(result.status)
+                self.send_header("Content-Type", result.content_type)
+                self.send_header("Content-Length", str(len(result.body)))
+                self.send_header("Cache-Control", "private, max-age=86400")
+                self.end_headers()
+                self.wfile.write(result.body)
+            else:
+                self._json(result)
             return True
 
         def _static(self, filename: str, content_type: str) -> None:

@@ -34,6 +34,7 @@ from mindtrail.organize.roadmap_templates import TEMPLATES, get_template
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.organize.trash import DeletedConversation, NodeTrash, Trash
 from mindtrail.web import today as today_view
+from mindtrail.web.jobs_api import pipeline_counts
 
 
 def _conversation_json(conversation) -> dict:
@@ -432,6 +433,7 @@ def handle_daily_summary(
         # there, and checking one off shouldn't trigger a brief rewrite.
         "habits": today_view.habits_today(habits, today) if habits is not None else [],
         "journal": today_view.journal_today(journal, today) if journal is not None else None,
+        "pipeline": pipeline_counts(jobs.all(), today) if jobs is not None else None,
         "new_since_yesterday": new_since_yesterday,
         "calendar": calendar_block,
         "empty": not (due or unblocked or recurring or calendar_events

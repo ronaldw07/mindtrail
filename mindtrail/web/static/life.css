@@ -230,3 +230,167 @@
     .journal-past-preview { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 0.15rem;
                             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     @media (prefers-reduced-motion: reduce) { .rating-btn:active { transform: none; } }
+
+    /* --- Today: the daily brief --- */
+    .t-page { max-width: 1120px; margin: 0 auto; padding-bottom: 1rem; }
+    .t-masthead { display: grid; grid-template-columns: 64px 1fr 64px; gap: 1.1rem;
+                  align-items: center; }
+    .t-side { writing-mode: vertical-rl; justify-self: center; font-family: var(--font-serif);
+              font-style: italic; font-size: 2.2rem; letter-spacing: 0.01em;
+              color: var(--text-heading); white-space: nowrap; }
+    .t-side-date { transform: rotate(180deg); }
+    .t-art { position: relative; height: min(52vh, 540px); min-height: 300px; overflow: hidden;
+             border-radius: 3px; display: grid; place-items: center;
+             background: radial-gradient(120% 90% at 30% 20%, #2c3a33 0%, #1d2421 55%, var(--bg) 100%); }
+    .t-art.plain { height: 240px; min-height: 0; }
+    .t-art-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+                 opacity: 0; transition: opacity 400ms var(--ease-out); }
+    .t-art-img.loaded { opacity: 1; }
+    /* A soft centre vignette keeps the title readable over any painting. */
+    .t-art::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+                    background: radial-gradient(60% 55% at 50% 50%, rgba(0,0,0,0.28), rgba(0,0,0,0) 75%); }
+    .t-title { position: relative; z-index: 1; margin: 0; text-align: center;
+               font-family: var(--font-serif); font-weight: 500; color: var(--brief-yellow);
+               line-height: 0.92; text-shadow: 0 2px 22px rgba(0,0,0,0.45); }
+    .t-title-the { display: block; font-style: italic; font-size: clamp(2.2rem, 4.6vw, 3.8rem); }
+    .t-title-main { display: block; font-size: clamp(3rem, 7.4vw, 6.6rem); letter-spacing: -0.01em; }
+
+    .t-under { display: grid; grid-template-columns: 1fr minmax(0, 300px); gap: 2rem;
+               margin: 0.7rem 82px 0; align-items: start; }
+    .t-brief { margin: 0; font-family: var(--font-serif); font-style: italic; font-size: 1.12rem;
+               line-height: var(--lh-body); color: var(--text-2); max-width: 64ch; }
+    .t-brief.pending { color: var(--text-faint); }
+    .t-credit { font-family: ui-monospace, monospace; font-size: 0.68rem; line-height: 1.5;
+                color: var(--text-faint); text-align: right; }
+    .t-link { border: none; background: none; padding: 0; color: var(--link); cursor: pointer;
+              font: inherit; font-style: normal; font-size: var(--fs-base); }
+    .t-link:hover { text-decoration: underline; }
+
+    /* --- at a glance --- */
+    .t-glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 0.9rem; margin: 1.8rem 82px 0.5rem; }
+    .t-customize { grid-column: 1 / -1; justify-self: end; font-size: var(--fs-sm);
+                   color: var(--text-muted); }
+    .t-tile { background: var(--surface-raised); border: 1px solid var(--border);
+              border-radius: var(--r-lg); padding: 0.85rem 0.95rem; min-width: 0; }
+    .t-tile-head { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em;
+                   color: var(--text-muted); margin-bottom: 0.65rem; cursor: pointer; }
+    .t-tile-head:hover { color: var(--text-bright); }
+    .t-empty { font-size: var(--fs-base); color: var(--text-muted); }
+    .t-note { font-size: var(--fs-xs); color: var(--text-faint); margin-bottom: 0.4rem; }
+
+    .t-rings { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+    .t-ring { width: 64px; text-align: center; }
+    .t-ring svg { display: block; margin: 0 auto 0.2rem; }
+    .t-ring-track { fill: none; stroke: var(--surface-hover); stroke-width: 4; }
+    .t-ring-arc { fill: none; stroke-width: 4; stroke-linecap: round; }
+    .t-ring-name { font-size: var(--fs-xs); color: var(--text-2); overflow: hidden;
+                   text-overflow: ellipsis; white-space: nowrap; }
+    .t-ring-count { font-size: var(--fs-xs); color: var(--text-muted);
+                    font-variant-numeric: tabular-nums; }
+
+    .t-spark { display: block; width: 100%; height: auto; overflow: visible; }
+    .t-grid { stroke: var(--border-subtle); stroke-width: 1; }
+    .t-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    /* 2px surface ring on each marker, per the dataviz mark spec. */
+    .t-dot { stroke: var(--surface-raised); stroke-width: 2; }
+    .t-direct { fill: var(--text-2); font-size: 11px; }
+    .t-legend { display: flex; gap: 0.9rem; margin-top: 0.35rem; font-size: var(--fs-xs);
+                color: var(--text-muted); }
+    .t-legend-item { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .t-swatch { width: 8px; height: 8px; border-radius: 2px; }
+
+    .t-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .t-week-day { text-align: center; padding: 0.45rem 0; border-radius: var(--r);
+                  background: var(--surface-sunken); border: 1px solid transparent; }
+    .t-week-day.today { border-color: var(--accent); }
+    .t-week-name { font-size: var(--fs-xs); color: var(--text-muted); }
+    .t-week-count { font-size: var(--fs-lg); font-weight: 600; color: var(--text);
+                    font-variant-numeric: tabular-nums; }
+
+    .t-stats { display: flex; gap: 1.3rem; }
+    .t-stat-num { font-size: var(--fs-xl); font-weight: 600; color: var(--text-heading);
+                  font-variant-numeric: tabular-nums; }
+    .t-stat-label { font-size: var(--fs-xs); color: var(--text-muted); }
+
+    /* --- labeled sections: label left, content right --- */
+    .t-section { display: grid; grid-template-columns: minmax(200px, 1fr) 2fr; gap: 2rem;
+                 padding: 1.7rem 82px 0.4rem; }
+    .t-label { margin: 0; font-family: var(--font-serif); font-style: italic; font-weight: 400;
+               font-size: 1.6rem; line-height: 1.2; color: var(--text-heading); }
+    .t-body { min-width: 0; }
+
+    .t-push { background: var(--surface-raised); border-radius: var(--r-xl);
+              margin: 1.6rem 60px 0.6rem; padding: 1.6rem 22px 1.7rem; align-items: center; }
+    .t-push .t-head { display: flex; flex-direction: column; gap: 1.2rem; align-items: flex-start; }
+    .t-push-title { font-size: var(--fs-xl); font-weight: 600; color: var(--text-heading); }
+    .t-push-sub { font-size: var(--fs-base); color: var(--text-2); margin-top: 0.3rem;
+                  line-height: var(--lh-body); }
+    .t-sticker { width: 116px; height: 116px; border: none; cursor: pointer; padding: 0 18px;
+                 background: var(--brief-yellow); color: #141414;
+                 font-family: var(--font-serif); font-style: italic; font-size: 1.15rem;
+                 line-height: 1.15;
+                 clip-path: polygon(50.0% 0.0%, 58.0% 9.8%, 69.1% 3.8%, 72.8% 15.9%, 85.4% 14.6%,
+                   84.1% 27.2%, 96.2% 30.9%, 90.2% 42.0%, 100.0% 50.0%, 90.2% 58.0%, 96.2% 69.1%,
+                   84.1% 72.8%, 85.4% 85.4%, 72.8% 84.1%, 69.1% 96.2%, 58.0% 90.2%, 50.0% 100.0%,
+                   42.0% 90.2%, 30.9% 96.2%, 27.2% 84.1%, 14.6% 85.4%, 15.9% 72.8%, 3.8% 69.1%,
+                   9.8% 58.0%, 0.0% 50.0%, 9.8% 42.0%, 3.8% 30.9%, 15.9% 27.2%, 14.6% 14.6%,
+                   27.2% 15.9%, 30.9% 3.8%, 42.0% 9.8%);
+                 transform: rotate(-8deg); transition: transform 160ms var(--ease-out); }
+    @media (hover: hover) and (pointer: fine) {
+      .t-sticker:hover { transform: rotate(-3deg) scale(1.03); }
+    }
+    .t-sticker:active { transform: rotate(-8deg) scale(0.97); }
+    /* clip-path cuts off the outline ring, so focus shows as a dark inner ring. */
+    .t-sticker:focus-visible { outline: none; box-shadow: inset 0 0 0 3px #141414; }
+
+    .t-list { display: flex; flex-direction: column; }
+    .t-item { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.55rem 0;
+              cursor: pointer; }
+    .t-item .task-check { margin-top: 0.2rem; }
+    .t-item-mark { width: 16px; flex-shrink: 0; height: 1.2rem; position: relative; }
+    .t-item-mark::after { content: ""; position: absolute; left: 5px; top: 0.45rem; width: 6px;
+                          height: 6px; border-radius: 50%; background: var(--text-muted); }
+    .t-item.overdue .t-item-mark::after { background: var(--danger); }
+    .t-item-title { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+    .t-item:hover .t-item-title { color: var(--text-bright); }
+    .t-item.done .t-item-title { color: var(--text-faint); text-decoration: line-through; }
+    .t-item-sub { font-size: var(--fs-sm); color: var(--text-muted); margin-top: 0.1rem;
+                  line-height: var(--lh-tight); }
+    .t-item.overdue .t-item-sub { color: var(--danger); }
+    .t-list > .t-link { align-self: flex-start; margin-top: 0.5rem; }
+
+    .t-habits { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+                gap: 0.2rem 1.2rem; }
+    .t-habit { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0; }
+    .t-habit .task-check { margin-top: 0; }
+    .t-habit-name { flex: 1; font-size: var(--fs-md); color: var(--text); }
+    .t-habit.done .t-habit-name { color: var(--text-muted); }
+    .t-habit-streak { font-size: var(--fs-xs); color: var(--text-muted); white-space: nowrap; }
+
+    .t-day-row { display: grid; grid-template-columns: 70px 1fr; gap: 0.7rem; align-items: baseline;
+                 padding: 0.55rem 0.6rem; margin: 0 -0.6rem; border-radius: var(--r); }
+    .t-day-row.current { background: var(--surface-hover); }
+    .t-day-time { font-family: ui-monospace, monospace; font-size: var(--fs-xs); color: var(--text-muted); }
+    .t-day-title { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+
+    .t-update { display: flex; gap: 1rem; padding: 0.55rem 0; cursor: pointer; }
+    .t-update-num { font-family: ui-monospace, monospace; font-size: var(--fs-xs);
+                    color: var(--text-faint); padding-top: 0.2rem; }
+    .t-update:hover .t-item-title { color: var(--text-bright); }
+
+    .t-footer { text-align: center; font-family: var(--font-serif); font-size: 1.15rem;
+                color: var(--text-muted); margin: 3rem 0 2.5rem; }
+
+    @media (max-width: 1000px) {
+      .t-masthead { grid-template-columns: 1fr; }
+      .t-side { display: none; }
+      .t-under, .t-glance, .t-section { margin-left: 0; margin-right: 0; }
+      .t-section { grid-template-columns: 1fr; gap: 0.7rem; padding-left: 0; padding-right: 0; }
+      .t-push { margin-left: 0; margin-right: 0; }
+      .t-under { grid-template-columns: 1fr; }
+      .t-credit { text-align: left; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .t-sticker, .t-sticker:hover, .t-sticker:active { transition: none; transform: rotate(-8deg); }
+    }

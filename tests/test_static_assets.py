@@ -61,3 +61,14 @@ def test_view_scripts_load_before_app_js():
     for name in JS_FILES:
         if name != "app.js":
             assert CHAT_HTML.index(f'"/static/{name}"') < app_at, name
+
+
+def test_no_top_level_name_is_declared_in_two_scripts():
+    """Every script shares one global scope. A const/let declared twice
+    across files throws at load and takes the whole app down with it."""
+    pattern = re.compile(r"^  (?:const|let|var|function|async function) ([A-Za-z_$][\w$]*)", re.M)
+    seen: dict[str, str] = {}
+    for name in JS_FILES:
+        for ident in pattern.findall((STATIC_DIR / name).read_text(encoding="utf-8")):
+            assert ident not in seen, f"{ident} declared in both {seen[ident]} and {name}"
+            seen[ident] = name

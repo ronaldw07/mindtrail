@@ -13,3 +13,4 @@ mindtrail.db
 graphify-out/
 google_token.json
 google_calendar_cache.json
+artwork_cache/
