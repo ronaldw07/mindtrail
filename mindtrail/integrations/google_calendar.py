@@ -74,10 +74,17 @@ def _event_to_dict(item: dict) -> dict:
     try:
         local = datetime.fromisoformat(raw).astimezone()
     except ValueError:
-        return {"title": title, "all_day": False, "date": "", "start": ""}
+        return {"title": title, "all_day": False, "date": "", "start": "", "end": ""}
+    # End time feeds the free-time finder. An end on a later day (an
+    # overnight event) is clipped to the end of the start day.
+    try:
+        local_end = datetime.fromisoformat(item.get("end", {}).get("dateTime", "")).astimezone()
+        end = local_end.strftime("%H:%M") if local_end.date() == local.date() else "23:59"
+    except ValueError:
+        end = ""
     return {
         "title": title, "all_day": False,
-        "date": local.date().isoformat(), "start": local.strftime("%H:%M"),
+        "date": local.date().isoformat(), "start": local.strftime("%H:%M"), "end": end,
     }
 
 

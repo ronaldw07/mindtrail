@@ -443,6 +443,13 @@ def handle_daily_summary(
     # The one item the "push your work forward" card leads with. None when
     # there's nothing to lead with - the client shows no hero card then.
     summary["top_priority"] = today_view.pick_top_priority(summary, today)
+    # Free time is only meaningful against a real calendar.
+    if calendar_block.get("connected"):
+        ideas = [i["title"] for i in task_items + deadlines + unblocked if i.get("title")]
+        summary["free_time"] = today_view.free_slots(
+            calendar_events, datetime.now().strftime("%H:%M"), ideas)
+    else:
+        summary["free_time"] = []
     return summary
 
 

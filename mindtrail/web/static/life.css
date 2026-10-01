@@ -437,3 +437,7 @@
     .week-priorities { display: flex; flex-direction: column; align-items: stretch; gap: 0.45rem; max-width: 520px;
                        margin: 0; background: none; border: none; padding: 0; border-radius: 0; }
     .week-priorities .btn-primary { align-self: flex-start; }
+
+    /* --- free time in Your day --- */
+    .t-day-row.free { border: 1px dashed var(--border-strong); margin: 0.3rem -0.6rem; }
+    .t-day-row.free .t-day-title { color: var(--text-2); font-weight: 500; }

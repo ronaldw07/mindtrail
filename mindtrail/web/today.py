@@ -105,6 +105,46 @@ def finished_today(tasks: TaskStore, jobs: JobStore, today: date) -> list[dict]:
             for t in tasks.done_since(local_day_start_utc(today))]
 
 
+FREE_MIN_MINUTES = 45
+DAY_START, DAY_END = "08:00", "22:00"
+DEFAULT_EVENT_MINUTES = 60  # cached events from before end times were stored
+
+
+def _minutes(hm: str) -> int:
+    h, m = hm.split(":")
+    return int(h) * 60 + int(m)
+
+
+def _hm(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def free_slots(events: list[dict], now_hm: str, suggestions: list[str]) -> list[dict]:
+    """Gaps of FREE_MIN_MINUTES or more between now and DAY_END, outside
+    today's timed events, each paired with the next suggested to-do."""
+    busy = []
+    for e in events:
+        if e.get("all_day") or not e.get("start"):
+            continue
+        start = _minutes(e["start"])
+        end = _minutes(e["end"]) if e.get("end") else start + DEFAULT_EVENT_MINUTES
+        busy.append((start, max(end, start)))
+    cursor = max(_minutes(now_hm), _minutes(DAY_START))
+    day_end = _minutes(DAY_END)
+    gaps = []
+    for start, end in sorted(busy):
+        if start - cursor >= FREE_MIN_MINUTES:
+            gaps.append((cursor, min(start, day_end)))
+        cursor = max(cursor, end)
+    if day_end - cursor >= FREE_MIN_MINUTES:
+        gaps.append((cursor, day_end))
+    slots = []
+    for i, (start, end) in enumerate(g for g in gaps if g[1] - g[0] >= FREE_MIN_MINUTES):
+        slots.append({"start": _hm(start), "end": _hm(end), "minutes": end - start,
+                      "suggestion": suggestions[i] if i < len(suggestions) else ""})
+    return slots
+
+
 MOOD_DAYS = 14
 
 

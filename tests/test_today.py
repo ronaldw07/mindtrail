@@ -200,3 +200,29 @@ def test_roll_over_moves_only_open_tasks_due_by_today(s):
     assert [s.tasks.get(t.id).due_date for t in (late, due, future, undated, finished)] == [
         iso(1), iso(1), iso(3), "", iso(0)]
     assert "error" in handle_roll_tasks(s.tasks, {"to": iso(0)}, TODAY)
+
+
+# --- free-time finder -------------------------------------------------------
+
+
+def test_free_slots_skip_short_gaps_and_pair_suggestions():
+    from mindtrail.web.today import free_slots
+    events = [
+        {"title": "Club fair", "all_day": False, "start": "10:00", "end": "12:30"},
+        {"title": "AIML", "all_day": False, "start": "13:00", "end": "14:15"},
+        {"title": "ARC", "all_day": False, "start": "18:00", "end": "23:59"},
+        {"title": "Holiday", "all_day": True, "start": "2026-10-01"},
+    ]
+    # 9:20-10:00 and 12:30-1:00 are under 45 minutes; the evening is booked.
+    slots = free_slots(events, "09:20", ["Apply to Google", "Prep IBM"])
+    assert [(s["start"], s["end"], s["suggestion"]) for s in slots] == [
+        ("14:15", "18:00", "Apply to Google")]
+
+
+def test_free_slots_before_the_day_starts_and_old_cache_without_ends():
+    from mindtrail.web.today import free_slots
+    # The day starts at 8:00, and an event with no end is assumed to take an hour.
+    slots = free_slots([{"title": "x", "all_day": False, "start": "09:00"}], "06:00", ["A", "B"])
+    assert [(s["start"], s["end"], s["suggestion"]) for s in slots] == [
+        ("08:00", "09:00", "A"), ("10:00", "22:00", "B")]
+    assert free_slots([], "21:30", ["A"]) == []

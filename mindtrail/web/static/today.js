@@ -499,7 +499,7 @@
   }
 
   // The day as a list of times, the current or next event highlighted.
-  function dayTimeline(calendar) {
+  function dayTimeline(calendar, freeTime) {
     const cal = calendar || {connected: false};
     const box = tEl('div', 't-day');
     if (!cal.connected) {
@@ -522,13 +522,33 @@
     const nextIdx = timed.findIndex(e => e.start >= nowHM);
     // The next event to start, or the last one once the day's are over.
     const highlight = nextIdx === -1 ? timed[timed.length - 1] : timed[nextIdx];
-    events.forEach(e => {
+    const rows = events.map(e => ({at: e.all_day ? '' : e.start, node: (() => {
       const row = tEl('div', 't-day-row' + (e === highlight ? ' current' : ''));
       row.appendChild(tEl('span', 't-day-time', e.all_day ? 'All day' : fmtClock(e.start)));
       row.appendChild(tEl('span', 't-day-title', e.title));
-      box.appendChild(row);
-    });
+      return row;
+    })()}));
+    (freeTime || []).forEach(f => rows.push({at: f.start, node: freeRow(f)}));
+    rows.sort((a, b) => a.at.localeCompare(b.at)).forEach(r => box.appendChild(r.node));
     return box;
+  }
+
+  function freeRow(f) {
+    const row = tEl('div', 't-day-row free');
+    row.appendChild(tEl('span', 't-day-time', fmtClock(f.start)));
+    const body = tEl('div', '');
+    body.appendChild(tEl('div', 't-day-title', 'Free until ' + fmtClock(f.end) + ' · '
+      + fmtMinutes(f.minutes)));
+    if (f.suggestion) {
+      const tip = tEl('div', 't-item-sub');
+      tip.appendChild(document.createTextNode('Good time for: ' + f.suggestion + ' '));
+      const go = tEl('button', 't-link', 'Focus on it');
+      go.onclick = () => startFocus({label: f.suggestion});
+      tip.appendChild(go);
+      body.appendChild(tip);
+    }
+    row.appendChild(body);
+    return row;
   }
 
   function fmtClock(hm) {
@@ -660,7 +680,7 @@
     }
     page.appendChild(section(isEvening() ? 'Coming up' : 'Top to-dos', todoList(summary)));
     page.appendChild(section('Habits', habitList(summary.habits || [])));
-    page.appendChild(section('Your day', dayTimeline(summary.calendar)));
+    page.appendChild(section('Your day', dayTimeline(summary.calendar, summary.free_time)));
     page.appendChild(section('New updates', updatesList(data.highlights || [])));
     if (!isEvening()) page.appendChild(section('Journal', journalPrompt(summary.journal)));
     // Sunday is review day.
