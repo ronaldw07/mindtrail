@@ -1,0 +1,131 @@
+
+    /* Life-dashboard views (jobs, tasks, ...). Same tokens as app.css's
+       :root - this file defines no tokens of its own. */
+
+    #jobs-view { flex: 1; overflow-y: auto; display: none; padding: 1.75rem 2rem; }
+    #jobs-view.open { display: block; }
+
+    /* --- shared form controls --- */
+    /* app.css styles bare `form` as the chat composer's pill; these
+       forms are plain rows. */
+    .jobs-link-form, .task-add { max-width: none; margin: 0; background: none; border: none;
+                                 border-radius: 0; padding: 0; }
+    .job-field-input { width: 100%; background: var(--surface-sunken); color: var(--text);
+                       border: 1px solid var(--border); border-radius: var(--r);
+                       padding: 0.4rem 0.55rem; font: inherit; font-size: var(--fs-base);
+                       outline: none; color-scheme: dark;
+                       transition: border-color 0.14s ease; }
+    .job-field-input:focus { border-color: var(--accent); }
+    textarea.job-field-input { min-height: 84px; resize: vertical; line-height: var(--lh-tight); }
+    .jobs-btn { padding: 0.45rem 0.85rem; border-radius: var(--r); border: none;
+                font-size: var(--fs-base); cursor: pointer; white-space: nowrap; }
+    .jobs-btn:disabled { opacity: 0.6; cursor: default; }
+
+    /* --- jobs: header and toolbar --- */
+    .jobs-layout { display: flex; gap: 1.25rem; align-items: flex-start;
+                   max-width: 1400px; margin: 0 auto; }
+    .jobs-main { flex: 1; min-width: 0; }
+    .jobs-head { display: flex; align-items: flex-end; justify-content: space-between;
+                 gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .jobs-head .proj-title { margin: 0; }
+    .jobs-stats { display: flex; gap: 1.5rem; }
+    .jobs-stat-num { font-size: var(--fs-xl); font-weight: 600; color: var(--text-heading);
+                     font-variant-numeric: tabular-nums; }
+    .jobs-stat-label { font-size: var(--fs-xs); color: var(--text-muted); }
+    .jobs-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+                    margin-bottom: 1.25rem; }
+    .jobs-link-form { display: flex; gap: 0.4rem; flex: 1; min-width: 280px; }
+    .jobs-link-input { flex: 1; background: var(--surface-sunken); color: var(--text);
+                       border: 1px solid var(--border); border-radius: var(--r);
+                       padding: 0.45rem 0.65rem; font: inherit; font-size: var(--fs-base);
+                       outline: none; transition: border-color 0.14s ease; }
+    .jobs-link-input:focus { border-color: var(--accent); }
+    .jobs-email-status { width: 100%; font-size: var(--fs-xs); color: var(--text-faint); }
+
+    /* --- jobs: board --- */
+    .jobs-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(170px, 1fr);
+                  gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem;
+                  scrollbar-color: var(--surface-active) transparent; }
+    .jobs-col { background: var(--surface-sunken); border: 1px solid var(--border-subtle);
+                border-radius: var(--r-lg); padding: 0.6rem; min-height: 220px;
+                transition: border-color 0.12s ease, background-color 0.12s ease; }
+    .jobs-col.drop { border-color: var(--accent);
+                     background: color-mix(in srgb, var(--accent) 8%, var(--surface-sunken)); }
+    .jobs-col-head { display: flex; justify-content: space-between; align-items: center;
+                     font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em;
+                     color: var(--text-muted); padding: 0.1rem 0.2rem 0.55rem; }
+    .jobs-col-count { font-variant-numeric: tabular-nums; }
+    .jobs-closed-toggle { margin-top: 0.5rem; font-size: var(--fs-sm); padding: 0.3rem 0.6rem;
+                          border-radius: var(--r); border: none; cursor: pointer; }
+
+    .job-card { background: var(--surface-raised); border: 1px solid var(--border);
+                border-radius: var(--r); padding: 0.55rem 0.65rem; margin-bottom: 0.45rem;
+                cursor: grab; transition: border-color 0.12s ease, transform 160ms var(--ease-out); }
+    .job-card:hover { border-color: var(--border-strong); }
+    .job-card:active { transform: scale(0.98); cursor: grabbing; }
+    .job-card.selected { border-color: var(--accent); }
+    .job-card-company { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+    .job-card-role { font-size: var(--fs-sm); color: var(--text-2); margin-top: 0.1rem; }
+    .job-card-meta { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
+    .job-chip { font-size: var(--fs-xs); color: var(--text-3); background: var(--surface-chip);
+                border-radius: var(--r-sm); padding: 0.05rem 0.4rem; }
+    .job-chip.review { color: var(--warn); }
+
+    /* --- jobs: detail panel --- */
+    .job-detail { width: 340px; flex-shrink: 0; position: sticky; top: 0;
+                  max-height: calc(100vh - 7rem); overflow-y: auto;
+                  background: var(--surface); border: 1px solid var(--border-strong);
+                  border-radius: var(--r-lg); padding: 1rem; }
+    .job-detail-top { display: flex; justify-content: space-between; align-items: center;
+                      margin-bottom: 0.75rem; }
+    .job-detail-title { font-size: var(--fs-xl); font-weight: 600; color: var(--text-heading); }
+    .job-review { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
+                  font-size: var(--fs-sm); color: var(--warn); margin-bottom: 0.85rem;
+                  padding: 0.6rem; border-radius: var(--r);
+                  background: color-mix(in srgb, var(--warn) 10%, transparent); }
+    .job-review > div { width: 100%; }
+    .job-field { display: block; margin-bottom: 0.6rem; }
+    .job-field-label { display: block; font-size: var(--fs-xs); color: var(--text-muted);
+                       margin-bottom: 0.2rem; }
+    .job-open-link { display: inline-block; font-size: var(--fs-sm); color: var(--link);
+                     margin: -0.2rem 0 0.6rem; text-decoration: none; }
+    .job-open-link:hover { text-decoration: underline; }
+    .job-detail .brief-section-label { margin: 1rem 0 0.4rem; }
+    .job-email { padding: 0.35rem 0; border-bottom: 1px solid var(--border-subtle); }
+    .job-email-subject { font-size: var(--fs-sm); color: var(--text); }
+    .job-email-meta { font-size: var(--fs-xs); color: var(--text-faint); }
+    .job-delete { margin-top: 1.1rem; color: var(--danger); }
+
+    /* --- tasks (Jobs panel and Today) --- */
+    .task-row { display: flex; gap: 0.55rem; align-items: flex-start; padding: 0.35rem 0; }
+    .task-body { min-width: 0; }
+    .task-title { font-size: var(--fs-base); color: var(--text); }
+    .task-due { font-size: var(--fs-xs); color: var(--text-muted); }
+    .task-row.done .task-title, .brief-todo.done .brief-todo-title {
+      color: var(--text-faint); text-decoration: line-through; }
+    .task-add { display: flex; gap: 0.35rem; margin-top: 0.4rem; }
+    .task-add-date { width: 9.5rem; flex-shrink: 0; }
+
+    /* The check is the one thing on Today touched many times a day, so
+       its feedback is press-scale plus a color fill - no checkmark draw
+       animation to wait through. */
+    .task-check { width: 16px; height: 16px; flex-shrink: 0; margin-top: 0.15rem;
+                  border-radius: 50%; border: 1.5px solid var(--text-muted);
+                  background: transparent; cursor: pointer; padding: 0; position: relative;
+                  transition: background-color 0.12s ease, border-color 0.12s ease,
+                              transform 160ms var(--ease-out); }
+    .task-check:hover { border-color: var(--text); }
+    .task-check:active { transform: scale(0.9); }
+    .done > .task-check, .task-check[aria-pressed="true"] {
+      background: var(--success); border-color: var(--success); }
+    .done > .task-check::after, .task-check[aria-pressed="true"]::after {
+      content: ""; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px;
+      border: solid var(--text-bright); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+    .brief-todo .task-check { margin-top: 0.2rem; }
+    /* Centred in the same 16px column as the checks, so titles line up. */
+    .brief-todo .brief-todo-dot { margin-left: 4px; margin-right: 4px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .job-card, .task-check { transition: border-color 0.12s ease, background-color 0.12s ease; }
+      .job-card:active, .task-check:active { transform: none; }
+    }

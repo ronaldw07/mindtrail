@@ -1159,11 +1159,10 @@
     return c;
   }
 
+  const VIEW_NAMES = ['project', 'roadmap', 'profile', 'dashboard', 'jobs'];
+
   function setActiveView(name) {
-    $('project-view').classList.toggle('open', name === 'project');
-    $('roadmap-view').classList.toggle('open', name === 'roadmap');
-    $('profile-view').classList.toggle('open', name === 'profile');
-    $('dashboard-view').classList.toggle('open', name === 'dashboard');
+    VIEW_NAMES.forEach(v => $(v + '-view').classList.toggle('open', name === v));
     log.style.display = name === 'chat' ? '' : 'none';
     $('composer').style.display = name === 'chat' ? '' : 'none';
   }
@@ -2869,6 +2868,7 @@
   }
 
   $('open-profile').onclick = () => openProfileView();
+  $('open-jobs').onclick = () => openJobsView();
 
   // Notes were CLI-only until now, and the CLI version stores them with
   // no conversation attached - unreachable from the browser even after
@@ -3084,7 +3084,7 @@
   // Header: date/time, greeting, and the on-demand LLM paragraph (see
   // handle_daily_brief) behind a button rather than run automatically -
   // the Today view has to stay a free, instant page load.
-  function briefHeader() {
+  function briefHeader(summary) {
     const now = new Date();
     const header = document.createElement('div');
     header.className = 'brief-header';
@@ -3107,31 +3107,41 @@
     header.appendChild(greet);
 
     const briefRow = document.createElement('div');
-    briefRow.className = 'brief-text';
-    const btn = document.createElement('button');
-    btn.className = 'brief-text-btn';
-    btn.textContent = 'Write my brief →';
-    briefRow.appendChild(btn);
+    briefRow.className = 'brief-text muted';
     header.appendChild(briefRow);
-
-    btn.onclick = async () => {
-      btn.disabled = true;
-      btn.textContent = 'Thinking…';
-      try {
-        const res = await jsonSend('/api/daily-summary/brief', {});
-        briefRow.innerHTML = '';
-        briefRow.className = 'brief-text' + (res.error ? ' muted' : '');
-        briefRow.textContent = res.error
-          ? 'Could not generate a brief: ' + res.error
-          : res.text;
-      } catch (err) {
-        briefRow.innerHTML = '';
-        briefRow.className = 'brief-text muted';
-        briefRow.textContent = 'Could not generate a brief: request failed';
-      }
-    };
-
+    if (summary.empty) {
+      briefRow.textContent = 'A clear day — nothing due and nothing on the calendar.';
+    } else {
+      loadBrief(briefRow, false);
+    }
     return header;
+  }
+
+  // Asked for on every Today visit, but the server answers from cache
+  // unless the day's data changed (see daily_brief.cached_brief), so this
+  // is a model call only when there's something new to say.
+  async function loadBrief(row, force) {
+    row.className = 'brief-text muted';
+    row.textContent = force ? 'Rewriting…' : 'Writing your brief…';
+    let res;
+    try {
+      res = await jsonSend('/api/daily-summary/brief', {force});
+    } catch (err) {
+      res = {error: 'request failed'};
+    }
+    row.innerHTML = '';
+    if (res.text) {
+      row.className = 'brief-text';
+      row.appendChild(document.createTextNode(res.text + ' '));
+    } else {
+      row.appendChild(document.createTextNode(
+        'Could not write a brief: ' + (res.error || 'nothing to say') + '. '));
+    }
+    const again = document.createElement('button');
+    again.className = 'brief-text-btn';
+    again.textContent = 'Rewrite';
+    again.onclick = () => loadBrief(row, true);
+    row.appendChild(again);
   }
 
   // "Push your work forward": the single most urgent item (handle_daily_
@@ -3152,59 +3162,109 @@
     title.textContent = item.title;
     c.appendChild(title);
 
+    const due = item.due_date ? ' · due ' + fmtShortDate(item.due_date) : '';
     const sub = document.createElement('div');
     sub.className = 'brief-hero-sub';
-    sub.textContent = item.project_name +
-      (item.due_date ? ' · due ' + item.due_date : '');
-    c.appendChild(sub);
-
     const btn = document.createElement('button');
     btn.className = 'brief-hero-btn';
-    btn.textContent = 'Let’s do it →';
-    btn.onclick = () => openRoadmapView(item.project_id, item.project_name);
+    if (item.kind === 'task') {
+      sub.textContent = (item.company || 'To-do') + due;
+      btn.textContent = 'Done ✓';
+      btn.onclick = async () => {
+        await jsonSend('/api/tasks/' + item.task_id, {done: true}, 'PATCH');
+        openDashboardView();
+      };
+    } else if (item.kind === 'deadline') {
+      sub.textContent = 'Application deadline' + due;
+      btn.textContent = 'Let’s do it →';
+      btn.onclick = () => openJobsView(item.application_id);
+    } else {
+      sub.textContent = item.project_name + due;
+      btn.textContent = 'Let’s do it →';
+      btn.onclick = () => openRoadmapView(item.project_id, item.project_name);
+    }
+    c.appendChild(sub);
     c.appendChild(btn);
-
     return c;
   }
 
-  // Checklist merging due/overdue, newly unblocked, and recurring steps
-  // coming due - the three sections the old daily-summary card kept
-  // separate, folded into one list the way the to-do section in the
-  // reference brief reads.
+  // One row of Top to-dos. A to-do gets a real check button; roadmap
+  // steps and deadlines get a plain marker, since "done" for them means
+  // something richer (a status, an application) handled where they live.
+  function todoRow(opts) {
+    const row = document.createElement('div');
+    row.className = 'brief-todo' + (opts.overdue ? ' overdue' : '');
+    if (opts.onCheck) {
+      const check = document.createElement('button');
+      check.className = 'task-check';
+      check.setAttribute('aria-label', 'Mark done: ' + opts.title);
+      check.onclick = async e => {
+        e.stopPropagation();
+        row.classList.add('done');
+        await opts.onCheck();
+      };
+      row.appendChild(check);
+    } else {
+      const dot = document.createElement('div');
+      dot.className = 'brief-todo-dot';
+      row.appendChild(dot);
+    }
+    const body = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'brief-todo-title';
+    title.textContent = opts.title;
+    const sub = document.createElement('div');
+    sub.className = 'brief-todo-sub';
+    sub.textContent = opts.sub;
+    body.appendChild(title);
+    body.appendChild(sub);
+    row.appendChild(body);
+    if (opts.onOpen) makeClickable(row, opts.onOpen);
+    return row;
+  }
+
+  const BUCKET_TAGS = {overdue: 'Overdue', today: 'Due today'};
+
+  // To-dos, application deadlines, and roadmap steps (due, unblocked,
+  // recurring) in one list, the way the reference brief reads.
   function topTodosCard(summary) {
-    const items = [
-      ...(summary.due || []).map(n =>
-        ({...n, tag: n.bucket === 'overdue' ? 'Overdue' : 'Due today'})),
-      ...(summary.unblocked || []).map(n => ({...n, tag: 'Unblocked'})),
-      ...(summary.recurring || []).map(n => ({...n, tag: 'Coming up ' + n.due_date})),
+    const c = card('Top to-dos', '+ Add', () => quickAddTask());
+    const tag = n => BUCKET_TAGS[n.bucket] || ('Due ' + fmtShortDate(n.due_date));
+    const rows = [
+      ...(summary.tasks || []).map(t => todoRow({
+        title: t.title, overdue: t.bucket === 'overdue',
+        sub: (t.company ? t.company + ' · ' : '') + tag(t),
+        onCheck: async () => {
+          await jsonSend('/api/tasks/' + t.task_id, {done: true}, 'PATCH');
+          openDashboardView();
+        },
+        onOpen: t.application_id ? () => openJobsView(t.application_id) : null,
+      })),
+      ...(summary.deadlines || []).map(d => todoRow({
+        title: d.title, sub: 'Application deadline · ' + tag(d),
+        onOpen: () => openJobsView(d.application_id),
+      })),
+      ...(summary.due || []).map(n => todoRow({
+        title: n.title, overdue: n.bucket === 'overdue',
+        sub: n.project_name + ' · ' + tag(n),
+        onOpen: () => openRoadmapView(n.project_id, n.project_name),
+      })),
+      ...(summary.unblocked || []).map(n => todoRow({
+        title: n.title, sub: n.project_name + ' · Unblocked',
+        onOpen: () => openRoadmapView(n.project_id, n.project_name),
+      })),
+      ...(summary.recurring || []).map(n => todoRow({
+        title: n.title, sub: n.project_name + ' · Coming up ' + fmtShortDate(n.due_date),
+        onOpen: () => openRoadmapView(n.project_id, n.project_name),
+      })),
     ];
-    const c = card('Top to-dos', null, null);
-    if (!items.length) {
+    if (!rows.length) {
       const p = document.createElement('div');
       p.className = 'muted';
       p.textContent = 'Nothing due, overdue, or newly unblocked today.';
       c.appendChild(p);
-      return c;
     }
-    items.forEach(n => {
-      const row = document.createElement('div');
-      row.className = 'brief-todo' + (n.tag === 'Overdue' ? ' overdue' : '');
-      const dot = document.createElement('div');
-      dot.className = 'brief-todo-dot';
-      row.appendChild(dot);
-      const body = document.createElement('div');
-      const title = document.createElement('div');
-      title.className = 'brief-todo-title';
-      title.textContent = n.title;
-      const sub = document.createElement('div');
-      sub.className = 'brief-todo-sub';
-      sub.textContent = n.project_name + ' · ' + n.tag;
-      body.appendChild(title);
-      body.appendChild(sub);
-      row.appendChild(body);
-      makeClickable(row, () => openRoadmapView(n.project_id, n.project_name));
-      c.appendChild(row);
-    });
+    rows.forEach(r => c.appendChild(r));
     return c;
   }
 
@@ -3254,8 +3314,8 @@
       const p = document.createElement('div');
       p.className = 'muted';
       p.textContent = cal.needs_reconnect
-        ? 'Google Calendar needs reconnecting — run: mindtrail calendar connect'
-        : 'Connect Google Calendar — run: mindtrail calendar connect';
+        ? 'Google Calendar needs reconnecting — run: mindtrail google connect'
+        : 'Connect Google Calendar — run: mindtrail google connect';
       c.appendChild(p);
       return c;
     }
@@ -3317,7 +3377,7 @@
 
     const wrap = document.createElement('div');
     wrap.className = 'brief-wrap';
-    wrap.appendChild(briefHeader());
+    wrap.appendChild(briefHeader(summary));
 
     const hero = pushForwardCard(summary.top_priority);
     if (hero) wrap.appendChild(hero);
@@ -3586,7 +3646,15 @@
       {label: 'Save a link', run: () => { closePalette(); saveUrl(); }},
       {label: 'New project', run: () => { closePalette(); createProject(); }},
       {label: 'Go to Today', run: () => { closePalette(); openDashboardView(); }},
+      {label: 'Go to Jobs', run: () => { closePalette(); openJobsView(); }},
       {label: 'Go to Profile', run: () => { closePalette(); openProfileView(); }},
+      {label: 'Add a to-do', run: () => { closePalette(); quickAddTask(); }},
+      {label: 'Add a job application', run: async () => {
+        closePalette();
+        await openJobsView();
+        const input = document.querySelector('.jobs-link-input');
+        if (input) input.focus();
+      }},
     ];
     if (isRoadmapViewOpen()) {
       actions.push({label: 'Tidy roadmap', run: () => {
@@ -3887,6 +3955,7 @@
       return;
     }
     if (last.type === 'profile') { await openProfileView(); return; }
+    if (last.type === 'jobs') { await openJobsView(); return; }
     openDashboardView();
   }
 
