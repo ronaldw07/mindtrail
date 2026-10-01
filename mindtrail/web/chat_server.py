@@ -17,13 +17,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from mindtrail.advice.job_scan import JobScanner, ScanTimer
 from mindtrail.ingest.researcher import Researcher
+from mindtrail.integrations.gmail import GmailClient
 from mindtrail.integrations.google_calendar import GoogleCalendarClient
 from mindtrail.integrations.google_sheets import SheetsClient
 from mindtrail.llm import LLMClient
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.app_state import AppState
 from mindtrail.organize.conversations import ConversationStore
+from mindtrail.organize.email_log import EmailLog
 from mindtrail.organize.jobs import JobStore
 from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.tasks import TaskStore
@@ -91,8 +94,11 @@ class Deps:
         self.tasks = TaskStore(db_path)
         self.state = AppState(db_path)
         self.sheets = SheetsClient()
-        # app_id -> [{subject, received_at, label}], set once Gmail exists.
-        self.job_emails = None
+        self.email_log = EmailLog(db_path)
+        self.job_emails = self.email_log.for_application
+        self.scanner = JobScanner(
+            self.jobs, self.tasks, self.email_log, self.state, llm, GmailClient()
+        )
 
 
 def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandler]:
@@ -578,9 +584,14 @@ def run_chat_server(
     print(f"mindtrail chat running at {url}  (Ctrl+C to stop)")
     if open_browser:
         webbrowser.open(url)
+    # Catch-up scan now, then hourly, only while the server runs. Without
+    # a Google connection each run just records "not connected".
+    timer = ScanTimer(deps.scanner)
+    timer.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nstopped")
     finally:
+        timer.stop()
         server.server_close()

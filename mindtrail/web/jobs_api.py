@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import date, timedelta
 
+from mindtrail.advice.job_scan import STATUS_KEY as SCAN_STATUS_KEY
 from mindtrail.ingest.job_import import apply_plan, plan_import
 from mindtrail.ingest.job_posting import add_from_link
 from mindtrail.integrations.google_api import GoogleAuthError, GoogleFetchError
@@ -55,6 +56,7 @@ def handle_list_jobs(
             "link": state.get(SHEET_LINK_KEY, "") if state else "",
             "synced_at": state.get(SHEET_SYNCED_KEY, "") if state else "",
         },
+        "email": state.get(SCAN_STATUS_KEY, {}) if state else {},
         "stages": list(STAGES),
         "pipeline": list(PIPELINE),
         "closed": list(CLOSED),

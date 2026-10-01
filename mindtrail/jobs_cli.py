@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from mindtrail.advice.job_scan import JobScanner
 from mindtrail.ingest.job_posting import add_from_link
+from mindtrail.integrations.gmail import GmailClient
 from mindtrail.integrations.google_sheets import SheetsClient
 from mindtrail.llm import LLMClient
 from mindtrail.organize.app_state import AppState
 from mindtrail.organize.db import initialize
+from mindtrail.organize.email_log import EmailLog
 from mindtrail.organize.jobs import JobStore
+from mindtrail.organize.tasks import TaskStore
 from mindtrail.web.jobs_api import handle_import_sheet
 
 
@@ -52,6 +56,21 @@ def cmd_jobs_sheet(args) -> int:
     return 0
 
 
+def cmd_jobs_scan(args) -> int:
+    initialize()
+    jobs, tasks, state = JobStore(), TaskStore(), AppState()
+    status = JobScanner(jobs, tasks, EmailLog(), state, LLMClient(), GmailClient()).scan()
+    s = status.get("summary", {})
+    print(status["message"])
+    if s:
+        print(f"  {s['scanned']} emails read, {s['job_emails']} about applications, "
+              f"{s['stages_moved']} stages moved, {s['new_applications']} new (to review), "
+              f"{s['tasks_created']} to-dos added")
+        for error in s["errors"]:
+            print(f"  could not read: {error}")
+    return 0 if status["ok"] else 1
+
+
 def register(sub) -> None:
     jobs = sub.add_parser("jobs", help="track job applications")
     jobs_sub = jobs.add_subparsers(dest="jobs_command", required=True)
@@ -71,3 +90,6 @@ def register(sub) -> None:
 
     sync = jobs_sub.add_parser("sync-sheet", help="re-import new rows from the linked sheet")
     sync.set_defaults(func=cmd_jobs_sheet)
+
+    scan = jobs_sub.add_parser("scan", help="read new job emails from Gmail now")
+    scan.set_defaults(func=cmd_jobs_scan)

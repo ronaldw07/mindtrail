@@ -57,6 +57,11 @@ def _import_sheet(deps, args, body, query):
     return jobs_api.handle_import_sheet(deps.jobs, deps.state, deps.llm, deps.sheets, body)
 
 
+@route("POST", "/api/jobs/scan")
+def _scan_email(deps, args, body, query):
+    return deps.scanner.scan()
+
+
 @route("POST", "/api/jobs/link")
 def _add_job_link(deps, args, body, query):
     return jobs_api.handle_add_job_link(deps.jobs, deps.llm, body)
