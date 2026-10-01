@@ -111,6 +111,7 @@ CHAT_HTML = """<!doctype html>
   <div id="shortcuts"></div>
 
   <script src="/static/jobs.js"></script>
+  <script src="/static/life.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>"""

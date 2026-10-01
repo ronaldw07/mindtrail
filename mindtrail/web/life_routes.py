@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 
-from mindtrail.web import jobs_api
+from mindtrail.web import jobs_api, life_api
 
 ROUTES: list[tuple[str, re.Pattern, object]] = []
 
@@ -75,6 +75,34 @@ def _update_job(deps, args, body, query):
 @route("DELETE", f"/api/jobs/{_ID}")
 def _delete_job(deps, args, body, query):
     return jobs_api.handle_delete_job(deps.jobs, args[0])
+
+
+# --- areas ------------------------------------------------------------------
+
+
+@route("GET", "/api/areas")
+def _list_areas(deps, args, body, query):
+    return life_api.handle_list_areas(deps.areas)
+
+
+@route("POST", "/api/areas")
+def _create_area(deps, args, body, query):
+    return life_api.handle_create_area(deps.areas, body)
+
+
+@route("PATCH", f"/api/areas/{_ID}")
+def _update_area(deps, args, body, query):
+    return life_api.handle_update_area(deps.areas, args[0], body)
+
+
+@route("DELETE", f"/api/areas/{_ID}")
+def _delete_area(deps, args, body, query):
+    return life_api.handle_delete_area(deps.areas, args[0])
+
+
+@route("PATCH", f"/api/projects/{_ID}/area")
+def _set_project_area(deps, args, body, query):
+    return life_api.handle_set_project_area(deps.areas, args[0], body)
 
 
 # --- tasks ------------------------------------------------------------------

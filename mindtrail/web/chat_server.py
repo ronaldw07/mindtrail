@@ -25,6 +25,7 @@ from mindtrail.integrations.google_sheets import SheetsClient
 from mindtrail.llm import LLMClient
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.app_state import AppState
+from mindtrail.organize.areas import AreaStore
 from mindtrail.organize.conversations import ConversationStore
 from mindtrail.organize.email_log import EmailLog
 from mindtrail.organize.jobs import JobStore
@@ -51,6 +52,7 @@ STATIC_FILES = {
     "/static/app.js": ("app.js", "application/javascript; charset=utf-8"),
     "/static/life.css": ("life.css", "text/css; charset=utf-8"),
     "/static/jobs.js": ("jobs.js", "application/javascript; charset=utf-8"),
+    "/static/life.js": ("life.js", "application/javascript; charset=utf-8"),
 }
 
 
@@ -95,6 +97,8 @@ class Deps:
         self.jobs = JobStore(db_path)
         self.tasks = TaskStore(db_path)
         self.state = AppState(db_path)
+        self.areas = AreaStore(db_path)
+        self.areas.ensure_seeded()
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)
         self.job_emails = self.email_log.for_application

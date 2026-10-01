@@ -80,6 +80,7 @@ class ParsedProject:
     created_at: str
     instructions: str = ""
     highlights: tuple[ParsedHighlight, ...] = ()
+    area_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -372,6 +373,7 @@ def parse_project_index_file(content: str) -> ParsedProject:
         created_at=fm["created_at"],
         instructions="" if instructions == NONE_YET else instructions,
         highlights=_parse_highlights(highlights_block),
+        area_id=str(fm.get("area_id") or ""),
     )
 
 

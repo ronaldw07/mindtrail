@@ -58,6 +58,7 @@ def handle_sidebar(projects: ProjectStore, chats: ConversationStore) -> dict:
             {
                 "id": p.id,
                 "name": p.name,
+                "area_id": p.area_id,
                 "conversations": [
                     _conversation_json(c) for c in chats.in_project(p.id)
                 ],

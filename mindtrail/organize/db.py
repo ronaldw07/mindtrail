@@ -142,6 +142,17 @@ CREATE TABLE IF NOT EXISTS gmail_seen (
     seen_at        TEXT NOT NULL
 );
 
+-- Career, School, Health... - a color-coded tag that projects, tasks,
+-- and habits point at by id. No foreign keys onto it: deleting an area
+-- clears those references in code (AreaStore.delete) rather than
+-- cascading anything away.
+CREATE TABLE IF NOT EXISTS areas (
+    id    TEXT PRIMARY KEY,
+    name  TEXT NOT NULL,
+    color TEXT NOT NULL,
+    sort  INTEGER NOT NULL DEFAULT 0
+);
+
 -- Small named values that don't deserve a table each: last scan time,
 -- the linked sheet, the cached brief. Values are JSON text.
 CREATE TABLE IF NOT EXISTS app_state (
@@ -200,6 +211,7 @@ ADDED_COLUMNS = [
     # (1/7/14/30 from the UI's daily/weekly/fortnightly/monthly presets),
     # applied when the node is marked done - see RoadmapNodeStore.set_status.
     ("roadmap_nodes", "repeat_days", "INTEGER NOT NULL DEFAULT 0"),
+    ("projects", "area_id", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

@@ -129,3 +129,13 @@
       .job-card, .task-check { transition: border-color 0.12s ease, background-color 0.12s ease; }
       .job-card:active, .task-check:active { transform: none; }
     }
+
+    /* --- life areas --- */
+    .area-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+                flex-shrink: 0; margin-right: 0.45rem; align-self: center; }
+    .area-hint { margin-bottom: 0.6rem; font-size: var(--fs-sm); }
+    .area-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; }
+    .area-color { width: 2rem; height: 2rem; padding: 0; border: none; background: none;
+                  cursor: pointer; flex-shrink: 0; }
+    .area-color::-webkit-color-swatch-wrapper { padding: 3px; }
+    .area-color::-webkit-color-swatch { border: none; border-radius: 50%; }

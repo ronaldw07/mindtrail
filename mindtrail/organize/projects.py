@@ -19,6 +19,7 @@ class Project:
     advice_basis_count: int = 0
     """How many entries the stored advice was generated from. Compared
     against the project's current entry count to detect staleness."""
+    area_id: str = ""
 
 
 def _to_project(row) -> Project:
@@ -35,6 +36,7 @@ def _to_project(row) -> Project:
         advice_basis_count=(
             row["advice_basis_count"] if "advice_basis_count" in keys else 0
         ),
+        area_id=row["area_id"] if "area_id" in keys else "",
     )
 
 
@@ -104,6 +106,17 @@ class ProjectStore:
             cursor = conn.execute(
                 "UPDATE projects SET instructions = ? WHERE id = ?",
                 (instructions.strip(), project_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"no such project: {project_id}")
+
+    def set_area(self, project_id: str, area_id: str) -> None:
+        """Tag the project with a life area ('' to clear). Not validated
+        against the areas table here - import restores projects before
+        areas - see AreaStore.set_project_area for the checked path."""
+        with connect(self._path) as conn:
+            cursor = conn.execute(
+                "UPDATE projects SET area_id = ? WHERE id = ?", (area_id, project_id)
             )
             if cursor.rowcount == 0:
                 raise ValueError(f"no such project: {project_id}")

@@ -18,6 +18,7 @@ from mindtrail.organize.db import connect
 LIFE_FILE = "life.json"
 
 LIFE_TABLES = (
+    "areas",
     "applications",
     "tasks",
     "gmail_seen",

@@ -112,6 +112,8 @@ def _import_projects(
                 for h in parsed.highlights
             ]
             projects.save_advice(parsed.id, highlights_to_json(highlights), len(highlights))
+        if parsed.area_id:
+            projects.set_area(parsed.id, parsed.area_id)
         created += 1
 
     return ImportSummary(created, skipped, failed, tuple(warnings)), slug_to_id, name_to_id

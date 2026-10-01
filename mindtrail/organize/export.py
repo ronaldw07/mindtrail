@@ -216,6 +216,10 @@ def build_project_index_file(project: Project, slug: str) -> ExportFile:
         "title": project.name,
         "created_at": project.created_at,
     }
+    # Only when set, so exports of untagged projects stay byte-identical
+    # to the ones made before areas existed.
+    if project.area_id:
+        frontmatter["area_id"] = project.area_id
     highlights = highlights_from_json(project.advice)
     highlight_lines = (
         "\n".join(f"- **{h.headline}** ({h.priority}) - {h.detail}" for h in highlights)

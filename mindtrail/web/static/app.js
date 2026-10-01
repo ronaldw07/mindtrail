@@ -505,7 +505,7 @@
   // ---------- sidebar ----------
 
   async function loadSidebar() {
-    sidebar = await api('/api/sidebar');
+    [sidebar] = await Promise.all([api('/api/sidebar'), loadAreas()]);
     renderTree();
   }
 
@@ -635,6 +635,8 @@
         caret.className = 'caret';
         caret.textContent = expanded ? '\u25be' : '\u25b8';
         head.appendChild(caret);
+        const dot = areaDot(p.area_id);
+        if (dot) head.appendChild(dot);
         const name = document.createElement('span');
         name.style.flex = '1';
         name.textContent = p.name;
@@ -828,6 +830,7 @@
           toast('Rename undone');
         }});
       }},
+      {label: 'Set life area\u2026', run: () => setProjectArea(p)},
       {divider: true},
       {label: 'Delete project', danger: true, run: async () => {
         const ok = await askConfirm('Delete project',
@@ -2844,6 +2847,7 @@
     };
 
     main.appendChild(aboutCard);
+    main.appendChild(areasCard());
     layout.appendChild(main);
 
     const rail = document.createElement('div');
