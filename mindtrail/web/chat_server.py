@@ -21,12 +21,15 @@ from mindtrail.ingest.researcher import Researcher
 from mindtrail.integrations.google_calendar import GoogleCalendarClient
 from mindtrail.llm import LLMClient
 from mindtrail.memory.store import MemoryStore
+from mindtrail.organize.app_state import AppState
 from mindtrail.organize.conversations import ConversationStore
+from mindtrail.organize.jobs import JobStore
 from mindtrail.organize.profile import ProfileStore
+from mindtrail.organize.tasks import TaskStore
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.organize.trash import NodeTrash, Trash
-from mindtrail.web import api, auth
+from mindtrail.web import api, auth, life_routes
 from mindtrail.web.auth import AuthState
 from mindtrail.web.chat_ui import CHAT_HTML
 
@@ -81,6 +84,13 @@ class Deps:
         # a deployment with no Google setup at all still gets a working
         # Deps object and a "not connected" calendar block for free.
         self.calendar = calendar or GoogleCalendarClient()
+        # Life-dashboard stores share the projects store's database.
+        db_path = self.projects.path
+        self.jobs = JobStore(db_path)
+        self.tasks = TaskStore(db_path)
+        self.state = AppState(db_path)
+        # app_id -> [{subject, received_at, label}], set once Gmail exists.
+        self.job_emails = None
 
 
 def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandler]:
@@ -168,6 +178,23 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
             self.send_response(404)
             self.end_headers()
 
+        def _life_route(self, method: str, body: dict | None = None) -> bool:
+            """Serve the request from life_routes if it matches one.
+            Call after auth. `body` is None to read it here (POST); PATCH
+            passes the one it already parsed."""
+            parsed = urlparse(self.path)
+            found = life_routes.find(method, parsed.path)
+            if found is None:
+                return False
+            handler, args = found
+            if body is None:
+                body = self._json_body() if method == "POST" else {}
+                if body is None:
+                    self._json({"error": "malformed request body"}, 400)
+                    return True
+            self._json(handler(deps, args, body, parse_qs(parsed.query)))
+            return True
+
         def _static(self, filename: str, content_type: str) -> None:
             # no-store: later phases get debugged against these files, and a
             # cached stale app.js would waste hours chasing a ghost.
@@ -188,6 +215,8 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                     self._login_page()
                 else:
                     self._unauthorized()
+                return
+            if self._life_route("GET"):
                 return
             if path == "/":
                 body = CHAT_HTML.encode("utf-8")
@@ -274,6 +303,8 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                     self._unauthorized()
                     return
 
+            if self._life_route("POST"):
+                return
             if path == "/api/daily-summary/brief":
                 self._json(
                     api.handle_daily_brief(
@@ -460,6 +491,8 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                 self._json({"error": "malformed request body"}, 400)
                 return
 
+            if self._life_route("PATCH", body):
+                return
             if path.startswith("/api/conversations/"):
                 self._json(
                     api.handle_update_conversation(
@@ -492,6 +525,8 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
             path = urlparse(self.path).path
             if auth_state.config.required and not self._is_authenticated():
                 self._unauthorized()
+                return
+            if self._life_route("DELETE", {}):
                 return
             if path.startswith("/api/conversations/"):
                 self._json(

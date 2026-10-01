@@ -7,7 +7,7 @@ import sys
 import webbrowser
 from pathlib import Path
 
-from mindtrail import config
+from mindtrail import config, jobs_cli
 from mindtrail.advice.planner import generate_advice
 from mindtrail.ingest.documents import DocumentError, extract_pdf_text
 from mindtrail.ingest.fetch import FetchError, extract_title, fetch_html, html_to_text
@@ -385,6 +385,8 @@ def build_parser() -> argparse.ArgumentParser:
         "today", help="show today's events from the primary calendar"
     )
     today_cmd.set_defaults(func=cmd_calendar_today)
+
+    jobs_cli.register(sub)
 
     chat = sub.add_parser("chat", help="chatbot interface in the browser")
     chat.add_argument("--port", type=int, default=8765)

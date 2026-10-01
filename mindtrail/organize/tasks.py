@@ -6,6 +6,7 @@ application_id; a general one doesn't.
 
 from __future__ import annotations
 
+import sqlite3
 import uuid
 from dataclasses import dataclass
 
@@ -55,13 +56,16 @@ class TaskStore:
             done_at="", application_id=application_id or None, area_id=area_id,
             source_message_id=source_message_id, created_at=now_iso(),
         )
-        with connect(self._path) as conn:
-            conn.execute(
-                "INSERT INTO tasks (id, title, due_date, done, done_at, application_id, "
-                "area_id, source_message_id, created_at) VALUES (?, ?, ?, 0, '', ?, ?, ?, ?)",
-                (task.id, task.title, task.due_date, task.application_id, task.area_id,
-                 task.source_message_id, task.created_at),
-            )
+        try:
+            with connect(self._path) as conn:
+                conn.execute(
+                    "INSERT INTO tasks (id, title, due_date, done, done_at, application_id, "
+                    "area_id, source_message_id, created_at) VALUES (?, ?, ?, 0, '', ?, ?, ?, ?)",
+                    (task.id, task.title, task.due_date, task.application_id, task.area_id,
+                     task.source_message_id, task.created_at),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(f"no such application: {application_id}") from exc
         return task
 
     def get(self, task_id: str) -> Task | None:
