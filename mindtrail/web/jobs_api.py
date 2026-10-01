@@ -17,6 +17,7 @@ from mindtrail.llm import LLMError
 from mindtrail.organize.app_state import AppState
 from mindtrail.organize.db import now_iso
 from mindtrail.organize.jobs import CLOSED, PIPELINE, STAGES, Application, JobStore
+from mindtrail.organize.task_dates import parse_task_input
 from mindtrail.organize.tasks import Task, TaskStore
 
 RESPONDED_STAGES = ("oa", "interview", "offer", "rejected")
@@ -143,10 +144,16 @@ def handle_list_tasks(tasks: TaskStore, include_done: bool = False) -> dict:
 
 
 def handle_add_task(tasks: TaskStore, body: dict) -> dict:
+    """An explicit due_date wins; otherwise a trailing phrase in the title
+    ("... fri", "... oct 12") becomes the due date."""
+    title = str(body.get("title", ""))
+    due = str(body.get("due_date", "") or "")
+    if not due:
+        title, due = parse_task_input(title, date.today())
     try:
         task = tasks.add(
-            str(body.get("title", "")),
-            due_date=str(body.get("due_date", "")),
+            title,
+            due_date=due,
             application_id=body.get("application_id") or None,
             area_id=str(body.get("area_id", "") or ""),
         )

@@ -1162,7 +1162,7 @@
     return c;
   }
 
-  const VIEW_NAMES = ['project', 'roadmap', 'profile', 'dashboard', 'jobs'];
+  const VIEW_NAMES = ['project', 'roadmap', 'profile', 'dashboard', 'jobs', 'tasks'];
 
   function setActiveView(name) {
     VIEW_NAMES.forEach(v => $(v + '-view').classList.toggle('open', name === v));
@@ -2873,6 +2873,7 @@
 
   $('open-profile').onclick = () => openProfileView();
   $('open-jobs').onclick = () => openJobsView();
+  $('open-tasks').onclick = () => openTasksView();
 
   // Notes were CLI-only until now, and the CLI version stores them with
   // no conversation attached - unreachable from the browser even after
@@ -3651,6 +3652,7 @@
       {label: 'New project', run: () => { closePalette(); createProject(); }},
       {label: 'Go to Today', run: () => { closePalette(); openDashboardView(); }},
       {label: 'Go to Jobs', run: () => { closePalette(); openJobsView(); }},
+      {label: 'Go to To-dos', run: () => { closePalette(); openTasksView(); }},
       {label: 'Go to Profile', run: () => { closePalette(); openProfileView(); }},
       {label: 'Add a to-do', run: () => { closePalette(); quickAddTask(); }},
       {label: 'Add a job application', run: async () => {
@@ -3960,6 +3962,7 @@
     }
     if (last.type === 'profile') { await openProfileView(); return; }
     if (last.type === 'jobs') { await openJobsView(); return; }
+    if (last.type === 'tasks') { await openTasksView(); return; }
     openDashboardView();
   }
 

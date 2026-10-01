@@ -139,3 +139,20 @@
                   cursor: pointer; flex-shrink: 0; }
     .area-color::-webkit-color-swatch-wrapper { padding: 3px; }
     .area-color::-webkit-color-swatch { border: none; border-radius: 50%; }
+
+    /* --- to-dos view --- */
+    #tasks-view, #habits-view, #journal-view {
+      flex: 1; overflow-y: auto; display: none; padding: 1.75rem 2rem; }
+    #tasks-view.open, #habits-view.open, #journal-view.open { display: block; }
+    .task-add-wide { margin-bottom: 1.25rem; }
+    .task-add-wide .jobs-link-input { width: 100%; }
+    .task-group-head { margin: 1.1rem 0 0.35rem; }
+    .task-group-head[role="button"] { cursor: pointer; }
+    #tasks-view .task-row { align-items: center; padding: 0.45rem 0.25rem;
+                            border-bottom: 1px solid var(--border-subtle); }
+    #tasks-view .task-row .task-check { margin-top: 0; }
+    #tasks-view .task-body { flex: 1; display: flex; align-items: baseline; gap: 0.6rem; }
+    #tasks-view .task-row.overdue .task-due { color: var(--danger); }
+    .task-job-chip { cursor: pointer; }
+    .task-more { opacity: 0; }
+    .task-row:hover .task-more, .task-more:focus-visible { opacity: 1; }
