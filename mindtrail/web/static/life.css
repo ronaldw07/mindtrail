@@ -178,7 +178,7 @@
                grid-auto-columns: 10px; grid-auto-flow: column; gap: 2px;
                overflow-x: auto; }
     .heat-cell { border-radius: 2px; background: var(--surface-hover); }
-    .heat-cell.on { background: var(--habit-color); }
+    .heat-cell.on { background: var(--habit-color, #3987e5); }  /* set per heatmap, inline */
     .heat-cell.future { background: transparent; }
     .heat-cell.today { box-shadow: 0 0 0 1px var(--text-muted); }
     .heat-cell.editable { cursor: pointer; }
