@@ -10,7 +10,7 @@ import tempfile
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from mindtrail.advice.daily_brief import generate_daily_brief
+from mindtrail.advice.daily_brief import cached_brief, generate_daily_brief
 from mindtrail.advice.highlights import (
     generate_highlights,
     highlights_from_json,
@@ -33,6 +33,7 @@ from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.roadmap_templates import TEMPLATES, get_template
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.organize.trash import DeletedConversation, NodeTrash, Trash
+from mindtrail.web import today as today_view
 
 
 def _conversation_json(conversation) -> dict:
@@ -328,6 +329,8 @@ def handle_daily_summary(
     roadmaps: RoadmapStore,
     nodes: RoadmapNodeStore,
     calendar=None,
+    tasks=None,
+    jobs=None,
 ) -> dict:
     """Everything the Today view needs to answer "what should I do today",
     assembled entirely from already-stored data - no LLM call. The
@@ -412,22 +415,25 @@ def handle_daily_summary(
     calendar_block = _calendar_block(calendar)
     calendar_events = calendar_block.get("events") or []
 
-    # The single item the "push your work forward" card leads with: the
-    # most urgent due/overdue step, or - if nothing is due - the first
-    # unblocked one. `due` is already sorted overdue-first; `unblocked` is
-    # already sorted by due date. None when there's simply nothing to lead
-    # with, which the client treats as "no hero card" rather than an error.
-    top_priority = (due[0] if due else None) or (unblocked[0] if unblocked else None)
+    has_life = tasks is not None and jobs is not None
+    task_items = today_view.open_tasks(tasks, jobs, today) if has_life else []
+    deadlines = today_view.upcoming_deadlines(jobs, today) if has_life else []
 
-    return {
+    summary = {
         "due": due,
         "unblocked": unblocked[:DAILY_SUMMARY_UNBLOCKED_LIMIT],
         "recurring": recurring[:DAILY_SUMMARY_RECURRING_LIMIT],
+        "tasks": task_items,
+        "deadlines": deadlines,
         "new_since_yesterday": new_since_yesterday,
         "calendar": calendar_block,
-        "top_priority": top_priority,
-        "empty": not due and not unblocked and not recurring and not calendar_events,
+        "empty": not (due or unblocked or recurring or calendar_events
+                      or task_items or deadlines),
     }
+    # The one item the "push your work forward" card leads with. None when
+    # there's nothing to lead with - the client shows no hero card then.
+    summary["top_priority"] = today_view.pick_top_priority(summary, today)
+    return summary
 
 
 def _friendly_brief_error(exc: Exception) -> str:
@@ -447,14 +453,24 @@ def handle_daily_brief(
     nodes: RoadmapNodeStore,
     llm: LLMClient,
     calendar=None,
+    tasks=None,
+    jobs=None,
+    state=None,
+    force: bool = False,
 ) -> dict:
-    """The "Brief me" button: an on-demand LLM paragraph over the same
-    data handle_daily_summary already assembled for free. Recomputes the
-    summary itself rather than trusting one the client might send, so the
-    prose can never drift from what is actually on screen.
+    """The brief paragraph over the same data handle_daily_summary already
+    assembled for free. Recomputes the summary itself rather than trusting
+    one the client might send, so the prose can never drift from what is
+    actually on screen. With `state`, served from cache unless the day's
+    data changed (see daily_brief.cached_brief); without it, always fresh.
     """
-    summary = handle_daily_summary(projects, chats, roadmaps, nodes, calendar)
+    summary = handle_daily_summary(projects, chats, roadmaps, nodes, calendar, tasks, jobs)
     try:
+        if state is not None:
+            result = cached_brief(llm, summary, state, datetime.now().astimezone(), force)
+            if "error" in result:
+                result["error"] = _friendly_brief_error(LLMError(result["error"]))
+            return result
         brief = generate_daily_brief(llm, summary)
     except (LLMError, ValueError) as exc:
         return {"error": _friendly_brief_error(exc)}

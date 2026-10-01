@@ -254,7 +254,7 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                 self._json(
                     api.handle_daily_summary(
                         deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes,
-                        deps.calendar,
+                        deps.calendar, deps.tasks, deps.jobs,
                     )
                 )
             elif path == "/api/search":
@@ -314,10 +314,12 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
             if self._life_route("POST"):
                 return
             if path == "/api/daily-summary/brief":
+                body = self._json_body() or {}
                 self._json(
                     api.handle_daily_brief(
                         deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes,
-                        deps.llm, deps.calendar,
+                        deps.llm, deps.calendar, deps.tasks, deps.jobs, deps.state,
+                        force=bool(body.get("force")),
                     )
                 )
             elif path == "/api/ask":
