@@ -34,6 +34,7 @@ from mindtrail.organize.roadmap_templates import TEMPLATES, get_template
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.organize.trash import DeletedConversation, NodeTrash, Trash
 from mindtrail.web import today as today_view
+from mindtrail.web.admin_api import nudges_today
 from mindtrail.web.jobs_api import pipeline_counts
 
 
@@ -335,6 +336,7 @@ def handle_daily_summary(
     jobs=None,
     habits=None,
     journal=None,
+    people=None,
 ) -> dict:
     """Everything the Today view needs to answer "what should I do today",
     assembled entirely from already-stored data - no LLM call. The
@@ -435,6 +437,7 @@ def handle_daily_summary(
         "journal": today_view.journal_today(journal, today) if journal is not None else None,
         "pipeline": pipeline_counts(jobs.all(), today) if jobs is not None else None,
         "finished_today": today_view.finished_today(tasks, jobs, today) if has_life else [],
+        "nudges": nudges_today(people, today) if people is not None else [],
         "new_since_yesterday": new_since_yesterday,
         "calendar": calendar_block,
         "empty": not (due or unblocked or recurring or calendar_events

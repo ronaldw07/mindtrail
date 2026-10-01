@@ -27,6 +27,7 @@ LIFE_TABLES = (
     "habit_logs",
     "journal",
     "focus_sessions",
+    "people",
 )
 
 # Derived columns rebuilt on import rather than carried over: a journal

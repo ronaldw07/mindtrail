@@ -444,6 +444,12 @@
         },
         onOpen: t.application_id ? () => openJobsView(t.application_id) : null,
       })),
+      ...(summary.nudges || []).map(n => todoItem({
+        title: 'Reach out to ' + n.name,
+        sub: (n.context ? n.context + ' · ' : '') + sinceLabel(n.days_since),
+        onCheck: async () => { await talkedToday(n.person_id); openDashboardView(); },
+        onOpen: () => openPeopleView(),
+      })),
       ...(summary.deadlines || []).map(d => todoItem({
         title: d.title, sub: 'Application deadline · ' + tag(d),
         onOpen: () => openJobsView(d.application_id),

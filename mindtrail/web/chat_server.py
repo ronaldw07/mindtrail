@@ -32,6 +32,7 @@ from mindtrail.organize.email_log import EmailLog
 from mindtrail.organize.focus import FocusStore
 from mindtrail.organize.habits import HabitStore
 from mindtrail.organize.journal import JournalStore
+from mindtrail.organize.people import PeopleStore
 from mindtrail.organize.jobs import JobStore
 from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.tasks import TaskStore
@@ -60,6 +61,7 @@ STATIC_FILES = {
     "/static/today.js": ("today.js", "application/javascript; charset=utf-8"),
     "/static/focus.js": ("focus.js", "application/javascript; charset=utf-8"),
     "/static/review.js": ("review.js", "application/javascript; charset=utf-8"),
+    "/static/admin.js": ("admin.js", "application/javascript; charset=utf-8"),
 }
 
 
@@ -110,6 +112,7 @@ class Deps:
         self.journal = JournalStore(db_path, store)
         self.artwork = ArtworkClient(self.state)
         self.focus = FocusStore(db_path)
+        self.people = PeopleStore(db_path)
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)
         self.job_emails = self.email_log.for_application
@@ -287,7 +290,7 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                     api.handle_daily_summary(
                         deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes,
                         deps.calendar, deps.tasks, deps.jobs, deps.habits,
-                        deps.journal,
+                        deps.journal, deps.people,
                     )
                 )
             elif path == "/api/search":

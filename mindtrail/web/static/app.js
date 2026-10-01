@@ -1162,11 +1162,12 @@
     return c;
   }
 
-  const VIEW_NAMES = ['project', 'roadmap', 'profile', 'dashboard', 'jobs', 'tasks', 'habits', 'journal', 'week'];
+  const VIEW_NAMES = ['project', 'roadmap', 'profile', 'dashboard', 'jobs', 'tasks', 'habits', 'journal', 'week', 'people'];
 
   // Which sidebar button lights up for each view.
   const VIEW_NAV = {dashboard: 'open-today', week: 'open-week', tasks: 'open-tasks', habits: 'open-habits',
-                    journal: 'open-journal', jobs: 'open-jobs', profile: 'open-profile'};
+                    journal: 'open-journal', jobs: 'open-jobs', people: 'open-people',
+                    profile: 'open-profile'};
 
   function setActiveView(name) {
     VIEW_NAMES.forEach(v => $(v + '-view').classList.toggle('open', name === v));
@@ -2885,6 +2886,7 @@
   $('open-jobs').onclick = () => openJobsView();
   $('open-today').onclick = () => openDashboardView();
   $('open-week').onclick = () => openWeekView();
+  $('open-people').onclick = () => openPeopleView();
   $('open-tasks').onclick = () => openTasksView();
   $('open-habits').onclick = () => openHabitsView();
   $('open-journal').onclick = () => openJournalView();
@@ -3280,6 +3282,7 @@
       {label: 'Go to To-dos', run: () => { closePalette(); openTasksView(); }},
       {label: 'Go to Habits', run: () => { closePalette(); openHabitsView(); }},
       {label: 'Weekly review', run: () => { closePalette(); openWeekView(); }},
+      {label: 'Go to People', run: () => { closePalette(); openPeopleView(); }},
       {label: 'Write in journal', run: () => { closePalette(); openJournalView(); }},
       {label: 'Go to Profile', run: () => { closePalette(); openProfileView(); }},
       {label: 'Add a to-do', run: () => { closePalette(); quickAddTask(); }},
@@ -3600,6 +3603,7 @@
     if (last.type === 'habits') { await openHabitsView(); return; }
     if (last.type === 'journal') { await openJournalView(); return; }
     if (last.type === 'week') { await openWeekView(); return; }
+    if (last.type === 'people') { await openPeopleView(); return; }
     openDashboardView();
   }
 

@@ -25,6 +25,9 @@ SIDE_GROUPS = (
          '<path d="M8 14h2"/><path d="M14 14h2"/>'),
         ("open-journal", "Journal",
          '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8"/><path d="M8 13h6"/>'),
+        ("open-people", "People",
+         '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/>'
+         '<path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14c2.2.6 3.5 2.8 3.5 6"/>'),
         ("open-jobs", "Jobs",
          '<rect x="3" y="7" width="18" height="13" rx="2"/>'
          '<path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
@@ -101,6 +104,7 @@ CHAT_HTML = """<!doctype html>
       <div id="habits-view"></div>
       <div id="journal-view"></div>
       <div id="week-view"></div>
+      <div id="people-view"></div>
       <div id="composer">
         <form id="form">
           <button type="button" class="icon-btn" id="attach" title="Upload a PDF"
@@ -133,6 +137,7 @@ CHAT_HTML = """<!doctype html>
   <script src="/static/today.js"></script>
   <script src="/static/focus.js"></script>
   <script src="/static/review.js"></script>
+  <script src="/static/admin.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>""".format(side_nav=_side_nav())

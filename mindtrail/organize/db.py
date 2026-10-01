@@ -194,6 +194,20 @@ CREATE TABLE IF NOT EXISTS focus_sessions (
     area_id    TEXT NOT NULL DEFAULT ''
 );
 
+-- People you want to keep in touch with. nudge_every_days 0 means no
+-- reminder; otherwise Today nudges once that many days pass since
+-- last_contacted (a local YYYY-MM-DD, '' if never).
+CREATE TABLE IF NOT EXISTS people (
+    id               TEXT PRIMARY KEY,
+    name             TEXT NOT NULL,
+    context          TEXT NOT NULL DEFAULT '',
+    notes            TEXT NOT NULL DEFAULT '',
+    last_contacted   TEXT NOT NULL DEFAULT '',
+    nudge_every_days INTEGER NOT NULL DEFAULT 0,
+    application_id   TEXT NOT NULL DEFAULT '',
+    created_at       TEXT NOT NULL
+);
+
 -- Small named values that don't deserve a table each: last scan time,
 -- the linked sheet, the cached brief. Values are JSON text.
 CREATE TABLE IF NOT EXISTS app_state (

@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
-from mindtrail.web import jobs_api, life_api, review
+from mindtrail.web import admin_api, jobs_api, life_api, review
 
 ROUTES: list[tuple[str, re.Pattern, object]] = []
 
@@ -186,6 +186,29 @@ def _week_priorities(deps, args, body, query):
 @route("POST", "/api/week/summary")
 def _week_summary(deps, args, body, query):
     return review.handle_week_summary(deps, body)
+
+
+# --- people -----------------------------------------------------------------
+
+
+@route("GET", "/api/people")
+def _list_people(deps, args, body, query):
+    return admin_api.handle_list_people(deps.people, deps.jobs)
+
+
+@route("POST", "/api/people")
+def _create_person(deps, args, body, query):
+    return admin_api.handle_create_person(deps.people, body)
+
+
+@route("PATCH", f"/api/people/{_ID}")
+def _update_person(deps, args, body, query):
+    return admin_api.handle_update_person(deps.people, args[0], body)
+
+
+@route("DELETE", f"/api/people/{_ID}")
+def _delete_person(deps, args, body, query):
+    return admin_api.handle_delete_person(deps.people, args[0])
 
 
 # --- artwork ----------------------------------------------------------------
