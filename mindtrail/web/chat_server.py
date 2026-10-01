@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from mindtrail.ingest.researcher import Researcher
 from mindtrail.integrations.google_calendar import GoogleCalendarClient
+from mindtrail.integrations.google_sheets import SheetsClient
 from mindtrail.llm import LLMClient
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.app_state import AppState
@@ -89,6 +90,7 @@ class Deps:
         self.jobs = JobStore(db_path)
         self.tasks = TaskStore(db_path)
         self.state = AppState(db_path)
+        self.sheets = SheetsClient()
         # app_id -> [{subject, received_at, label}], set once Gmail exists.
         self.job_emails = None
 

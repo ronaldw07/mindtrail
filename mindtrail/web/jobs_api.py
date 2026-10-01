@@ -9,7 +9,12 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import date, timedelta
 
+from mindtrail.ingest.job_import import apply_plan, plan_import
 from mindtrail.ingest.job_posting import add_from_link
+from mindtrail.integrations.google_api import GoogleAuthError, GoogleFetchError
+from mindtrail.llm import LLMError
+from mindtrail.organize.app_state import AppState
+from mindtrail.organize.db import now_iso
 from mindtrail.organize.jobs import CLOSED, PIPELINE, STAGES, Application, JobStore
 from mindtrail.organize.tasks import Task, TaskStore
 
@@ -38,12 +43,18 @@ def pipeline_counts(apps: list[Application], today: date) -> dict:
     }
 
 
-def handle_list_jobs(jobs: JobStore, tasks: TaskStore, emails_for=None) -> dict:
+def handle_list_jobs(
+    jobs: JobStore, tasks: TaskStore, emails_for=None, state: AppState | None = None
+) -> dict:
     """Every application with its tasks and (once Gmail is connected) the
     subject/date of each matched email. `emails_for(app_id)` is optional
     so this works before the email scan exists or is connected."""
     apps = jobs.all()
     return {
+        "sheet": {
+            "link": state.get(SHEET_LINK_KEY, "") if state else "",
+            "synced_at": state.get(SHEET_SYNCED_KEY, "") if state else "",
+        },
         "stages": list(STAGES),
         "pipeline": list(PIPELINE),
         "closed": list(CLOSED),
@@ -53,6 +64,31 @@ def handle_list_jobs(jobs: JobStore, tasks: TaskStore, emails_for=None) -> dict:
         ],
         "counts": pipeline_counts(apps, date.today()),
     }
+
+
+SHEET_LINK_KEY = "job_sheet_link"
+SHEET_SYNCED_KEY = "job_sheet_synced_at"
+SHEET_MAPPINGS_KEY = "job_sheet_mappings"
+
+
+def handle_import_sheet(jobs: JobStore, state: AppState, llm, sheets, body: dict) -> dict:
+    """Preview (dry_run) or apply an import from a linked Google Sheet.
+    With no link in the body, re-syncs the last applied one."""
+    link = str(body.get("link") or "").strip() or state.get(SHEET_LINK_KEY, "")
+    if not link:
+        return {"error": "paste your Google Sheet's link first"}
+    dry_run = bool(body.get("dry_run"))
+    cache = state.get(SHEET_MAPPINGS_KEY, {})
+    try:
+        plan = plan_import(sheets.rows(link), jobs, llm, cache)
+    except (GoogleAuthError, GoogleFetchError, LLMError, ValueError) as exc:
+        return {"error": str(exc)}
+    state.set(SHEET_MAPPINGS_KEY, cache)
+    if not dry_run:
+        apply_plan(plan, jobs)
+        state.set(SHEET_LINK_KEY, link)
+        state.set(SHEET_SYNCED_KEY, now_iso())
+    return {"summary": plan.summary(), "applied": not dry_run}
 
 
 def handle_create_job(jobs: JobStore, body: dict) -> dict:

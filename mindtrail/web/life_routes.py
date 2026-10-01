@@ -44,12 +44,17 @@ _ID = r"([A-Za-z0-9-]+)"
 
 @route("GET", "/api/jobs")
 def _list_jobs(deps, args, body, query):
-    return jobs_api.handle_list_jobs(deps.jobs, deps.tasks, deps.job_emails)
+    return jobs_api.handle_list_jobs(deps.jobs, deps.tasks, deps.job_emails, deps.state)
 
 
 @route("POST", "/api/jobs")
 def _create_job(deps, args, body, query):
     return jobs_api.handle_create_job(deps.jobs, body)
+
+
+@route("POST", "/api/jobs/sheet")
+def _import_sheet(deps, args, body, query):
+    return jobs_api.handle_import_sheet(deps.jobs, deps.state, deps.llm, deps.sheets, body)
 
 
 @route("POST", "/api/jobs/link")
