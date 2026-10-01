@@ -29,10 +29,12 @@ since Chroma embeds the document text once, at write time).
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
 from mindtrail.advice.highlights import Highlight, highlights_to_json
+from mindtrail.organize.life_data import LIFE_FILE, load_tables
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.conversations import Conversation, ConversationStore
 from mindtrail.organize.profile import ProfileStore
@@ -277,6 +279,20 @@ def _import_notes(root: Path, store: MemoryStore, overwrite: bool) -> ImportSumm
     return ImportSummary(created=1)
 
 
+def _import_life(root: Path, db_path: str | None, overwrite: bool) -> ImportSummary:
+    path = root / LIFE_FILE
+    if not path.exists():
+        return ImportSummary()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return ImportSummary(failed=1, warnings=(f"{path}: could not parse ({exc})",))
+    if not isinstance(data, dict):
+        return ImportSummary(failed=1, warnings=(f"{path}: expected a JSON object",))
+    created, skipped, failed, warnings = load_tables(db_path, data, overwrite)
+    return ImportSummary(created, skipped, failed, tuple(warnings))
+
+
 def import_from_directory(
     root_dir: str,
     store: MemoryStore,
@@ -300,4 +316,5 @@ def import_from_directory(
     total += _import_conversations(root, chats, store, name_to_id, overwrite)
     total += _import_profile(root, profile, overwrite)
     total += _import_notes(root, store, overwrite)
+    total += _import_life(root, projects.path, overwrite)
     return total

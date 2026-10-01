@@ -25,6 +25,7 @@ from mindtrail import config
 from mindtrail.advice.highlights import highlights_from_json
 from mindtrail.memory.store import Entry, MemoryStore
 from mindtrail.organize.conversations import Conversation, ConversationStore
+from mindtrail.organize.life_data import LIFE_FILE, dump_tables
 from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import Project, ProjectStore
 from mindtrail.organize.roadmaps import Roadmap, RoadmapNode, RoadmapNodeStore, RoadmapStore
@@ -136,6 +137,11 @@ def build_notes_file(orphaned_entries: list[Entry]) -> ExportFile:
             )
         body = "\n\n".join(sections)
     return ExportFile("notes.md", _render(frontmatter, body))
+
+
+def build_life_file(db_path: str | None) -> ExportFile:
+    """Jobs, tasks, and the other structured tables - see life_data.py."""
+    return ExportFile(LIFE_FILE, json.dumps(dump_tables(db_path), indent=2) + "\n")
 
 
 # --- conversations ------------------------------------------------------
@@ -303,6 +309,7 @@ def collect_export_files(
     if project_id is None:
         files.append(build_profile_file(profile))
         files.append(build_notes_file(by_conversation.get("", [])))
+        files.append(build_life_file(projects.path))
         target_projects = projects.all()
         conversations = chats.all()
     else:

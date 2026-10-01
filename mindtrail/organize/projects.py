@@ -42,6 +42,12 @@ class ProjectStore:
     def __init__(self, path: str | None = None):
         self._path = path
 
+    @property
+    def path(self) -> str | None:
+        """The SQLite file this store reads - export/import use it to reach
+        the other tables in the same database (see organize/life_data.py)."""
+        return self._path
+
     def create(self, name: str) -> Project:
         clean = name.strip()
         if not clean:

@@ -95,6 +95,60 @@ CREATE TABLE IF NOT EXISTS deleted_nodes (
     payload    TEXT NOT NULL,
     deleted_at TEXT NOT NULL
 );
+
+-- Dates below (applied_at, deadline, due_date) are bare local YYYY-MM-DD
+-- strings, same convention as roadmap_nodes.due_date.
+CREATE TABLE IF NOT EXISTS applications (
+    id           TEXT PRIMARY KEY,
+    company      TEXT NOT NULL,
+    role         TEXT NOT NULL DEFAULT '',
+    url          TEXT NOT NULL DEFAULT '',
+    location     TEXT NOT NULL DEFAULT '',
+    -- saved | applied | oa | interview | offer | rejected | withdrawn
+    stage        TEXT NOT NULL DEFAULT 'applied',
+    applied_at   TEXT NOT NULL DEFAULT '',
+    deadline     TEXT NOT NULL DEFAULT '',
+    notes        TEXT NOT NULL DEFAULT '',
+    -- manual | link | sheet | email
+    source       TEXT NOT NULL DEFAULT 'manual',
+    needs_review INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id                TEXT PRIMARY KEY,
+    title             TEXT NOT NULL,
+    due_date          TEXT NOT NULL DEFAULT '',
+    done              INTEGER NOT NULL DEFAULT 0,
+    done_at           TEXT NOT NULL DEFAULT '',
+    application_id    TEXT REFERENCES applications(id) ON DELETE CASCADE,
+    area_id           TEXT NOT NULL DEFAULT '',
+    source_message_id TEXT NOT NULL DEFAULT '',
+    created_at        TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_application ON tasks(application_id);
+
+-- Every Gmail message the job scan has classified, so each one costs at
+-- most one model call ever. Subject and date are kept for the
+-- application's email history; the body never is.
+CREATE TABLE IF NOT EXISTS gmail_seen (
+    message_id     TEXT PRIMARY KEY,
+    application_id TEXT NOT NULL DEFAULT '',
+    label          TEXT NOT NULL DEFAULT '',
+    subject        TEXT NOT NULL DEFAULT '',
+    received_at    TEXT NOT NULL DEFAULT '',
+    seen_at        TEXT NOT NULL
+);
+
+-- Small named values that don't deserve a table each: last scan time,
+-- the linked sheet, the cached brief. Values are JSON text.
+CREATE TABLE IF NOT EXISTS app_state (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 

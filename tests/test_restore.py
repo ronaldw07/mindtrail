@@ -14,7 +14,9 @@ from mindtrail.organize.export import NONE_YET, build_conversation_file, export_
 from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.restore import parse_conversation_file
+from mindtrail.organize.jobs import JobStore
 from mindtrail.organize.restore_apply import import_from_directory
+from mindtrail.organize.tasks import TaskStore
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 
 
@@ -107,6 +109,12 @@ def _populate(store, chats, projects, roadmaps, nodes, profile):
     nodes.add(roadmap.id, "Offer accepted", status="done")
 
     profile.save("CS student at UCI, targeting backend roles.")
+
+    app = JobStore(projects.path).create(
+        "IBM", role="PM Intern", stage="interview", deadline="2026-10-08"
+    )
+    TaskStore(projects.path).add("Record the interview", "2026-10-07", application_id=app.id)
+    TaskStore(projects.path).add("Inbox item")
     return project, roadmap
 
 

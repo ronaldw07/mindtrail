@@ -166,7 +166,7 @@ def test_project_with_no_roadmap_exports_a_none_yet_roadmap(
 def test_export_with_nothing_at_all_does_not_crash(store, chats, projects, roadmaps, nodes, profile):
     files = collect_export_files(store, chats, projects, roadmaps, nodes, profile)
     paths = {f.path for f in files}
-    assert paths == {"profile.md", "notes.md"}
+    assert paths == {"profile.md", "notes.md", "life.json"}
 
 
 # --- conversation content -------------------------------------------------
