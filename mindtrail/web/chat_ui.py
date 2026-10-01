@@ -128,6 +128,7 @@ CHAT_HTML = """<!doctype html>
   <script src="/static/jobs.js"></script>
   <script src="/static/life.js"></script>
   <script src="/static/today.js"></script>
+  <script src="/static/focus.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>""".format(side_nav=_side_nav())

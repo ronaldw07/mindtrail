@@ -183,6 +183,17 @@ CREATE TABLE IF NOT EXISTS journal (
     updated_at TEXT NOT NULL
 );
 
+-- A finished focus session (pomodoro). Logged when the timer ends, so
+-- an abandoned one leaves nothing behind. started_at is UTC ISO.
+CREATE TABLE IF NOT EXISTS focus_sessions (
+    id         TEXT PRIMARY KEY,
+    started_at TEXT NOT NULL,
+    minutes    INTEGER NOT NULL,
+    label      TEXT NOT NULL DEFAULT '',
+    task_id    TEXT NOT NULL DEFAULT '',
+    area_id    TEXT NOT NULL DEFAULT ''
+);
+
 -- Small named values that don't deserve a table each: last scan time,
 -- the linked sheet, the cached brief. Values are JSON text.
 CREATE TABLE IF NOT EXISTS app_state (

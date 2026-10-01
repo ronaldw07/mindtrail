@@ -3281,6 +3281,7 @@
       {label: 'Write in journal', run: () => { closePalette(); openJournalView(); }},
       {label: 'Go to Profile', run: () => { closePalette(); openProfileView(); }},
       {label: 'Add a to-do', run: () => { closePalette(); quickAddTask(); }},
+      {label: 'Start a focus session', run: () => { closePalette(); startFocus(); }},
       {label: 'Add a job application', run: async () => {
         closePalette();
         await openJobsView();
@@ -3600,6 +3601,7 @@
   }
 
   restoreLastView();
+  resumeFocus();
   updateNav();
   loadSidebar();
   

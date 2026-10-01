@@ -12,6 +12,7 @@
     {id: 'mood', label: 'Mood & energy'},
     {id: 'week', label: 'Week ahead'},
     {id: 'pipeline', label: 'Job pipeline'},
+    {id: 'focus', label: 'Focus time'},
   ];
   const DEFAULT_LAYOUT = {order: TODAY_WIDGETS.map(w => w.id), hidden: [], art: true};
 
@@ -124,7 +125,8 @@
     const row = tEl('section', 't-glance');
     row.setAttribute('aria-label', 'At a glance');
     layout.order.filter(id => !layout.hidden.includes(id)).forEach(id => {
-      const w = {habits: habitRings, mood: moodChart, week: weekStrip, pipeline: pipelineTiles}[id];
+      const w = {habits: habitRings, mood: moodChart, week: weekStrip, pipeline: pipelineTiles,
+                 focus: focusTile}[id];
       const tile = w(summary, data);
       if (tile) row.appendChild(tile);
     });
@@ -278,6 +280,48 @@
     }
     tile.appendChild(strip);
     return tile;
+  }
+
+  // Minutes per day this week: one series, one hue, bars anchored to the
+  // baseline with rounded data-ends and 2px gaps (dataviz mark spec).
+  // The total is the headline; per-day values are on hover.
+  function focusTile(summary, data) {
+    const f = data.focus;
+    const tile = glanceTile('Focus this week', () => startFocus());
+    if (!f) return tile;
+    const head = tEl('div', 't-focus-head');
+    head.appendChild(tEl('span', 't-stat-num', fmtMinutes(f.total)));
+    head.appendChild(tEl('span', 't-stat-label', fmtMinutes(f.today) + ' today'));
+    tile.appendChild(head);
+    const W = 420, H = 56, GAP = 8, max = Math.max(...f.days, 60);
+    const bw = (W - GAP * 6) / 7;
+    const s = svg('svg', {viewBox: `0 0 ${W} ${H + 14}`, class: 't-bars', role: 'img',
+      'aria-label': 'Focus minutes per day this week'});
+    const todayIdx = (new Date().getDay() + 6) % 7;
+    'MTWTFSS'.split('').forEach((d, i) => {
+      const h = f.days[i] ? Math.max((f.days[i] / max) * H, 4) : 0;
+      const x = i * (bw + GAP);
+      if (h) {
+        const bar = svg('rect', {x, y: H - h, width: bw, height: h, rx: 4, class: 't-bar'});
+        const tip = svg('title');
+        tip.textContent = fmtMinutes(f.days[i]);
+        bar.appendChild(tip);
+        s.appendChild(bar);
+      }
+      s.appendChild(svg('line', {x1: x, x2: x + bw, y1: H, y2: H, class: 't-grid'}));
+      const label = svg('text', {x: x + bw / 2, y: H + 12, class: 't-axis' + (i === todayIdx ? ' today' : '')});
+      label.textContent = d;
+      s.appendChild(label);
+    });
+    tile.appendChild(s);
+    const start = tEl('button', 't-link', prefs.get('focusTimer', null) ? 'Running…' : 'Start a session');
+    start.onclick = e => { e.stopPropagation(); startFocus(); };
+    tile.appendChild(start);
+    return tile;
+  }
+
+  function fmtMinutes(m) {
+    return m < 60 ? m + ' min' : Math.floor(m / 60) + 'h' + (m % 60 ? ' ' + (m % 60) + 'm' : '');
   }
 
   function pipelineTiles(summary) {
@@ -595,9 +639,10 @@
       view.innerHTML = '';
       view.appendChild(skeletonBlock(6));
     }
-    const [data, summary] = await Promise.all([
-      api('/api/dashboard'), api('/api/daily-summary'),
+    const [data, summary, focus] = await Promise.all([
+      api('/api/dashboard'), api('/api/daily-summary'), api('/api/focus/week'),
     ]);
+    data.focus = focus;
     const layout = todayLayout();
     const page = tEl('div', 't-page');
     page.appendChild(masthead(layout));

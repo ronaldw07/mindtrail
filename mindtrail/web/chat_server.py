@@ -29,6 +29,7 @@ from mindtrail.organize.app_state import AppState
 from mindtrail.organize.areas import AreaStore
 from mindtrail.organize.conversations import ConversationStore
 from mindtrail.organize.email_log import EmailLog
+from mindtrail.organize.focus import FocusStore
 from mindtrail.organize.habits import HabitStore
 from mindtrail.organize.journal import JournalStore
 from mindtrail.organize.jobs import JobStore
@@ -57,6 +58,7 @@ STATIC_FILES = {
     "/static/jobs.js": ("jobs.js", "application/javascript; charset=utf-8"),
     "/static/life.js": ("life.js", "application/javascript; charset=utf-8"),
     "/static/today.js": ("today.js", "application/javascript; charset=utf-8"),
+    "/static/focus.js": ("focus.js", "application/javascript; charset=utf-8"),
 }
 
 
@@ -106,6 +108,7 @@ class Deps:
         self.habits = HabitStore(db_path)
         self.journal = JournalStore(db_path, store)
         self.artwork = ArtworkClient(self.state)
+        self.focus = FocusStore(db_path)
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)
         self.job_emails = self.email_log.for_application

@@ -23,7 +23,7 @@ AREA_PALETTE = ("#3987e5", "#d95926", "#199e70", "#c98500", "#d55181",
 OVERFLOW_COLOR = "#8a8f98"
 DEFAULT_AREAS = tuple(zip(("Career", "School", "Health", "Social", "Money"), AREA_PALETTE))
 SEEDED_KEY = "areas_seeded"
-AREA_TABLES = ("projects", "tasks", "habits")
+AREA_TABLES = ("projects", "tasks", "habits", "focus_sessions")
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 

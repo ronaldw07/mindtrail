@@ -216,6 +216,7 @@
         if (due) await update({due_date: due});
       }},
       ...(t.due_date ? [{label: 'Clear due date', run: () => update({due_date: ''})}] : []),
+      {label: 'Focus on this', run: () => startFocus({label: t.title, task_id: t.id})},
       {label: 'Set life area…', run: async () => {
         const areaId = await pickArea('Life area', t.area_id);
         if (areaId !== null) await update({area_id: areaId});

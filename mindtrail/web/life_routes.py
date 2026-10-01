@@ -157,6 +157,19 @@ def _save_journal(deps, args, body, query):
     return life_api.handle_save_journal(deps.journal, body)
 
 
+# --- focus ------------------------------------------------------------------
+
+
+@route("POST", "/api/focus")
+def _log_focus(deps, args, body, query):
+    return life_api.handle_log_focus(deps.focus, deps.tasks, body)
+
+
+@route("GET", "/api/focus/week")
+def _focus_week(deps, args, body, query):
+    return life_api.handle_focus_week(deps.focus)
+
+
 # --- artwork ----------------------------------------------------------------
 
 

@@ -401,3 +401,18 @@
     .t-item.finished .t-item-title { color: var(--text-2); }
     .t-item.finished .t-item-mark::after { background: var(--success); }
     .t-carry { align-self: flex-start; margin-top: 0.7rem; }
+
+    /* --- focus timer --- */
+    #focus-pill { margin-left: auto; display: flex; align-items: center; gap: 0.55rem;
+                  background: var(--surface-chip); border: 1px solid var(--border);
+                  border-radius: 999px; padding: 0.2rem 0.3rem 0.2rem 0.8rem;
+                  font-size: var(--fs-sm); }
+    .focus-label { color: var(--text-2); max-width: 220px; overflow: hidden;
+                   text-overflow: ellipsis; white-space: nowrap; }
+    .focus-time { color: var(--text-bright); font-variant-numeric: tabular-nums; font-weight: 600; }
+    .focus-stop { font-size: var(--fs-xs); }
+    .t-focus-head { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.4rem; }
+    .t-bars { display: block; width: 100%; height: auto; margin-bottom: 0.3rem; }
+    .t-bar { fill: #3987e5; }
+    .t-axis { fill: var(--text-muted); font-size: 10px; text-anchor: middle; }
+    .t-axis.today { fill: var(--text-bright); font-weight: 600; }

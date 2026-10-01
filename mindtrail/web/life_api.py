@@ -7,7 +7,7 @@ stores, returning dicts, with bad input as {"error": ...}.
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 from mindtrail.organize.areas import AreaStore
 from mindtrail.organize.habits import (
@@ -18,6 +18,7 @@ from mindtrail.organize.habits import (
     this_week_count,
     week_start,
 )
+from mindtrail.organize.focus import FocusStore
 from mindtrail.organize.journal import JournalEntry, JournalStore
 
 
@@ -189,3 +190,47 @@ def handle_save_journal(journal: JournalStore, body: dict, today: date | None = 
     except (ValueError, TypeError) as exc:
         return {"error": str(exc)}
     return {"entry": _journal_json(entry, day)}
+
+
+# --- focus ------------------------------------------------------------------
+
+
+def handle_log_focus(focus: FocusStore, tasks, body: dict) -> dict:
+    """Log a finished session. Without an explicit area, a session on a
+    to-do takes that to-do's area."""
+    task_id = str(body.get("task_id") or "")
+    area_id = str(body.get("area_id") or "")
+    if task_id and not area_id:
+        task = tasks.get(task_id)
+        area_id = task.area_id if task else ""
+    try:
+        session = focus.log(str(body.get("started_at", "")), body.get("minutes", 0),
+                            str(body.get("label", "")), task_id, area_id)
+    except (ValueError, TypeError) as exc:
+        return {"error": str(exc)}
+    return {"session": asdict(session)}
+
+
+def focus_week(focus: FocusStore, today: date) -> dict:
+    """Minutes per day (Monday first) and per area for today's week."""
+    start = week_start(today)
+    to_utc = lambda d: datetime.combine(d, time()).astimezone().astimezone(timezone.utc).isoformat()
+    sessions = focus.between(to_utc(start), to_utc(start + timedelta(days=7)))
+    days = [0] * 7
+    by_area: dict[str, int] = {}
+    for s in sessions:
+        local = datetime.fromisoformat(s.started_at).astimezone().date()
+        days[(local - start).days] += s.minutes
+        by_area[s.area_id] = by_area.get(s.area_id, 0) + s.minutes
+    return {
+        "week_start": start.isoformat(),
+        "days": days,
+        "today": days[(today - start).days],
+        "total": sum(days),
+        "by_area": [{"area_id": k, "minutes": v}
+                    for k, v in sorted(by_area.items(), key=lambda kv: -kv[1])],
+    }
+
+
+def handle_focus_week(focus: FocusStore, today: date | None = None) -> dict:
+    return focus_week(focus, today or date.today())
