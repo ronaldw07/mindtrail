@@ -11,15 +11,17 @@ from mindtrail.organize.app_state import AppState
 from mindtrail.organize.db import connect
 from mindtrail.organize.projects import ProjectStore
 
-# Muted hues that read on the dark surfaces and stay distinguishable from
-# each other; checked against --surface-raised for a visible dot.
-DEFAULT_AREAS = (
-    ("Career", "#6d8cff"),
-    ("School", "#c8a44a"),
-    ("Health", "#3fb27f"),
-    ("Social", "#e07a9a"),
-    ("Money", "#9b7fe0"),
-)
+# The dataviz skill's validated dark categorical slots, in its fixed order.
+# The first five were re-run through its validator against both of
+# Mind Trail's surfaces (#1a1a1a, #242424): lightness band, chroma, CVD and
+# normal-vision separation, and 3:1 contrast all pass. Areas become chart
+# series (time per area), so these are not just decoration - don't
+# hand-pick replacements without re-running the validator.
+AREA_PALETTE = ("#3987e5", "#d95926", "#199e70", "#c98500", "#d55181",
+                "#008300", "#9085e9", "#e66767")
+# Past the eighth area, a neutral rather than a cycled hue.
+OVERFLOW_COLOR = "#8a8f98"
+DEFAULT_AREAS = tuple(zip(("Career", "School", "Health", "Social", "Money"), AREA_PALETTE))
 SEEDED_KEY = "areas_seeded"
 AREA_TABLES = ("projects", "tasks", "habits")
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -71,8 +73,12 @@ class AreaStore:
             row = conn.execute("SELECT * FROM areas WHERE id = ?", (area_id,)).fetchone()
         return _to_area(row) if row else None
 
-    def create(self, name: str, color: str, sort: int | None = None) -> Area:
-        name, color = _clean(name, color)
+    def next_color(self) -> str:
+        used = {a.color for a in self.all()}
+        return next((c for c in AREA_PALETTE if c not in used), OVERFLOW_COLOR)
+
+    def create(self, name: str, color: str = "", sort: int | None = None) -> Area:
+        name, color = _clean(name, color or self.next_color())
         with connect(self._path) as conn:
             if sort is None:
                 sort = conn.execute("SELECT COALESCE(MAX(sort), -1) + 1 FROM areas").fetchone()[0]

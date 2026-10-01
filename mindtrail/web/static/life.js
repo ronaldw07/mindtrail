@@ -43,7 +43,7 @@
     const c = card('Life areas', '+ Add', async () => {
       const name = await askText('New life area', '', 'e.g. Family');
       if (!name) return;
-      const res = await jsonSend('/api/areas', {name, color: '#8a8f98'});
+      const res = await jsonSend('/api/areas', {name});
       if (res.error) { toast(res.error, {error: true}); return; }
       await loadAreas();
       c.replaceWith(areasCard());

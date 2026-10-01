@@ -3,6 +3,7 @@
 import pytest
 
 from mindtrail.organize.areas import DEFAULT_AREAS, AreaStore
+from mindtrail.organize.conversations import ConversationStore
 from mindtrail.organize.db import initialize
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.tasks import TaskStore
@@ -69,7 +70,15 @@ def test_handlers_and_sidebar_report_areas(db, areas):
     project = ProjectStore(db).create("Recruiting")
     assert life_api.handle_set_project_area(areas, project.id, {"area_id": career["id"]}) == {"ok": True}
     assert life_api.handle_list_areas(areas)["project_areas"] == {project.id: career["id"]}
-    sidebar = api.handle_sidebar(ProjectStore(db), __import__(
-        "mindtrail.organize.conversations", fromlist=["ConversationStore"]).ConversationStore(db))
+    sidebar = api.handle_sidebar(ProjectStore(db), ConversationStore(db))
     assert sidebar["projects"][0]["area_id"] == career["id"]
     assert "error" in life_api.handle_update_area(areas, career["id"], {"name": "", "color": "#000000"})
+
+
+def test_new_areas_take_the_next_unused_palette_slot(areas):
+    from mindtrail.organize.areas import AREA_PALETTE, OVERFLOW_COLOR
+    areas.ensure_seeded()
+    assert areas.create("Family").color == AREA_PALETTE[5]
+    for i in range(2):
+        areas.create(f"x{i}")
+    assert areas.create("ninth").color == OVERFLOW_COLOR
