@@ -1164,8 +1164,18 @@
 
   const VIEW_NAMES = ['project', 'roadmap', 'profile', 'dashboard', 'jobs', 'tasks', 'habits', 'journal'];
 
+  // Which sidebar button lights up for each view.
+  const VIEW_NAV = {dashboard: 'open-today', tasks: 'open-tasks', habits: 'open-habits',
+                    journal: 'open-journal', jobs: 'open-jobs', profile: 'open-profile'};
+
   function setActiveView(name) {
     VIEW_NAMES.forEach(v => $(v + '-view').classList.toggle('open', name === v));
+    Object.entries(VIEW_NAV).forEach(([view, id]) => {
+      const btn = $(id);
+      btn.classList.toggle('active', view === name);
+      if (view === name) btn.setAttribute('aria-current', 'page');
+      else btn.removeAttribute('aria-current');
+    });
     log.style.display = name === 'chat' ? '' : 'none';
     $('composer').style.display = name === 'chat' ? '' : 'none';
   }
@@ -2873,6 +2883,7 @@
 
   $('open-profile').onclick = () => openProfileView();
   $('open-jobs').onclick = () => openJobsView();
+  $('open-today').onclick = () => openDashboardView();
   $('open-tasks').onclick = () => openTasksView();
   $('open-habits').onclick = () => openHabitsView();
   $('open-journal').onclick = () => openJournalView();

@@ -10,6 +10,55 @@ render in the OS light theme regardless of the page, which breaks the
 dark UI. Everything goes through the in-page modal below.
 """
 
+# Sidebar buttons: (id, label, svg inner markup), grouped - navigation,
+# capture, then settings - with a small gap between groups.
+SIDE_GROUPS = (
+    (
+        ("open-today", "Today",
+         '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4'
+         'M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+        ("open-tasks", "To-dos", '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>'),
+        ("open-habits", "Habits",
+         '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/>'
+         '<path d="M8 14h2"/><path d="M14 14h2"/>'),
+        ("open-journal", "Journal",
+         '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8"/><path d="M8 13h6"/>'),
+        ("open-jobs", "Jobs",
+         '<rect x="3" y="7" width="18" height="13" rx="2"/>'
+         '<path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+    ),
+    (
+        ("add-note", "Note",
+         '<path d="M4 19.5V6a2 2 0 0 1 2-2h9l5 5v10.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/>'
+         '<path d="M14 4v5h5"/><path d="M8 13h8"/><path d="M8 17h5"/>'),
+        ("save-url", "Save a link",
+         '<path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07l-1.5 1.5"/>'
+         '<path d="M14 11a5 5 0 0 0-7.07 0l-2.83 2.83a5 5 0 0 0 7.07 7.07l1.5-1.5"/>'),
+    ),
+    (
+        ("open-profile", "Profile",
+         '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>'),
+        ("export-data", "Export",
+         '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
+         '<path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>'),
+    ),
+)
+
+
+def _side_nav() -> str:
+    groups = []
+    for group in SIDE_GROUPS:
+        buttons = "\n".join(
+            f'        <button class="side-btn" id="{bid}">'
+            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+            f'style="vertical-align:-2px;margin-right:0.4rem;">{paths}</svg>{label}</button>'
+            for bid, label, paths in group
+        )
+        groups.append(f'      <div class="side-group">\n{buttons}\n      </div>')
+    return "\n".join(groups)
+
+
 CHAT_HTML = """<!doctype html>
 <html>
 <head>
@@ -27,65 +76,7 @@ CHAT_HTML = """<!doctype html>
                aria-label="Search everything stored">
         <div id="search-results"></div>
       </div>
-      <button class="side-btn" id="open-profile">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             style="vertical-align:-2px;margin-right:0.4rem;">
-          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-        </svg>Profile
-      </button>
-      <button class="side-btn" id="open-tasks">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             style="vertical-align:-2px;margin-right:0.4rem;">
-          <circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>
-        </svg>To-dos
-      </button>
-      <button class="side-btn" id="open-habits">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             style="vertical-align:-2px;margin-right:0.4rem;">
-          <rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/><path d="M8 14h2"/><path d="M14 14h2"/>
-        </svg>Habits
-      </button>
-      <button class="side-btn" id="open-journal">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             style="vertical-align:-2px;margin-right:0.4rem;">
-          <path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8"/><path d="M8 13h6"/>
-        </svg>Journal
-      </button>
-      <button class="side-btn" id="open-jobs">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             style="vertical-align:-2px;margin-right:0.4rem;">
-          <rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-        </svg>Jobs
-      </button>
-      <button class="side-btn" id="add-note">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             style="vertical-align:-2px;margin-right:0.4rem;">
-          <path d="M4 19.5V6a2 2 0 0 1 2-2h9l5 5v10.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/>
-          <path d="M14 4v5h5"/><path d="M8 13h8"/><path d="M8 17h5"/>
-        </svg>Note
-      </button>
-      <button class="side-btn" id="save-url">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             style="vertical-align:-2px;margin-right:0.4rem;">
-          <path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07l-1.5 1.5"/>
-          <path d="M14 11a5 5 0 0 0-7.07 0l-2.83 2.83a5 5 0 0 0 7.07 7.07l1.5-1.5"/>
-        </svg>Save a link
-      </button>
-      <button class="side-btn" id="export-data">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             style="vertical-align:-2px;margin-right:0.4rem;">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>
-        </svg>Export
-      </button>
+{side_nav}
       <div id="tree"></div>
     </aside>
     <main>
@@ -139,4 +130,4 @@ CHAT_HTML = """<!doctype html>
   <script src="/static/today.js"></script>
   <script src="/static/app.js"></script>
 </body>
-</html>"""
+</html>""".format(side_nav=_side_nav())

@@ -187,7 +187,8 @@
       tile.appendChild(tEl('div', 't-empty', 'Rate a day in the journal to see a trend.'));
       return tile;
     }
-    const W = 260, H = 84, PADL = 6, PADR = 46, PADT = 8, PADB = 8;
+    // Drawn at roughly its on-screen size so 11px labels stay 11px.
+    const W = 400, H = 96, PADL = 6, PADR = 56, PADT = 10, PADB = 10;
     const today = localISO(new Date());
     const x = i => PADL + (i / 13) * (W - PADL - PADR);
     const y = v => PADT + (5 - v) / 4 * (H - PADT - PADB);
@@ -263,8 +264,9 @@
       const day = addDays(today, i);
       const items = byDay[day] || [];
       const col = tEl('div', 't-week-day' + (i === 0 ? ' today' : ''));
-      col.appendChild(tEl('div', 't-week-name', i === 0 ? 'Today'
-        : new Date(day + 'T12:00:00').toLocaleDateString(undefined, {weekday: 'short'})));
+      col.appendChild(tEl('div', 't-week-name',
+        new Date(day + 'T12:00:00').toLocaleDateString(undefined, {weekday: 'short'})));
+      if (i === 0) col.setAttribute('aria-label', 'Today');
       col.appendChild(tEl('div', 't-week-count', items.length ? String(items.length) : '–'));
       col.title = items.length ? items.join('\n') : 'Nothing due';
       strip.appendChild(col);

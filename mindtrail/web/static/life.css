@@ -101,7 +101,7 @@
     .task-body { min-width: 0; }
     .task-title { font-size: var(--fs-base); color: var(--text); }
     .task-due { font-size: var(--fs-xs); color: var(--text-muted); }
-    .task-row.done .task-title, .brief-todo.done .brief-todo-title {
+    .task-row.done .task-title {
       color: var(--text-faint); text-decoration: line-through; }
     .task-add { display: flex; gap: 0.35rem; margin-top: 0.4rem; }
     .task-add-date { width: 9.5rem; flex-shrink: 0; }
@@ -121,9 +121,6 @@
     .done > .task-check::after, .task-check[aria-pressed="true"]::after {
       content: ""; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px;
       border: solid var(--text-bright); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
-    .brief-todo .task-check { margin-top: 0.2rem; }
-    /* Centred in the same 16px column as the checks, so titles line up. */
-    .brief-todo .brief-todo-dot { margin-left: 4px; margin-right: 4px; }
 
     @media (prefers-reduced-motion: reduce) {
       .job-card, .task-check { transition: border-color 0.12s ease, background-color 0.12s ease; }
@@ -267,7 +264,7 @@
     .t-link:hover { text-decoration: underline; }
 
     /* --- at a glance --- */
-    .t-glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    .t-glance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
                 gap: 0.9rem; margin: 1.8rem 82px 0.5rem; }
     .t-customize { grid-column: 1 / -1; justify-self: end; font-size: var(--fs-sm);
                    color: var(--text-muted); }
@@ -394,3 +391,8 @@
     @media (prefers-reduced-motion: reduce) {
       .t-sticker, .t-sticker:hover, .t-sticker:active { transition: none; transform: rotate(-8deg); }
     }
+
+    /* --- sidebar groups --- */
+    .side-group { margin-bottom: 0.55rem; }
+    .side-group .side-btn { margin-bottom: 0.1rem; }
+    .side-btn.active { background: var(--surface); color: var(--text-bright); }
