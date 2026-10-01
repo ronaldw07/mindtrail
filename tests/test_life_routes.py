@@ -87,3 +87,9 @@ def test_life_routes_require_login_when_a_token_is_set(monkeypatch, deps):
                              ("PATCH", "/api/tasks/x"), ("DELETE", "/api/jobs/x")):
             resp, _ = request(p, method, path, {})
             assert resp.status == 401, (method, path)
+
+
+def test_unknown_routes_answer_404_for_every_method(port):
+    for method in ("GET", "POST", "PATCH", "DELETE"):
+        resp, _ = request(port, method, "/api/no-such-thing", {"x": 1})
+        assert resp.status == 404, method

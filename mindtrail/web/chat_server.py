@@ -180,6 +180,7 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
             self._json({"ok": True}, headers={"Set-Cookie": cookie})
 
         def _body(self) -> bytes:
+            self._body_read = True
             length = int(self.headers.get("Content-Length", 0))
             if length > MAX_UPLOAD_BYTES:
                 return b""
@@ -196,6 +197,11 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
             return unquote(urlparse(self.path).path[len(prefix) :])
 
         def _not_found(self) -> None:
+            # Read any unread body first: closing with request bytes still
+            # in the socket makes the OS send a reset, and the client sees
+            # "connection reset" instead of this 404.
+            if not getattr(self, "_body_read", False):
+                self._body()
             self.send_response(404)
             self.end_headers()
 
