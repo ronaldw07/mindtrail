@@ -7,7 +7,7 @@ handle_daily_summary, which owns the roadmap half of the same summary.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 from mindtrail.organize.habits import DAILY, HabitStore, streak, this_week_count
 from mindtrail.organize.jobs import JobStore
@@ -90,6 +90,19 @@ def habits_today(habits: HabitStore, today: date) -> list[dict]:
             "this_week": this_week_count(done, today),
         })
     return items
+
+
+def local_day_start_utc(day: date) -> str:
+    """Local midnight of `day` as a UTC ISO string - the same format
+    done_at is stored in (organize/db.now_iso), so it compares as text."""
+    return datetime.combine(day, time()).astimezone().astimezone(timezone.utc).isoformat()
+
+
+def finished_today(tasks: TaskStore, jobs: JobStore, today: date) -> list[dict]:
+    """To-dos checked off since local midnight, for the evening wind-down."""
+    companies = {a.id: a.company for a in jobs.all()}
+    return [{"task_id": t.id, "title": t.title, "company": companies.get(t.application_id, "")}
+            for t in tasks.done_since(local_day_start_utc(today))]
 
 
 MOOD_DAYS = 14

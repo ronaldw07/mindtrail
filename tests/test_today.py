@@ -167,3 +167,36 @@ def test_handler_uses_the_cache(s):
                                         None, s.tasks, s.jobs, s.state)
     assert result["text"] == "Do the IBM prep first." and llm.calls == 1
     assert s.state.get(CACHE_KEY)["text"] == "Do the IBM prep first."
+
+
+# --- evening wind-down ------------------------------------------------------
+
+
+def test_finished_today_lists_tasks_checked_off_since_local_midnight(s):
+    from mindtrail.organize.db import connect
+    from mindtrail.web.today import finished_today, local_day_start_utc
+    done = s.tasks.add("Done today")
+    s.tasks.update(done.id, {"done": True})
+    old = s.tasks.add("Done yesterday")
+    s.tasks.update(old.id, {"done": True})
+    with connect(s.tasks._path) as conn:
+        conn.execute("UPDATE tasks SET done_at = ? WHERE id = ?",
+                     ("2000-01-01T00:00:00+00:00", old.id))
+    assert [t["title"] for t in finished_today(s.tasks, s.jobs, TODAY)] == ["Done today"]
+    assert local_day_start_utc(TODAY).endswith("+00:00")
+
+
+def test_roll_over_moves_only_open_tasks_due_by_today(s):
+    from mindtrail.web.jobs_api import handle_roll_tasks
+    late = s.tasks.add("late", iso(-2))
+    due = s.tasks.add("due", iso(0))
+    future = s.tasks.add("future", iso(3))
+    undated = s.tasks.add("undated")
+    finished = s.tasks.add("finished", iso(0))
+    s.tasks.update(finished.id, {"done": True})
+
+    result = handle_roll_tasks(s.tasks, {}, TODAY)
+    assert result == {"moved": 2, "to": iso(1)}
+    assert [s.tasks.get(t.id).due_date for t in (late, due, future, undated, finished)] == [
+        iso(1), iso(1), iso(3), "", iso(0)]
+    assert "error" in handle_roll_tasks(s.tasks, {"to": iso(0)}, TODAY)

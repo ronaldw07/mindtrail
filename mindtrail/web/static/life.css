@@ -396,3 +396,8 @@
     .side-group { margin-bottom: 0.55rem; }
     .side-group .side-btn { margin-bottom: 0.1rem; }
     .side-btn.active { background: var(--surface); color: var(--text-bright); }
+
+    /* --- evening wind-down --- */
+    .t-item.finished .t-item-title { color: var(--text-2); }
+    .t-item.finished .t-item-mark::after { background: var(--success); }
+    .t-carry { align-self: flex-start; margin-top: 0.7rem; }

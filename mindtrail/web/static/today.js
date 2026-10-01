@@ -42,6 +42,11 @@
 
   // ---------- masthead ----------
 
+  // From 6pm Today turns into the evening wind-down: what got done, what
+  // to carry over, and the journal - the counterpart to the morning brief.
+  const EVENING_HOUR = 18;
+  const isEvening = () => new Date().getHours() >= EVENING_HOUR;
+
   function masthead(layout) {
     const now = new Date();
     const wrap = tEl('header', 't-masthead');
@@ -53,7 +58,7 @@
     const title = tEl('h1', 't-title');
     title.appendChild(tEl('span', 't-title-the', 'The'));
     title.appendChild(tEl('span', 't-title-main',
-      now.toLocaleDateString(undefined, {weekday: 'long'}) + ' Brief'));
+      now.toLocaleDateString(undefined, {weekday: 'long'}) + (isEvening() ? ' Wind-down' : ' Brief')));
     art.appendChild(title);
     wrap.appendChild(date);
     wrap.appendChild(art);
@@ -524,6 +529,36 @@
     return box;
   }
 
+  function finishedList(summary) {
+    const list = tEl('div', 't-list');
+    const habits = (summary.habits || []).filter(h => h.done_today);
+    (summary.finished_today || []).forEach(t => list.appendChild(todoItem({
+      title: t.title, sub: t.company ? t.company + ' · Done' : 'Done'})));
+    habits.forEach(h => list.appendChild(todoItem({title: h.name, sub: 'Habit · Done'})));
+    list.querySelectorAll('.t-item').forEach(r => r.classList.add('finished'));
+    if (!list.childNodes.length) {
+      list.appendChild(tEl('div', 't-empty', 'Nothing checked off yet — that’s fine. Rest counts.'));
+    }
+    return list;
+  }
+
+  function carryOver(summary) {
+    const open = (summary.tasks || []).filter(t => t.bucket === 'overdue' || t.bucket === 'today');
+    if (!open.length) return null;
+    const box = tEl('div', 't-list');
+    open.forEach(t => box.appendChild(todoItem({title: t.title, overdue: t.bucket === 'overdue',
+      sub: (t.company ? t.company + ' · ' : '') + (BUCKET_TAGS[t.bucket] || '')})));
+    const btn = tEl('button', 'btn-primary jobs-btn t-carry', 'Move all to tomorrow');
+    btn.onclick = async () => {
+      const res = await jsonSend('/api/tasks/roll', {});
+      if (res.error) { toast(res.error, {error: true}); return; }
+      toast('Moved ' + res.moved + ' to tomorrow');
+      openDashboardView();
+    };
+    box.appendChild(btn);
+    return box;
+  }
+
   function laterList(data) {
     const list = tEl('div', 't-list');
     const agenda = data.agenda || {};
@@ -569,13 +604,20 @@
     page.appendChild(underline(summary));
     page.appendChild(glanceRow(summary, data, layout));
 
-    const push = pushSection(summary.top_priority);
-    if (push) page.appendChild(push);
-    page.appendChild(section('Top to-dos', todoList(summary)));
+    if (isEvening()) {
+      page.appendChild(section('What you finished', finishedList(summary)));
+      const carry = carryOver(summary);
+      if (carry) page.appendChild(section('Carry over', carry));
+      page.appendChild(section('Journal', journalPrompt(summary.journal)));
+    } else {
+      const push = pushSection(summary.top_priority);
+      if (push) page.appendChild(push);
+    }
+    page.appendChild(section(isEvening() ? 'Coming up' : 'Top to-dos', todoList(summary)));
     page.appendChild(section('Habits', habitList(summary.habits || [])));
     page.appendChild(section('Your day', dayTimeline(summary.calendar)));
     page.appendChild(section('New updates', updatesList(data.highlights || [])));
-    page.appendChild(section('Journal', journalPrompt(summary.journal)));
+    if (!isEvening()) page.appendChild(section('Journal', journalPrompt(summary.journal)));
     const later = laterList(data);
     if (later) page.appendChild(section('Later & recent', later));
     page.appendChild(footer(summary));

@@ -96,6 +96,16 @@ class TaskStore:
     def done_since(self, iso_timestamp: str) -> list[Task]:
         return self._select("done = 1 AND done_at >= ?", (iso_timestamp,))
 
+    def roll_over(self, today: str, to: str) -> int:
+        """Move every open task due today or earlier to `to`. Returns how
+        many moved."""
+        to = clean_date(to)
+        with connect(self._path) as conn:
+            return conn.execute(
+                "UPDATE tasks SET due_date = ? WHERE done = 0 AND due_date != '' "
+                "AND due_date <= ?", (to, clean_date(today)),
+            ).rowcount
+
     def has_source_message(self, message_id: str) -> bool:
         with connect(self._path) as conn:
             row = conn.execute(

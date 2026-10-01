@@ -162,6 +162,19 @@ def handle_add_task(tasks: TaskStore, body: dict) -> dict:
     return {"task": task_json(task)}
 
 
+def handle_roll_tasks(tasks: TaskStore, body: dict, today: date | None = None) -> dict:
+    """Move today's and overdue open to-dos to tomorrow (or body["to"])."""
+    today = today or date.today()
+    to = str(body.get("to") or (today + timedelta(days=1)).isoformat())
+    try:
+        if date.fromisoformat(to) <= today:
+            return {"error": "pick a day after today"}
+        moved = tasks.roll_over(today.isoformat(), to)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"moved": moved, "to": to}
+
+
 def handle_update_task(tasks: TaskStore, task_id: str, body: dict) -> dict:
     try:
         task = tasks.update(task_id, body)

@@ -434,6 +434,7 @@ def handle_daily_summary(
         "habits": today_view.habits_today(habits, today) if habits is not None else [],
         "journal": today_view.journal_today(journal, today) if journal is not None else None,
         "pipeline": pipeline_counts(jobs.all(), today) if jobs is not None else None,
+        "finished_today": today_view.finished_today(tasks, jobs, today) if has_life else [],
         "new_since_yesterday": new_since_yesterday,
         "calendar": calendar_block,
         "empty": not (due or unblocked or recurring or calendar_events

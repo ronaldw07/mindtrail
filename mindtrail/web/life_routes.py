@@ -192,6 +192,11 @@ def _add_task(deps, args, body, query):
     return jobs_api.handle_add_task(deps.tasks, body)
 
 
+@route("POST", "/api/tasks/roll")
+def _roll_tasks(deps, args, body, query):
+    return jobs_api.handle_roll_tasks(deps.tasks, body)
+
+
 @route("PATCH", f"/api/tasks/{_ID}")
 def _update_task(deps, args, body, query):
     return jobs_api.handle_update_task(deps.tasks, args[0], body)
