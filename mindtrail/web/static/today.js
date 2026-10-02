@@ -263,6 +263,7 @@
     const add = (day, title) => { (byDay[day] = byDay[day] || []).push(title); };
     (summary.tasks || []).forEach(t => add(t.due_date < today ? today : t.due_date, t.title));
     (summary.deadlines || []).forEach(d => add(d.due_date, d.title));
+    (summary.assignments || []).forEach(a => add(a.due, a.title));
     const agenda = data.agenda || {};
     ['overdue', 'today', 'this_week'].forEach(k => (agenda[k] || []).forEach(n =>
       add(n.due_date < today ? today : n.due_date, n.title)));
@@ -399,6 +400,13 @@
     } else if (item.kind === 'deadline') {
       sub = 'Application deadline' + due;
       sticker.onclick = () => openJobsView(item.application_id);
+    } else if (item.kind === 'assignment') {
+      sub = 'Assignment' + due;
+      label.textContent = 'Done ✓';
+      sticker.onclick = async () => {
+        await jsonSend('/api/canvas/done', {uid: item.uid});
+        openDashboardView();
+      };
     } else {
       sub = item.project_name + due;
       sticker.onclick = () => openRoadmapView(item.project_id, item.project_name);
@@ -449,6 +457,16 @@
         sub: (n.context ? n.context + ' · ' : '') + sinceLabel(n.days_since),
         onCheck: async () => { await talkedToday(n.person_id); openDashboardView(); },
         onOpen: () => openPeopleView(),
+      })),
+      ...(summary.assignments || []).map(a => todoItem({
+        title: a.title,
+        sub: 'Assignment · ' + (a.due === localISO(new Date()) ? 'Due today' : 'Due ' + fmtShortDate(a.due))
+          + (a.time ? ' ' + fmtClock(a.time) : ''),
+        onCheck: async () => {
+          await jsonSend('/api/canvas/done', {uid: a.uid});
+          openDashboardView();
+        },
+        onOpen: a.url ? () => window.open(a.url, '_blank', 'noopener') : null,
       })),
       ...(summary.deadlines || []).map(d => todoItem({
         title: d.title, sub: 'Application deadline · ' + tag(d),

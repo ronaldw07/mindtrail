@@ -211,6 +211,29 @@ def _delete_person(deps, args, body, query):
     return admin_api.handle_delete_person(deps.people, args[0])
 
 
+# --- Canvas -----------------------------------------------------------------
+
+
+@route("GET", "/api/canvas")
+def _get_canvas(deps, args, body, query):
+    return admin_api.handle_get_canvas(deps.canvas, deps.state)
+
+
+@route("POST", "/api/canvas")
+def _set_canvas(deps, args, body, query):
+    return admin_api.handle_set_canvas(deps.canvas, deps.state, body)
+
+
+@route("POST", "/api/canvas/refresh")
+def _refresh_canvas(deps, args, body, query):
+    return admin_api.handle_refresh_canvas(deps.canvas, deps.state)
+
+
+@route("POST", "/api/canvas/done")
+def _canvas_done(deps, args, body, query):
+    return admin_api.handle_canvas_done(deps.canvas, body)
+
+
 # --- artwork ----------------------------------------------------------------
 
 

@@ -93,6 +93,8 @@ def generate_daily_brief(llm: LLMClient, summary: dict) -> DailyBrief:
         _format_items("DUE TODAY OR OVERDUE", summary.get("due", []))
         + _format_tasks("TO-DOS DUE THIS WEEK", summary.get("tasks", []))
         + _format_tasks("APPLICATION DEADLINES (NOT APPLIED YET)", summary.get("deadlines", []))
+        + _format_tasks("SCHOOL ASSIGNMENTS DUE", [
+            {"title": a["title"], "due_date": a["due"]} for a in summary.get("assignments", [])])
         + _format_items("NEWLY UNBLOCKED", summary.get("unblocked", []))
         + _format_items("RECURRING STEPS COMING DUE", summary.get("recurring", []))
         + _format_calendar(summary.get("calendar") or {})
@@ -118,7 +120,8 @@ def brief_input_hash(summary: dict, today: date) -> str:
     events = [(e.get("title"), e.get("start"))
               for e in (summary.get("calendar") or {}).get("events", []) or []]
     basis = {"date": today.isoformat(), "events": events,
-             **{k: titles(k) for k in ("due", "tasks", "deadlines", "unblocked", "recurring")}}
+             **{k: titles(k) for k in ("due", "tasks", "deadlines", "unblocked", "recurring")},
+             "assignments": [(a.get("title"), a.get("due")) for a in summary.get("assignments", [])]}
     return hashlib.sha1(json.dumps(basis, sort_keys=True).encode()).hexdigest()
 
 

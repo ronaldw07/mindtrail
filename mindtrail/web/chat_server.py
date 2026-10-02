@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from mindtrail.advice.job_scan import JobScanner, ScanTimer
 from mindtrail.ingest.researcher import Researcher
 from mindtrail.integrations.artwork import ArtworkClient
+from mindtrail.integrations.canvas import CanvasFeed
 from mindtrail.integrations.gmail import GmailClient
 from mindtrail.integrations.google_calendar import GoogleCalendarClient
 from mindtrail.integrations.google_sheets import SheetsClient
@@ -113,6 +114,7 @@ class Deps:
         self.artwork = ArtworkClient(self.state)
         self.focus = FocusStore(db_path)
         self.people = PeopleStore(db_path)
+        self.canvas = CanvasFeed(self.state)
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)
         self.job_emails = self.email_log.for_application
@@ -290,7 +292,7 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                     api.handle_daily_summary(
                         deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes,
                         deps.calendar, deps.tasks, deps.jobs, deps.habits,
-                        deps.journal, deps.people,
+                        deps.journal, deps.people, deps.canvas,
                     )
                 )
             elif path == "/api/search":

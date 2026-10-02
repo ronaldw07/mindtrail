@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import date
 
+from mindtrail.integrations.canvas import EVENTS_KEY, CanvasFeed
 from mindtrail.organize.people import PeopleStore, days_since, is_due
 
 
@@ -55,3 +56,46 @@ def handle_delete_person(people: PeopleStore, person_id: str) -> dict:
 def nudges_today(people: PeopleStore, today: date) -> list[dict]:
     return [{"person_id": p.id, "name": p.name, "context": p.context,
              "days_since": days_since(p, today)} for p in people.due(today)]
+
+
+# --- Canvas -----------------------------------------------------------------
+
+
+def canvas_status(canvas: CanvasFeed, state, error: str = "") -> dict:
+    """Never echoes the feed link back - only that one is set and where."""
+    from urllib.parse import urlparse
+    cache = state.get(EVENTS_KEY) or {}
+    url = canvas.url()
+    status = {"linked": bool(url), "host": urlparse(url).hostname if url else "",
+              "fetched_at": cache.get("fetched_at", ""), "count": len(cache.get("events", []))}
+    if error:
+        status["error"] = error
+    return status
+
+
+def handle_get_canvas(canvas: CanvasFeed, state) -> dict:
+    return canvas_status(canvas, state)
+
+
+def handle_set_canvas(canvas: CanvasFeed, state, body: dict) -> dict:
+    try:
+        canvas.set_url(str(body.get("url", "")))
+    except ValueError as exc:
+        return {"error": str(exc)}
+    if not canvas.url():
+        return canvas_status(canvas, state)
+    result = canvas.refresh()
+    return canvas_status(canvas, state, result.get("error", ""))
+
+
+def handle_refresh_canvas(canvas: CanvasFeed, state) -> dict:
+    result = canvas.refresh()
+    return canvas_status(canvas, state, result.get("error", ""))
+
+
+def handle_canvas_done(canvas: CanvasFeed, body: dict) -> dict:
+    uid = str(body.get("uid", ""))
+    if not uid:
+        return {"error": "uid required"}
+    canvas.mark_done(uid, bool(body.get("done", True)))
+    return {"ok": True}

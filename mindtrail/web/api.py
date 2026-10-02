@@ -337,6 +337,7 @@ def handle_daily_summary(
     habits=None,
     journal=None,
     people=None,
+    canvas=None,
 ) -> dict:
     """Everything the Today view needs to answer "what should I do today",
     assembled entirely from already-stored data - no LLM call. The
@@ -422,6 +423,8 @@ def handle_daily_summary(
     calendar_events = calendar_block.get("events") or []
 
     has_life = tasks is not None and jobs is not None
+    if canvas is not None:
+        canvas.refresh_in_background_if_stale()
     task_items = today_view.open_tasks(tasks, jobs, today) if has_life else []
     deadlines = today_view.upcoming_deadlines(jobs, today) if has_life else []
 
@@ -440,15 +443,18 @@ def handle_daily_summary(
         "nudges": nudges_today(people, today) if people is not None else [],
         "new_since_yesterday": new_since_yesterday,
         "calendar": calendar_block,
-        "empty": not (due or unblocked or recurring or calendar_events
-                      or task_items or deadlines),
     }
+    assignments = canvas.upcoming(today) if canvas is not None else []
+    summary["assignments"] = assignments
+    summary["empty"] = not (due or unblocked or recurring or calendar_events
+                            or task_items or deadlines or assignments)
     # The one item the "push your work forward" card leads with. None when
     # there's nothing to lead with - the client shows no hero card then.
     summary["top_priority"] = today_view.pick_top_priority(summary, today)
     # Free time is only meaningful against a real calendar.
     if calendar_block.get("connected"):
-        ideas = [i["title"] for i in task_items + deadlines + unblocked if i.get("title")]
+        ideas = [i["title"] for i in task_items + assignments + deadlines + unblocked
+                 if i.get("title")]
         summary["free_time"] = today_view.free_slots(
             calendar_events, datetime.now().strftime("%H:%M"), ideas)
     else:

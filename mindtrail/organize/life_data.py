@@ -35,6 +35,10 @@ LIFE_TABLES = (
 # another one (see JournalStore.reindex_all).
 EXCLUDED_COLUMNS = {"journal": ("entry_id",)}
 
+# app_state rows that act as credentials - a Canvas feed link reads your
+# course calendar with no login - so a backup someone shares can't leak them.
+PRIVATE_STATE_KEYS = {"canvas_ics_url"}
+
 
 def dump_tables(db_path: str | None) -> dict[str, list[dict]]:
     with connect(db_path) as conn:
@@ -42,6 +46,7 @@ def dump_tables(db_path: str | None) -> dict[str, list[dict]]:
             table: [
                 {k: v for k, v in dict(r).items() if k not in EXCLUDED_COLUMNS.get(table, ())}
                 for r in conn.execute(f"SELECT * FROM {table}")
+                if not (table == "app_state" and r["key"] in PRIVATE_STATE_KEYS)
             ]
             for table in LIFE_TABLES
         }

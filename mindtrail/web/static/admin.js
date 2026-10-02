@@ -147,3 +147,51 @@
       }},
     ]);
   }
+
+  // ---------- Canvas (school calendar) ----------
+
+  function canvasCard() {
+    const c = card('School calendar (Canvas)', null, null);
+    const hint = tEl('div', 'muted area-hint',
+      'In Canvas: Calendar → Calendar Feed → copy the link. Assignments then show up on Today. '
+      + 'The link is private, so it stays on this computer and is left out of exports.');
+    c.appendChild(hint);
+    const status = tEl('div', 'canvas-status');
+    const form = tEl('form', 'task-add habit-add');
+    const input = tEl('input', 'jobs-link-input');
+    input.type = 'password';
+    input.placeholder = 'https://…/feeds/calendars/user_….ics';
+    input.setAttribute('aria-label', 'Canvas calendar feed link');
+    input.autocomplete = 'off';
+    const save = tEl('button', 'btn-primary jobs-btn', 'Link');
+    save.type = 'submit';
+    form.appendChild(input);
+    form.appendChild(save);
+    c.appendChild(form);
+    c.appendChild(status);
+
+    const paint = s => {
+      status.innerHTML = '';
+      if (s.error) status.appendChild(tEl('div', 'canvas-error', s.error));
+      if (!s.linked) { status.appendChild(tEl('div', 'muted', 'Not linked.')); return; }
+      status.appendChild(tEl('div', 'muted', 'Linked to ' + s.host + ' · ' + s.count + ' items'
+        + (s.fetched_at ? ' · updated ' + relTime(s.fetched_at) : '')));
+      const refresh = tEl('button', 't-link', 'Refresh now');
+      refresh.onclick = async () => paint(await jsonSend('/api/canvas/refresh', {}));
+      const unlink = tEl('button', 't-link canvas-unlink', 'Unlink');
+      unlink.onclick = async () => paint(await jsonSend('/api/canvas', {url: ''}));
+      status.appendChild(refresh);
+      status.appendChild(unlink);
+    };
+    form.onsubmit = async e => {
+      e.preventDefault();
+      if (!input.value.trim()) return;
+      setButtonBusy(save, 'Linking…');
+      const s = await jsonSend('/api/canvas', {url: input.value});
+      setButtonIdle(save, 'Link');
+      input.value = '';
+      paint(s);
+    };
+    api('/api/canvas').then(paint);
+    return c;
+  }

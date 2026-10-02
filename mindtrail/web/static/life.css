@@ -454,3 +454,9 @@
     .person-row.due .person-meta { color: var(--warn); }
     .person-notes { font-size: var(--fs-sm); color: var(--text-2); margin-top: 0.25rem;
                     white-space: pre-wrap; }
+
+    /* --- Canvas card --- */
+    .canvas-status { margin-top: 0.6rem; display: flex; flex-wrap: wrap; gap: 0.4rem 1rem;
+                     align-items: baseline; font-size: var(--fs-sm); }
+    .canvas-error { width: 100%; color: var(--danger); font-size: var(--fs-sm); }
+    .canvas-unlink { color: var(--text-muted); }

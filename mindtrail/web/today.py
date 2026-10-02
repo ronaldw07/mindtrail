@@ -175,6 +175,9 @@ def pick_top_priority(summary: dict, today: date) -> dict | None:
         candidates.append((rank, item, "task"))
     for item in summary.get("deadlines", []):
         candidates.append((2 if item["due_date"] <= urgent_by else 4, item, "deadline"))
+    for item in summary.get("assignments", []):
+        rank = 1 if item["due"] == today.isoformat() else 2 if item["due"] <= urgent_by else 4
+        candidates.append((rank, {**item, "due_date": item["due"]}, "assignment"))
     for item in summary.get("unblocked", []):
         candidates.append((3, item, "step"))
     if not candidates:
