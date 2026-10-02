@@ -602,6 +602,22 @@
     return list;
   }
 
+  // One saved link a day, oldest unread first.
+  function readThis(reading) {
+    const box = tEl('div', 't-list');
+    const pick = reading.pick;
+    box.appendChild(todoItem({title: pick.title, sub: new URL(pick.url).hostname + ' · saved '
+      + relTime(pick.saved_at) + (reading.unread > 1 ? ' · ' + (reading.unread - 1) + ' more unread' : ''),
+      onOpen: () => window.open(pick.url, '_blank', 'noopener')}));
+    const done = tEl('button', 't-link', 'Mark as read');
+    done.onclick = async () => {
+      await jsonSend('/api/reading/read', {url: pick.url});
+      openDashboardView();
+    };
+    box.appendChild(done);
+    return box;
+  }
+
   function journalPrompt(journal) {
     const box = tEl('div', 't-list');
     if (journal && journal.written_today) {
@@ -683,8 +699,9 @@
       view.innerHTML = '';
       view.appendChild(skeletonBlock(6));
     }
-    const [data, summary, focus] = await Promise.all([
+    const [data, summary, focus, reading] = await Promise.all([
       api('/api/dashboard'), api('/api/daily-summary'), api('/api/focus/week'),
+      api('/api/reading'),
     ]);
     data.focus = focus;
     const layout = todayLayout();
@@ -706,6 +723,7 @@
     page.appendChild(section('Habits', habitList(summary.habits || [])));
     page.appendChild(section('Your day', dayTimeline(summary.calendar, summary.free_time)));
     page.appendChild(section('New updates', updatesList(data.highlights || [])));
+    if (reading.pick) page.appendChild(section('Read this', readThis(reading)));
     if (!isEvening()) page.appendChild(section('Journal', journalPrompt(summary.journal)));
     // Sunday is review day.
     if (new Date().getDay() === 0) {

@@ -99,3 +99,39 @@ def handle_canvas_done(canvas: CanvasFeed, body: dict) -> dict:
         return {"error": "uid required"}
     canvas.mark_done(uid, bool(body.get("done", True)))
     return {"ok": True}
+
+
+# --- reading list -------------------------------------------------------------
+
+READ_KEY = "links_read"  # list of URLs - stable across export/import, unlike entry ids
+
+
+def _link_url(entry) -> str:
+    return entry.sources[0] if entry.sources else ""
+
+
+def handle_reading(store, state) -> dict:
+    """Saved links, unread first (oldest first, so nothing rots at the
+    bottom), and the one to suggest today."""
+    read = set(state.get(READ_KEY, []) or [])
+    links = []
+    for e in store.all():
+        url = _link_url(e)
+        if e.kind != "link" or not url:
+            continue
+        links.append({"entry_id": e.id, "title": e.query, "url": url,
+                      "saved_at": e.created_at, "read": url in read,
+                      "conversation_id": e.conversation_id})
+    links.sort(key=lambda l: (l["read"], l["saved_at"]))
+    unread = [l for l in links if not l["read"]]
+    return {"links": links, "unread": len(unread), "pick": unread[0] if unread else None}
+
+
+def handle_mark_read(state, body: dict) -> dict:
+    url = str(body.get("url", ""))
+    if not url:
+        return {"error": "url required"}
+    read = set(state.get(READ_KEY, []) or [])
+    read = read | {url} if body.get("read", True) else read - {url}
+    state.set(READ_KEY, sorted(read))
+    return {"ok": True}

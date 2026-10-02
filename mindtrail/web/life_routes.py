@@ -234,6 +234,19 @@ def _canvas_done(deps, args, body, query):
     return admin_api.handle_canvas_done(deps.canvas, body)
 
 
+# --- reading list -------------------------------------------------------------
+
+
+@route("GET", "/api/reading")
+def _reading(deps, args, body, query):
+    return admin_api.handle_reading(deps.store, deps.state)
+
+
+@route("POST", "/api/reading/read")
+def _mark_read(deps, args, body, query):
+    return admin_api.handle_mark_read(deps.state, body)
+
+
 # --- artwork ----------------------------------------------------------------
 
 
