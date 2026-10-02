@@ -247,6 +247,19 @@ def _mark_read(deps, args, body, query):
     return admin_api.handle_mark_read(deps.state, body)
 
 
+# --- GitHub -----------------------------------------------------------------
+
+
+@route("GET", "/api/github")
+def _github(deps, args, body, query):
+    return admin_api.handle_github(deps.github)
+
+
+@route("POST", "/api/github/refresh")
+def _refresh_github(deps, args, body, query):
+    return admin_api.handle_refresh_github(deps.github)
+
+
 # --- artwork ----------------------------------------------------------------
 
 

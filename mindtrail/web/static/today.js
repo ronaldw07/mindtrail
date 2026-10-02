@@ -583,13 +583,29 @@
       .replace(' AM', 'a').replace(' PM', 'p');
   }
 
-  function updatesList(highlights) {
+  // GitHub first (review requests, failing CI, your open PRs), then
+  // project highlights - one numbered feed.
+  function updatesList(highlights, github) {
     const list = tEl('div', 't-list');
-    if (!highlights.length) {
-      list.appendChild(tEl('div', 't-empty', 'Project highlights show up here.'));
+    const gh = (github && github.items) || [];
+    if (!highlights.length && !gh.length) {
+      list.appendChild(tEl('div', 't-empty', 'Project highlights and GitHub activity show up here.'));
       return list;
     }
-    highlights.forEach((h, i) => {
+    gh.forEach((g, i) => {
+      const row = tEl('div', 't-update');
+      row.appendChild(tEl('span', 't-update-num', String(i + 1).padStart(2, '0')));
+      const body = tEl('div', 't-item-body');
+      const title = tEl('div', 't-item-title', g.title + ' ');
+      title.appendChild(tEl('span', 't-repo', g.repo));
+      body.appendChild(title);
+      body.appendChild(tEl('div', 't-item-sub', g.detail));
+      row.appendChild(body);
+      makeClickable(row, () => window.open(g.url, '_blank', 'noopener'));
+      list.appendChild(row);
+    });
+    highlights.forEach((h, j) => {
+      const i = j + gh.length;
       const row = tEl('div', 't-update');
       row.appendChild(tEl('span', 't-update-num', String(i + 1).padStart(2, '0')));
       const body = tEl('div', 't-item-body');
@@ -699,9 +715,9 @@
       view.innerHTML = '';
       view.appendChild(skeletonBlock(6));
     }
-    const [data, summary, focus, reading] = await Promise.all([
+    const [data, summary, focus, reading, github] = await Promise.all([
       api('/api/dashboard'), api('/api/daily-summary'), api('/api/focus/week'),
-      api('/api/reading'),
+      api('/api/reading'), api('/api/github'),
     ]);
     data.focus = focus;
     const layout = todayLayout();
@@ -722,7 +738,7 @@
     page.appendChild(section(isEvening() ? 'Coming up' : 'Top to-dos', todoList(summary)));
     page.appendChild(section('Habits', habitList(summary.habits || [])));
     page.appendChild(section('Your day', dayTimeline(summary.calendar, summary.free_time)));
-    page.appendChild(section('New updates', updatesList(data.highlights || [])));
+    page.appendChild(section('New updates', updatesList(data.highlights || [], github)));
     if (reading.pick) page.appendChild(section('Read this', readThis(reading)));
     if (!isEvening()) page.appendChild(section('Journal', journalPrompt(summary.journal)));
     // Sunday is review day.

@@ -135,3 +135,16 @@ def handle_mark_read(state, body: dict) -> dict:
     read = read | {url} if body.get("read", True) else read - {url}
     state.set(READ_KEY, sorted(read))
     return {"ok": True}
+
+
+# --- GitHub -----------------------------------------------------------------
+
+
+def handle_github(github) -> dict:
+    """The cached updates, kicking off a background refresh if stale."""
+    github.refresh_in_background_if_stale()
+    return github.cached()
+
+
+def handle_refresh_github(github) -> dict:
+    return github.refresh()

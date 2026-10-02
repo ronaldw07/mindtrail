@@ -2860,6 +2860,7 @@
     main.appendChild(aboutCard);
     main.appendChild(areasCard());
     main.appendChild(canvasCard());
+    main.appendChild(githubCard());
     layout.appendChild(main);
 
     const rail = document.createElement('div');

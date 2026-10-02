@@ -21,6 +21,7 @@ from mindtrail.advice.job_scan import JobScanner, ScanTimer
 from mindtrail.ingest.researcher import Researcher
 from mindtrail.integrations.artwork import ArtworkClient
 from mindtrail.integrations.canvas import CanvasFeed
+from mindtrail.integrations.github import GitHubUpdates
 from mindtrail.integrations.gmail import GmailClient
 from mindtrail.integrations.google_calendar import GoogleCalendarClient
 from mindtrail.integrations.google_sheets import SheetsClient
@@ -115,6 +116,7 @@ class Deps:
         self.focus = FocusStore(db_path)
         self.people = PeopleStore(db_path)
         self.canvas = CanvasFeed(self.state)
+        self.github = GitHubUpdates(self.state)
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)
         self.job_emails = self.email_log.for_application

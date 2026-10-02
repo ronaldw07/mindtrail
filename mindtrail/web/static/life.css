@@ -460,3 +460,7 @@
                      align-items: baseline; font-size: var(--fs-sm); }
     .canvas-error { width: 100%; color: var(--danger); font-size: var(--fs-sm); }
     .canvas-unlink { color: var(--text-muted); }
+
+    /* repo tag after a GitHub update title, italic serif like the reference */
+    .t-repo { font-family: var(--font-serif); font-style: italic; font-weight: 400;
+              color: var(--text-muted); margin-left: 0.25rem; }

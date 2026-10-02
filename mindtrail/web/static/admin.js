@@ -195,3 +195,26 @@
     api('/api/canvas').then(paint);
     return c;
   }
+
+
+  // ---------- GitHub ----------
+
+  function githubCard() {
+    const c = card('GitHub', 'Refresh', async () => paint(await jsonSend('/api/github/refresh', {})));
+    const status = tEl('div', 'canvas-status');
+    c.appendChild(status);
+    const paint = s => {
+      status.innerHTML = '';
+      if (s.error) status.appendChild(tEl('div', 'canvas-error', s.error));
+      if (s.connected === false) {
+        status.appendChild(tEl('div', 'muted',
+          'Not connected. Sign in with the GitHub CLI (gh auth login) or set GITHUB_TOKEN in .env.'));
+        return;
+      }
+      if (!s.login) { status.appendChild(tEl('div', 'muted', 'Checking…')); return; }
+      status.appendChild(tEl('div', 'muted', 'Reading as @' + s.login + ' (read-only) · '
+        + (s.items || []).length + ' updates' + (s.fetched_at ? ' · updated ' + relTime(s.fetched_at) : '')));
+    };
+    api('/api/github').then(paint);
+    return c;
+  }
