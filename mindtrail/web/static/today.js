@@ -13,6 +13,7 @@
     {id: 'week', label: 'Week ahead'},
     {id: 'pipeline', label: 'Job pipeline'},
     {id: 'focus', label: 'Focus time'},
+    {id: 'health', label: 'Sleep & workouts'},
   ];
   const DEFAULT_LAYOUT = {order: TODAY_WIDGETS.map(w => w.id), hidden: [], art: true};
 
@@ -126,7 +127,7 @@
     row.setAttribute('aria-label', 'At a glance');
     layout.order.filter(id => !layout.hidden.includes(id)).forEach(id => {
       const w = {habits: habitRings, mood: moodChart, week: weekStrip, pipeline: pipelineTiles,
-                 focus: focusTile}[id];
+                 focus: focusTile, health: healthTile}[id];
       const tile = w(summary, data);
       if (tile) row.appendChild(tile);
     });
@@ -318,6 +319,44 @@
     const start = tEl('button', 't-link', prefs.get('focusTimer', null) ? 'Running…' : 'Start a session');
     start.onclick = e => { e.stopPropagation(); startFocus(); };
     tile.appendChild(start);
+    return tile;
+  }
+
+  // Last seven nights as bars (one series, one hue), average as the
+  // headline, and this week's workouts. Hidden until Health data exists.
+  function healthTile(summary) {
+    const h = summary.health;
+    if (!h) return null;
+    const tile = glanceTile('Sleep & workouts', null);
+    const head = tEl('div', 't-focus-head');
+    head.appendChild(tEl('span', 't-stat-num', h.avg_sleep ? fmtMinutes(h.avg_sleep) : '–'));
+    head.appendChild(tEl('span', 't-stat-label', 'average sleep, last 7 nights'));
+    tile.appendChild(head);
+    const W = 420, H = 48, GAP = 8, max = Math.max(...h.sleep.map(n => n.minutes), 8 * 60);
+    const bw = (W - GAP * 6) / 7;
+    const s = svg('svg', {viewBox: `0 0 ${W} ${H + 14}`, class: 't-bars', role: 'img',
+      'aria-label': 'Hours of sleep, last seven nights'});
+    h.sleep.forEach((n, i) => {
+      const x = i * (bw + GAP);
+      if (n.minutes) {
+        const bh = Math.max((n.minutes / max) * H, 4);
+        const bar = svg('rect', {x, y: H - bh, width: bw, height: bh, rx: 4, class: 't-bar t-bar-sleep'});
+        const tip = svg('title');
+        tip.textContent = fmtShortDate(n.date) + ': ' + fmtMinutes(n.minutes);
+        bar.appendChild(tip);
+        s.appendChild(bar);
+      }
+      s.appendChild(svg('line', {x1: x, x2: x + bw, y1: H, y2: H, class: 't-grid'}));
+      const label = svg('text', {x: x + bw / 2, y: H + 12, class: 't-axis'});
+      label.textContent = new Date(n.date + 'T12:00:00').toLocaleDateString(undefined, {weekday: 'narrow'});
+      s.appendChild(label);
+    });
+    tile.appendChild(s);
+    const w = h.workouts;
+    tile.appendChild(tEl('div', 't-item-sub', w.length
+      ? w.length + ' workout' + (w.length > 1 ? 's' : '') + ' this week · '
+        + fmtMinutes(w.reduce((a, x) => a + x.minutes, 0))
+      : 'No workouts logged this week'));
     return tile;
   }
 

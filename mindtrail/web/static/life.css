@@ -464,3 +464,7 @@
     /* repo tag after a GitHub update title, italic serif like the reference */
     .t-repo { font-family: var(--font-serif); font-style: italic; font-weight: 400;
               color: var(--text-muted); margin-left: 0.25rem; }
+
+    /* Sleep bars: the third validated palette slot, so it never reads as
+       the same series as the focus bars beside it. */
+    .t-bar-sleep { fill: #199e70; }

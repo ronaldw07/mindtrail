@@ -208,6 +208,20 @@ CREATE TABLE IF NOT EXISTS people (
     created_at       TEXT NOT NULL
 );
 
+-- From an Apple Health export (organize/health.py). date is the local
+-- wake-up day for sleep, the local start day for a workout.
+CREATE TABLE IF NOT EXISTS health_sleep (
+    date    TEXT PRIMARY KEY,
+    minutes INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS health_workouts (
+    id      TEXT PRIMARY KEY,
+    date    TEXT NOT NULL,
+    type    TEXT NOT NULL,
+    minutes INTEGER NOT NULL
+);
+
 -- Small named values that don't deserve a table each: last scan time,
 -- the linked sheet, the cached brief. Values are JSON text.
 CREATE TABLE IF NOT EXISTS app_state (

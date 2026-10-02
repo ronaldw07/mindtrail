@@ -145,6 +145,26 @@ def free_slots(events: list[dict], now_hm: str, suggestions: list[str]) -> list[
     return slots
 
 
+SLEEP_NIGHTS = 7
+
+
+def health_today(health, today: date) -> dict | None:
+    """Last week of sleep and this week's workouts, or None with no data."""
+    start = today - timedelta(days=SLEEP_NIGHTS - 1)
+    nights = health.sleep_between(start.isoformat(), today.isoformat())
+    monday = today - timedelta(days=today.weekday())
+    workouts = health.workouts_between(monday.isoformat(), today.isoformat())
+    if not nights and not workouts:
+        return None
+    days = [(start + timedelta(days=i)).isoformat() for i in range(SLEEP_NIGHTS)]
+    recorded = [m for m in nights.values() if m]
+    return {
+        "sleep": [{"date": d, "minutes": nights.get(d, 0)} for d in days],
+        "avg_sleep": round(sum(recorded) / len(recorded)) if recorded else 0,
+        "workouts": workouts,
+    }
+
+
 MOOD_DAYS = 14
 
 

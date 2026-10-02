@@ -10,6 +10,7 @@ from mindtrail.llm import LLMClient
 from mindtrail.organize.app_state import AppState
 from mindtrail.organize.db import initialize
 from mindtrail.organize.email_log import EmailLog
+from mindtrail.organize.health import HealthStore
 from mindtrail.organize.jobs import JobStore
 from mindtrail.organize.tasks import TaskStore
 from mindtrail.web.jobs_api import handle_import_sheet
@@ -71,6 +72,13 @@ def cmd_jobs_scan(args) -> int:
     return 0 if status["ok"] else 1
 
 
+def cmd_health_import(args) -> int:
+    initialize()
+    result = HealthStore().import_export(args.path)
+    print(f"imported {result.nights} nights of sleep and {result.workouts} workouts")
+    return 0
+
+
 def register(sub) -> None:
     jobs = sub.add_parser("jobs", help="track job applications")
     jobs_sub = jobs.add_subparsers(dest="jobs_command", required=True)
@@ -93,3 +101,10 @@ def register(sub) -> None:
 
     scan = jobs_sub.add_parser("scan", help="read new job emails from Gmail now")
     scan.set_defaults(func=cmd_jobs_scan)
+
+    health = sub.add_parser("health", help="Apple Health data")
+    health_sub = health.add_subparsers(dest="health_command", required=True)
+    health_import = health_sub.add_parser(
+        "import", help="import sleep and workouts from an Apple Health export.zip")
+    health_import.add_argument("path")
+    health_import.set_defaults(func=cmd_health_import)

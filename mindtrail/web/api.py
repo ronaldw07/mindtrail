@@ -338,6 +338,7 @@ def handle_daily_summary(
     journal=None,
     people=None,
     canvas=None,
+    health=None,
 ) -> dict:
     """Everything the Today view needs to answer "what should I do today",
     assembled entirely from already-stored data - no LLM call. The
@@ -446,6 +447,7 @@ def handle_daily_summary(
     }
     assignments = canvas.upcoming(today) if canvas is not None else []
     summary["assignments"] = assignments
+    summary["health"] = today_view.health_today(health, today) if health is not None else None
     summary["empty"] = not (due or unblocked or recurring or calendar_events
                             or task_items or deadlines or assignments)
     # The one item the "push your work forward" card leads with. None when
