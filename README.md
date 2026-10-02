@@ -455,14 +455,17 @@ required. The model is `openai/gpt-oss-120b`; note that Groq removed the
 Llama line from its catalog, so older tutorials naming
 `llama-3.3-70b-versatile` will 404.
 
-## Google Calendar (read-only, optional)
+## Google: Calendar, Gmail, Sheets (read-only, optional)
 
-The daily summary works fully without this — skip it and Today just shows
-a "Connect Google Calendar" line instead of your events. To turn it on:
+Everything works without this. With it, Today shows your calendar (and
+free time between events), the job tracker reads application emails from
+Gmail every hour while mindtrail is open, and you can import a job-tracker
+Google Sheet. All three scopes are read-only. To turn it on:
 
 1. Create (or reuse) a project at
    [console.cloud.google.com](https://console.cloud.google.com/).
-2. **APIs & Services → Library** → enable the **Google Calendar API**.
+2. **APIs & Services → Library** → enable the **Google Calendar API**,
+   the **Gmail API**, and the **Google Sheets API**.
 3. **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
    Application type: **Desktop app**. Download or copy the client ID and
    client secret it gives you.
@@ -479,14 +482,17 @@ a "Connect Google Calendar" line instead of your events. To turn it on:
 6. Run the connect flow once:
 
    ```bash
-   .venv/bin/python -m mindtrail.cli calendar connect
+   .venv/bin/python -m mindtrail.cli google connect
    ```
 
    This opens a browser to Google's consent screen and, on approval, spins
    up a one-shot local server on a loopback address (`127.0.0.1`) to catch
    the redirect — the modern replacement for the OAuth "copy-paste a code"
-   flow, which Google has retired. Only `calendar.readonly` is requested;
-   mindtrail never writes to your calendar.
+   flow, which Google has retired. Only read-only scopes are requested
+   (`calendar.readonly`, `gmail.readonly`, `spreadsheets.readonly`);
+   mindtrail never sends mail, edits a calendar, or changes a sheet. You
+   can untick any of them on Google's screen - that feature just stays off,
+   and `google status` shows which are allowed.
 
 The resulting refresh token is written to `google_token.json`, next to
 your database, with file permissions `0600` (owner read/write only) — not
@@ -503,8 +509,29 @@ Check the connection any time with:
 If Google is unreachable, the daily summary falls back to the last
 successful fetch (cached for 15 minutes) and says so plainly rather than
 showing nothing. If the refresh token is later revoked or expires, both
-the CLI and the Today view tell you to run `calendar connect` again rather
+the CLI and the Today view tell you to run `google connect` again rather
 than failing silently.
+
+Only emails matching a job-application search are read, at most once
+each, and only the sender, subject, and first 1,500 characters are sent
+to the model to classify them. An email about a company you aren't
+tracking creates an application marked **Review** rather than adding it
+silently.
+
+## Other integrations (optional)
+
+- **Canvas assignments** - in Canvas, Calendar → Calendar Feed, copy the
+  link, and paste it under Profile → School calendar. The link is private
+  (it works without a login), so it stays on your machine and is left out
+  of exports.
+- **GitHub** - if you're signed in to the GitHub CLI (`gh auth login`),
+  Today shows your open PRs, review requests, and failing CI with no
+  setup. A `GITHUB_TOKEN` in `.env` takes precedence. Read-only.
+- **Apple Health** - Health app → your profile → Export All Health Data,
+  then `mindtrail health import export.zip` for sleep and workouts.
+- **Daily painting** - Today's masthead is a public-domain painting from
+  the Art Institute of Chicago, fetched once a day and cached. Turn it off
+  under Customize on Today.
 
 ## CLI reference
 
@@ -520,8 +547,15 @@ than failing silently.
 .venv/bin/python -m mindtrail.cli advice                 # generate a next-steps plan
 .venv/bin/python -m mindtrail.cli export --out DIR       # back up everything to markdown
 .venv/bin/python -m mindtrail.cli import DIR             # restore from a directory 'export' wrote
-.venv/bin/python -m mindtrail.cli calendar connect       # one-time Google Calendar OAuth (optional)
+.venv/bin/python -m mindtrail.cli google connect         # one-time Google sign-in (optional)
+.venv/bin/python -m mindtrail.cli google status          # which Google features are allowed
 .venv/bin/python -m mindtrail.cli calendar today         # today's events from the primary calendar
+.venv/bin/python -m mindtrail.cli jobs add URL           # track an application from a posting link
+.venv/bin/python -m mindtrail.cli jobs list              # your applications
+.venv/bin/python -m mindtrail.cli jobs import-sheet URL  # import a Google Sheet tracker (--dry-run to preview)
+.venv/bin/python -m mindtrail.cli jobs sync-sheet        # pull new rows from the linked sheet
+.venv/bin/python -m mindtrail.cli jobs scan              # read new job emails now
+.venv/bin/python -m mindtrail.cli health import FILE     # Apple Health export.zip
 ```
 
 `web` writes a single HTML file and opens it in your default browser. Each
