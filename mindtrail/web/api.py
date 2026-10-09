@@ -76,6 +76,9 @@ def handle_palette_index(
     chats: ConversationStore,
     roadmaps: RoadmapStore,
     nodes: RoadmapNodeStore,
+    tasks=None,
+    jobs=None,
+    people=None,
 ) -> dict:
     """Everything the command palette needs to fuzzy-match locally.
 
@@ -116,6 +119,12 @@ def handle_palette_index(
             for c in chats.all()
         ],
         "roadmap_nodes": roadmap_nodes,
+        "tasks": [{"id": t.id, "title": t.title, "due_date": t.due_date}
+                  for t in (tasks.open() if tasks else [])],
+        "jobs": [{"id": a.id, "company": a.company, "role": a.role, "stage": a.stage}
+                 for a in (jobs.all() if jobs else [])],
+        "people": [{"id": p.id, "name": p.name, "context": p.context}
+                   for p in (people.all() if people else [])],
     }
 
 

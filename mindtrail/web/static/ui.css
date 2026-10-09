@@ -115,3 +115,24 @@ main { background: var(--bg); border-radius: 14px; overflow: hidden;
 @media (prefers-reduced-motion: reduce) {
   .seg-thumb, .switch-knob { transition: none; }
 }
+
+/* ---------- command palette (Spotlight-style) ---------- */
+/* No open/close animation - it's a keyboard action used constantly. */
+.palette-box { width: 640px; top: 16vh; border-radius: 16px; border: 0.5px solid var(--border-strong); }
+.palette-input { font-size: 1.25rem; font-weight: 300; padding: 1.05rem 1.25rem;
+                 border-bottom-color: var(--border-subtle); }
+.palette-list { padding: 0.5rem; }
+.palette-group-heading { padding: 0.6rem 0.65rem 0.25rem; letter-spacing: 0.03em; text-transform: none;
+                         font-weight: 600; font-size: var(--fs-sm); }
+.palette-row { display: flex; align-items: center; gap: 0.65rem; padding: 0.42rem 0.65rem;
+               font-size: var(--fs-md); color: var(--text); }
+.palette-row.selected { background: var(--accent); color: var(--on-accent); }
+.palette-tile { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+                background: var(--tile, var(--text-muted)); color: #fff; flex-shrink: 0; }
+.palette-text { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-sub { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+               color: var(--text-muted); font-size: var(--fs-base); }
+.palette-text + .palette-type { margin-left: auto; }
+.palette-type { font-size: var(--fs-sm); color: var(--text-muted); flex-shrink: 0; }
+.palette-row.selected .palette-sub, .palette-row.selected .palette-type {
+  color: color-mix(in srgb, var(--on-accent) 78%, transparent); }

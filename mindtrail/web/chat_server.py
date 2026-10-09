@@ -293,7 +293,8 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
             elif path == "/api/palette-index":
                 self._json(
                     api.handle_palette_index(
-                        deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes
+                        deps.projects, deps.chats, deps.roadmaps, deps.roadmap_nodes,
+                        tasks=deps.tasks, jobs=deps.jobs, people=deps.people,
                     )
                 )
             elif path == "/api/dashboard":

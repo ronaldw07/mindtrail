@@ -13,6 +13,18 @@
   const PALETTE_MEMORY_DEBOUNCE_MS = 200;
   const PALETTE_MAX_PER_GROUP = 6;
 
+  // Icon tile + type label per kind of result, so a row says what it is.
+  const PALETTE_KINDS = {
+    project: {label: 'Project', color: '#0071e3', icon: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'},
+    chat: {label: 'Chat', color: '#248a3d', icon: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>'},
+    step: {label: 'Step', color: '#8944ab', icon: '<circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><path d="M6 8v4a4 4 0 0 0 4 4h6"/>'},
+    memory: {label: 'Memory', color: '#636366', icon: '<path d="M4 6h16M4 12h16M4 18h10"/>'},
+    todo: {label: 'To-do', color: '#0071e3', icon: '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>'},
+    job: {label: 'Job', color: '#a0560a', icon: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'},
+    person: {label: 'Person', color: '#0e7c86', icon: '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>'},
+    action: {label: 'Action', color: '#d9480f', icon: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>'},
+  };
+
   // Cheap subsequence fuzzy match, not a full fuzzy-ranking algorithm:
   // every character of the query must appear in order in the text.
   // Rewards an early, consecutive run so "roadm" ranks "Roadmap" above
@@ -106,7 +118,7 @@
     el.appendChild(box);
 
     const input = document.createElement('input');
-    input.placeholder = 'Search projects, chats, roadmap steps, memory…';
+    input.placeholder = 'Search to-dos, jobs, people, chats, memory…';
     input.setAttribute('aria-label', 'Command palette');
     input.name = 'palette-query';
     input.className = 'palette-input';
@@ -136,8 +148,28 @@
         flatItems.push(item);
         const row = document.createElement('div');
         row.dataset.idx = String(idx);
-        row.textContent = item.label;
         row.className = 'palette-row';
+        const kind = PALETTE_KINDS[item.kind || 'action'];
+        const tile = document.createElement('span');
+        tile.className = 'palette-tile';
+        tile.style.setProperty('--tile', kind.color);
+        tile.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+          'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + kind.icon + '</svg>';
+        row.appendChild(tile);
+        const text = document.createElement('span');
+        text.className = 'palette-text';
+        text.textContent = item.label;
+        row.appendChild(text);
+        if (item.sub) {
+          const sub = document.createElement('span');
+          sub.className = 'palette-sub';
+          sub.textContent = item.sub;
+          row.appendChild(sub);
+        }
+        const type = document.createElement('span');
+        type.className = 'palette-type';
+        type.textContent = kind.label;
+        row.appendChild(type);
         row.onclick = () => item.run();
         list.appendChild(row);
       });
@@ -163,25 +195,40 @@
         .map(r => r.item));
 
       const projects = rank(index.projects, p => p.name);
+      const todos = rank(index.tasks || [], t => t.title);
+      const jobs = rank(index.jobs || [], a => a.company + ' ' + a.role);
+      const people = rank(index.people || [], p => p.name + ' ' + p.context);
       const chats = rank(index.chats, c => c.title);
       const nodes = rank(index.roadmap_nodes, n => n.title);
       const actions = paletteActions()
         .filter(a => !query || fuzzyScore(query, a.label) >= 0);
 
+      group('To-dos', todos.slice(0, PALETTE_MAX_PER_GROUP).map(t => ({
+        kind: 'todo', label: t.title, sub: t.due_date ? fmtShortDate(t.due_date) : '',
+        run: () => { closePalette(); openTasksView(); },
+      })));
+      group('Jobs', jobs.slice(0, PALETTE_MAX_PER_GROUP).map(a => ({
+        kind: 'job', label: a.company, sub: a.role,
+        run: () => { closePalette(); openJobsView(a.id); },
+      })));
+      group('People', people.slice(0, PALETTE_MAX_PER_GROUP).map(p => ({
+        kind: 'person', label: p.name, sub: p.context,
+        run: () => { closePalette(); openPeopleView(); },
+      })));
       group('Projects', projects.slice(0, PALETTE_MAX_PER_GROUP).map(p => ({
-        label: p.name,
+        kind: 'project', label: p.name,
         run: () => { closePalette(); openProject(p.id); },
       })));
       group('Chats', chats.slice(0, PALETTE_MAX_PER_GROUP).map(c => ({
-        label: c.title + (c.project_name ? '  —  ' + c.project_name : ''),
+        kind: 'chat', label: c.title, sub: c.project_name || '',
         run: () => { closePalette(); showChatView(); openConversation(c.id); },
       })));
       group('Roadmap steps', nodes.slice(0, PALETTE_MAX_PER_GROUP).map(n => ({
-        label: n.title + '  —  ' + n.project_name,
+        kind: 'step', label: n.title, sub: n.project_name,
         run: () => { closePalette(); openRoadmapView(n.project_id, n.project_name); },
       })));
       group('Memory entries', memoryResults.slice(0, PALETTE_MAX_PER_GROUP).map(r => ({
-        label: r.query,
+        kind: 'memory', label: r.query,
         run: () => {
           closePalette();
           if (r.kind === 'journal') { openJournalView(r.topic); return; }
