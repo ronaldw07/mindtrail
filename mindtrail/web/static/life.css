@@ -13,7 +13,7 @@
     .job-field-input { width: 100%; background: var(--surface-sunken); color: var(--text);
                        border: 1px solid var(--border); border-radius: var(--r);
                        padding: 0.4rem 0.55rem; font: inherit; font-size: var(--fs-base);
-                       outline: none; color-scheme: dark;
+                       outline: none;
                        transition: border-color 0.14s ease; }
     .job-field-input:focus { border-color: var(--accent); }
     textarea.job-field-input { min-height: 84px; resize: vertical; line-height: var(--lh-tight); }

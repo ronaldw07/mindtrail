@@ -135,6 +135,29 @@
     return res;
   }
 
+  // Delete with an undo instead of a confirm dialog. The row disappears at
+  // once; the real delete only happens when the undo toast runs out, so
+  // "undo" never has to re-create anything. `key` is the row's data-key.
+  function softDelete({key, label, remove, rerender}) {
+    const node = document.querySelector('main [data-key="' + key + '"]');
+    const hide = () => {
+      if (!node) return;
+      node.classList.add('removing');
+      setTimeout(() => { if (node.classList.contains('removing')) node.hidden = true; }, 180);
+    };
+    const show = () => {
+      if (!node) return;
+      node.hidden = false;
+      requestAnimationFrame(() => node.classList.remove('removing'));
+    };
+    hide();
+    toast(label + ' deleted', {
+      undo: async () => { show(); },
+      onExpire: async () => { await remove(); if (rerender) await rerender(); },
+      seconds: 5,
+    });
+  }
+
   // Count a number up/down to its new value. Only used when a stat
   // changes while you're looking at it, never on first paint.
   function rollNumber(node, to, {suffix = '', duration = 450} = {}) {
@@ -309,4 +332,53 @@
       'Auto follows your Mac.'));
     c.appendChild(settingRow('Accent color', accentPicker()));
     return c;
+  }
+
+  // ---------- avatars and empty states ----------
+
+  // A colored initial. The color is picked from the name, so the same
+  // person or company always looks the same.
+  const AVATAR_COLORS = ['#0071e3', '#8944ab', '#d00041', '#995900', '#217837', '#15757f', '#c4271c', '#636366'];
+  function avatar(name, size) {
+    const a = document.createElement('span');
+    a.className = 'avatar';
+    let h = 0;
+    for (const ch of name || '?') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    a.style.setProperty('--avatar', AVATAR_COLORS[h % AVATAR_COLORS.length]);
+    if (size) a.style.setProperty('--avatar-size', size + 'px');
+    a.textContent = ((name || '?').trim()[0] || '?').toUpperCase();
+    a.setAttribute('aria-hidden', 'true');
+    return a;
+  }
+
+  const EMPTY_ICONS = {
+    todo: '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
+    habit: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/><path d="M8 14h2"/><path d="M14 14h2"/>',
+    people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14c2.2.6 3.5 2.8 3.5 6"/>',
+    jobs: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    journal: '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8"/><path d="M8 13h6"/>',
+  };
+  // An icon, a title, one line, and at most one button.
+  function emptyState(icon, title, text, actionLabel, onAction) {
+    const box = document.createElement('div');
+    box.className = 'empty-card';
+    box.innerHTML = '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+      + 'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+      + (EMPTY_ICONS[icon] || EMPTY_ICONS.todo) + '</svg>';
+    const t = document.createElement('div');
+    t.className = 'empty-title';
+    t.textContent = title;
+    const p = document.createElement('div');
+    p.className = 'empty-text';
+    p.textContent = text;
+    box.appendChild(t);
+    box.appendChild(p);
+    if (actionLabel) {
+      const b = document.createElement('button');
+      b.className = 'btn-tinted';
+      b.textContent = actionLabel;
+      b.onclick = onAction;
+      box.appendChild(b);
+    }
+    return box;
   }

@@ -136,3 +136,127 @@ main { background: var(--bg); border-radius: 14px; overflow: hidden;
 .palette-type { font-size: var(--fs-sm); color: var(--text-muted); flex-shrink: 0; }
 .palette-row.selected .palette-sub, .palette-row.selected .palette-type {
   color: color-mix(in srgb, var(--on-accent) 78%, transparent); }
+
+/* ---------- soft delete ---------- */
+.removing { opacity: 0; transform: scale(0.98); pointer-events: none;
+            transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out); }
+[hidden] { display: none !important; }
+
+/* ---------- buttons ---------- */
+/* filled = .btn-primary (app.css); tinted and plain are the quieter two. */
+.btn-tinted, .btn-plain { font-family: inherit; font-size: var(--fs-base); font-weight: 500; cursor: pointer;
+  border: none; border-radius: 8px; padding: 0.38rem 0.8rem; line-height: 1.3;
+  transition: background-color var(--dur-press) ease, color var(--dur-press) ease,
+              transform var(--dur-press) var(--ease-out); }
+.btn-tinted { background: var(--accent-tint); color: var(--accent-text); }
+.btn-tinted:hover { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+.btn-plain { background: transparent; color: var(--accent-text); }
+.btn-plain:hover { background: var(--accent-tint); }
+.btn-tinted:active, .btn-plain:active, .btn-primary:active { transform: scale(0.97); }
+.btn-tinted:disabled, .btn-plain:disabled { opacity: 0.45; cursor: default; }
+.btn-primary { border-radius: 8px; font-weight: 500; }
+.btn-danger-tinted { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.btn-danger-tinted:hover { background: color-mix(in srgb, var(--danger) 26%, transparent); }
+
+/* ---------- focus ring ---------- */
+:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 2px; }
+button:focus-visible, .side-btn:focus-visible { border-radius: inherit; }
+
+/* ---------- avatars ---------- */
+.avatar { --avatar-size: 30px; width: var(--avatar-size); height: var(--avatar-size); flex-shrink: 0;
+          border-radius: 50%; display: grid; place-items: center; background: var(--avatar, var(--text-muted));
+          color: #fff; font-weight: 600; font-size: calc(var(--avatar-size) * 0.42); user-select: none; }
+
+/* ---------- empty states ---------- */
+.empty-card { display: flex; flex-direction: column; align-items: center; text-align: center;
+              gap: 0.35rem; padding: 3rem 1rem; color: var(--text-muted); }
+.empty-card svg { color: var(--text-faint); margin-bottom: 0.4rem; }
+.empty-title { font-size: var(--fs-xl); font-weight: 600; color: var(--text-heading); }
+.empty-text { font-size: var(--fs-md); max-width: 32ch; line-height: var(--lh-body); margin-bottom: 0.6rem; }
+
+/* ---------- sheets ---------- */
+/* Dialogs drop in from the top with a spring, like a Mac sheet. */
+@keyframes sheet-in { from { opacity: 0; transform: translateY(-14px) scale(0.985); } }
+.modal { animation: sheet-in var(--dur-spring-smooth) var(--spring-smooth); border-radius: 16px;
+         border: 0.5px solid var(--border-strong); }
+@keyframes menu-in { from { opacity: 0; transform: scale(0.94); } }
+#menu { animation: menu-in var(--dur-pop) var(--ease-out); border-radius: 12px;
+        border: 0.5px solid var(--border-strong); padding: 0.3rem; }
+:root[data-input="keyboard"] .modal, :root[data-input="keyboard"] #menu { animation: none; }
+
+/* ---------- check circle (Reminders-style) ---------- */
+/* Fills with the accent, the check draws in, the label dims. */
+.task-check { width: 22px; height: 22px; margin-top: 0; border-width: 1.5px; border-color: var(--text-muted);
+              transition: background-color var(--dur-pop) var(--ease-out), border-color var(--dur-pop) var(--ease-out),
+                          transform var(--dur-press) var(--ease-out); }
+.task-check::after { content: none; }
+.done > .task-check, .task-check[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+.done > .task-check::after, .task-check[aria-pressed="true"]::after {
+  content: ""; position: absolute; left: 7px; top: 3px; width: 5px; height: 10px;
+  border: solid var(--on-accent); border-width: 0 2px 2px 0; transform: rotate(45deg);
+  animation: check-in 200ms var(--ease-out); }
+@keyframes check-in { from { clip-path: inset(0 100% 100% 0); } to { clip-path: inset(0 0 0 0); } }
+:root[data-input="keyboard"] .task-check::after { animation: none; }
+.task-row .task-title { transition: color var(--dur-pop) var(--ease-out), opacity var(--dur-pop) var(--ease-out); }
+.task-row.done .task-title { text-decoration: none; opacity: 0.55; }
+
+/* ---------- to-dos ---------- */
+.tasks-layout { display: flex; gap: 1.75rem; max-width: 1040px; margin: 0 auto; align-items: flex-start; }
+.tasks-main { flex: 1; min-width: 0; max-width: 720px; }
+.filter-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; margin-bottom: 1rem; }
+.filter-tile { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto;
+               align-items: center; text-align: left; gap: 0.35rem 0; padding: 0.65rem 0.8rem;
+               border: none; border-radius: 12px; background: var(--surface); cursor: pointer;
+               box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--hairline); font-family: inherit;
+               transition: transform var(--dur-press) var(--ease-out), box-shadow var(--dur-pop) var(--ease-out); }
+.filter-tile:active { transform: scale(0.97); }
+.filter-tile.active { box-shadow: 0 0 0 2px var(--accent); }
+.filter-icon { grid-row: 1; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+               background: var(--tile); color: #fff; }
+.filter-count { grid-row: 1; grid-column: 2; font-size: 1.55rem; font-weight: 700; color: var(--text-heading);
+                font-variant-numeric: tabular-nums; line-height: 1; }
+.filter-label { grid-row: 2; grid-column: 1 / -1; font-size: var(--fs-base); font-weight: 600; color: var(--text-2); }
+.task-add { margin-top: 0; }
+.task-add-input { width: 100%; padding: 0.65rem 0.9rem; border: none; outline: none; font: inherit;
+                  font-size: var(--fs-md); color: var(--text); background: var(--surface); border-radius: 12px;
+                  box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--hairline);
+                  transition: box-shadow var(--dur-pop) var(--ease-out); }
+.task-add-input:focus { box-shadow: 0 0 0 2px var(--accent); }
+.task-add-input::placeholder { color: var(--text-muted); }
+
+/* grouped list: a rounded container, rows divided by an inset hairline */
+.group-section { margin-top: 1.1rem; }
+.group-title { font-size: var(--fs-sm); font-weight: 600; color: var(--text-muted); margin: 0 0.4rem 0.35rem; }
+.group-title.overdue { color: var(--danger); }
+.group-list { background: var(--surface); border-radius: 12px; overflow: hidden;
+              box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--hairline); }
+#tasks-view .group-row { padding: 0.6rem 0.8rem; border-bottom: none; gap: 0.7rem; position: relative;
+                         transition: background-color var(--dur-press) ease; }
+#tasks-view .group-row + .group-row::before { content: ""; position: absolute; top: 0; left: 2.9rem; right: 0;
+                                              border-top: 0.5px solid var(--border-subtle); }
+#tasks-view .group-row:hover { background: var(--surface-hover); }
+#tasks-view .group-row.selected { background: var(--accent-tint); }
+#tasks-view .task-body { gap: 0.55rem; align-items: center; }
+#tasks-view .task-title { font-size: var(--fs-md); }
+.task-info { opacity: 0; border: none; background: transparent; color: var(--accent-text); cursor: pointer;
+             padding: 0.15rem; border-radius: 50%; display: grid; place-items: center;
+             transition: opacity var(--dur-press) ease, transform var(--dur-press) var(--ease-out); }
+.task-row:hover .task-info, .task-info:focus-visible, .group-row.selected .task-info { opacity: 1; }
+.task-info:active { transform: scale(0.9); }
+
+/* inspector: details of the selected item, beside the list */
+.inspector { width: 300px; flex-shrink: 0; position: sticky; top: 0; padding: 1rem; border-radius: 14px;
+             background: var(--surface); box-shadow: var(--shadow-md), 0 0 0 0.5px var(--hairline);
+             animation: inspector-in var(--dur-spring-smooth) var(--spring-smooth); }
+@keyframes inspector-in { from { opacity: 0; transform: translateX(14px); } }
+:root[data-input="keyboard"] .inspector { animation: none; }
+.inspector-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+.inspector-kicker { font-size: var(--fs-sm); font-weight: 600; color: var(--text-muted); }
+.inspector-title { width: 100%; border: none; outline: none; background: transparent; color: var(--text-heading);
+                   font: inherit; font-size: var(--fs-xl); font-weight: 600; padding: 0.2rem 0; margin-bottom: 0.4rem; }
+.inspector-field { margin-top: 0.85rem; }
+.inspector-label { font-size: var(--fs-xs); font-weight: 600; color: var(--text-muted); margin-bottom: 0.3rem; }
+.quick-dates { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
+.quick-dates .btn-tinted { padding: 0.22rem 0.55rem; font-size: var(--fs-sm); }
+.inspector-actions { display: flex; gap: 0.5rem; margin-top: 1.2rem; }
+@media (max-width: 980px) { .tasks-layout { flex-direction: column; } .inspector { width: 100%; position: static; } }

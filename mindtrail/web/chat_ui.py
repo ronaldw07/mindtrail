@@ -176,6 +176,7 @@ CHAT_HTML = """<!doctype html>
   <script src="/static/jobs.js"></script>
   <script src="/static/life.js"></script>
   <script src="/static/today.js"></script>
+  <script src="/static/tasks.js"></script>
   <script src="/static/focus.js"></script>
   <script src="/static/review.js"></script>
   <script src="/static/admin.js"></script>

@@ -422,7 +422,10 @@
       el.appendChild(btn);
       timer = setInterval(() => {
         left -= 1;
-        if (left <= 0) dismiss(); else label();
+        if (left <= 0) {
+          dismiss();
+          if (opts.onExpire) opts.onExpire();
+        } else label();
       }, 1000);
     } else {
       timer = setTimeout(dismiss, (opts.seconds || 3) * 1000);

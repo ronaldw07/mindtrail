@@ -141,9 +141,9 @@
       }},
       {divider: true},
       {label: 'Delete', danger: true, run: async () => {
-        if (!await askConfirm('Delete', 'Remove ' + p.name + '?', 'Delete')) return;
-        await api('/api/people/' + p.id, {method: 'DELETE'});
-        await renderPeopleView();
+        softDelete({key: 'person:' + p.id, label: p.name,
+                    remove: () => api('/api/people/' + p.id, {method: 'DELETE'}),
+                    rerender: renderPeopleView});
       }},
     ]);
   }

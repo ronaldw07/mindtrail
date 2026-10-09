@@ -330,13 +330,14 @@
     return panel;
   }
 
-  async function deleteJob(a, confirmFirst) {
-    if (confirmFirst && !await askConfirm('Delete application',
-        'Delete ' + a.company + ' and its to-dos? This cannot be undone.', 'Delete')) return;
-    const res = await api('/api/jobs/' + a.id, {method: 'DELETE'});
-    if (res.error) toast(res.error, {error: true});
+  // Undoable for a few seconds, like every delete: the card vanishes now and
+  // the application and its to-dos are removed when the toast runs out.
+  async function deleteJob(a) {
     jobsSelectedId = null;
-    await reloadJobs();
+    renderJobs();
+    softDelete({key: 'job:' + a.id, label: a.company,
+                remove: () => api('/api/jobs/' + a.id, {method: 'DELETE'}),
+                rerender: reloadJobs});
   }
 
   // ---------- tasks (shared by the Jobs panel and Today) ----------
