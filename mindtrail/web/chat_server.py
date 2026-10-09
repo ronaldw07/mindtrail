@@ -29,6 +29,7 @@ from mindtrail.llm import LLMClient
 from mindtrail.memory.store import MemoryStore
 from mindtrail.organize.app_state import AppState
 from mindtrail.organize.areas import AreaStore
+from mindtrail.organize.backup import BackupStore, BackupTimer
 from mindtrail.organize.conversations import ConversationStore
 from mindtrail.organize.email_log import EmailLog
 from mindtrail.organize.focus import FocusStore
@@ -66,6 +67,7 @@ STATIC_FILES = {
     "/static/life.js": ("life.js", "application/javascript; charset=utf-8"),
     "/static/today.js": ("today.js", "application/javascript; charset=utf-8"),
     "/static/tasks.js": ("tasks.js", "application/javascript; charset=utf-8"),
+    "/static/settings.js": ("settings.js", "application/javascript; charset=utf-8"),
     "/static/focus.js": ("focus.js", "application/javascript; charset=utf-8"),
     "/static/review.js": ("review.js", "application/javascript; charset=utf-8"),
     "/static/admin.js": ("admin.js", "application/javascript; charset=utf-8"),
@@ -131,6 +133,7 @@ class Deps:
         self.canvas = CanvasFeed(self.state)
         self.github = GitHubUpdates(self.state)
         self.health = HealthStore(db_path)
+        self.backups = BackupStore(db_path, self.state)
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)
         self.job_emails = self.email_log.for_application
@@ -645,10 +648,13 @@ def run_chat_server(
     # a Google connection each run just records "not connected".
     timer = ScanTimer(deps.scanner)
     timer.start()
+    backup_timer = BackupTimer(deps.backups)
+    backup_timer.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nstopped")
     finally:
         timer.stop()
+        backup_timer.stop()
         server.server_close()

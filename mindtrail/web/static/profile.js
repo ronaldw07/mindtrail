@@ -73,11 +73,14 @@
       toast('Profile saved');
     };
 
+    main.appendChild(setupCard());
     main.appendChild(appearanceCard());
     main.appendChild(aboutCard);
     main.appendChild(areasCard());
     main.appendChild(canvasCard());
     main.appendChild(githubCard());
+    main.appendChild(backupsCard());
+    main.appendChild(dataCard());
     layout.appendChild(main);
 
     const rail = document.createElement('div');

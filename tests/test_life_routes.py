@@ -119,3 +119,36 @@ def test_badges_count_what_needs_attention(tmp_path):
     badges = life_api.handle_badges(tasks, people, jobs, today)
 
     assert badges == {"tasks": 2, "people": 0, "jobs": 1}
+
+
+def test_journal_on_this_day_finds_a_month_and_a_year_back(tmp_path):
+    from datetime import date
+
+    from mindtrail.organize.db import initialize
+    from mindtrail.organize.journal import JournalStore
+    from mindtrail.web import life_api
+
+    db = str(tmp_path / "t.db")
+    initialize(db)
+    journal = JournalStore(db)
+    journal.save("2026-09-09", "a month ago", mood=3)
+    journal.save("2025-10-09", "a year ago")
+    journal.save("2026-08-09", "two months ago, not shown")
+
+    found = life_api.on_this_day(journal, date(2026, 10, 9))
+
+    assert [(f["label"], f["date"]) for f in found] == [
+        ("1 month ago", "2026-09-09"), ("1 year ago", "2025-10-09")]
+
+
+def test_journal_on_this_day_skips_dates_that_do_not_exist(tmp_path):
+    from datetime import date
+
+    from mindtrail.organize.db import initialize
+    from mindtrail.organize.journal import JournalStore
+    from mindtrail.web import life_api
+
+    db = str(tmp_path / "t.db")
+    initialize(db)
+
+    assert life_api.on_this_day(JournalStore(db), date(2026, 3, 31)) == []

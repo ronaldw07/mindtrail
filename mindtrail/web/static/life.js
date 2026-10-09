@@ -375,7 +375,6 @@
     const entry = data.entry;
     journalDay = entry.date;
     const view = $('journal-view');
-    view.innerHTML = '';
     const layout = document.createElement('div');
     layout.className = 'proj-layout';
     const main = document.createElement('div');
@@ -485,9 +484,27 @@
       makeClickable(row, () => openJournalView(e.date));
       past.appendChild(row);
     });
+    if ((data.on_this_day || []).length) {
+      const memory = card('On this day', null, null);
+      data.on_this_day.forEach(m => {
+        const row = document.createElement('div');
+        row.className = 'journal-past';
+        const top = document.createElement('div');
+        top.className = 'journal-past-date';
+        top.textContent = m.label + ' · ' + fmtShortDate(m.date) + (m.mood ? ' · ' + MOOD_LABELS[m.mood - 1] : '');
+        row.appendChild(top);
+        const text = document.createElement('div');
+        text.className = 'journal-past-preview';
+        text.textContent = m.preview;
+        row.appendChild(text);
+        makeClickable(row, () => openJournalView(m.date));
+        memory.appendChild(row);
+      });
+      rail.appendChild(memory);
+    }
     rail.appendChild(past);
     layout.appendChild(rail);
-    view.appendChild(layout);
+    commitView(view, layout);
     if (!entry.body) box.focus();
   }
 

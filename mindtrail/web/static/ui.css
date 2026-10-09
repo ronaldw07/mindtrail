@@ -371,3 +371,34 @@ body.dragging-card { cursor: grabbing; user-select: none; }
 .widget-row + .widget-row::before { content: ""; position: absolute; top: 0; left: 3.4rem; right: 0;
                                     border-top: 0.5px solid var(--border-subtle); }
 .widget-name { flex: 1; font-size: var(--fs-md); }
+
+/* ---------- journal ---------- */
+.journal-main { max-width: 65ch; }
+.journal-box { font-family: var(--font-serif); font-size: 1.12rem; line-height: 1.75; border: none; border-radius: 14px;
+               background: var(--surface); padding: 1.25rem 1.4rem; min-height: 340px;
+               box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--hairline);
+               transition: box-shadow var(--dur-pop) var(--ease-out); }
+.journal-box:focus { box-shadow: 0 0 0 2px var(--accent); }
+.journal-date { font-family: var(--font-serif); font-weight: 500; }
+.journal-past { border-radius: 10px; padding: 0.5rem 0.6rem; margin: 0 -0.6rem;
+                transition: background-color var(--dur-press) ease; }
+.journal-past:hover, .journal-past.current { background: var(--surface-hover); }
+
+/* ---------- settings ---------- */
+.setup-head { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 0.4rem; }
+.setup-count { font-size: var(--fs-md); font-weight: 600; white-space: nowrap; }
+.setup-track { flex: 1; height: 8px; border-radius: 999px; }
+.setup-fill { background: var(--success); border-radius: 999px;
+              transition: width var(--dur-spring-smooth) var(--spring-smooth); }
+.setup-row { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.55rem 0; }
+.setup-row + .setup-row { border-top: 0.5px solid var(--border-subtle); }
+.setup-mark { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--text-faint);
+              display: grid; place-items: center; color: #fff; flex-shrink: 0; margin-top: 0.1rem; }
+.setup-row.done .setup-mark { background: var(--success); border-color: var(--success); }
+.setup-label { font-size: var(--fs-md); font-weight: 600; }
+.setup-detail { font-size: var(--fs-sm); color: var(--text-muted); margin-top: 0.1rem; word-break: break-word; }
+.backup-body .widget-head { margin-top: 0.9rem; }
+.week-bar-track { height: 12px; border-radius: 999px; }
+.week-bar-fill { border-radius: 999px; transform-origin: left; animation: bar-in var(--dur-spring-smooth) var(--spring-smooth); }
+@keyframes bar-in { from { transform: scaleX(0); } }
+.card { border: none; border-radius: 14px; box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--hairline); }

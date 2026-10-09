@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
-from mindtrail.web import admin_api, jobs_api, life_api, review
+from mindtrail.web import admin_api, jobs_api, life_api, review, settings_api
 
 ROUTES: list[tuple[str, re.Pattern, object]] = []
 
@@ -316,3 +316,36 @@ def _update_task(deps, args, body, query):
 @route("DELETE", f"/api/tasks/{_ID}")
 def _delete_task(deps, args, body, query):
     return jobs_api.handle_delete_task(deps.tasks, args[0])
+
+
+# --- settings: connections and backups ----------------------------------------
+
+
+@route("GET", "/api/connections")
+def _connections(deps, args, body, query):
+    return settings_api.handle_connections(deps.canvas, deps.github, deps.health, deps.backups)
+
+
+@route("GET", "/api/backups")
+def _backups(deps, args, body, query):
+    return settings_api.handle_backups(deps.backups)
+
+
+@route("POST", "/api/backups/run")
+def _backup_run(deps, args, body, query):
+    return settings_api.handle_backup_run(deps.backups)
+
+
+@route("POST", "/api/backups/folder")
+def _backup_folder(deps, args, body, query):
+    return settings_api.handle_backup_folder(deps.backups, body)
+
+
+@route("POST", "/api/backups/enable")
+def _backup_enable(deps, args, body, query):
+    return settings_api.handle_backup_enable(deps.backups, body)
+
+
+@route("POST", "/api/backups/restore")
+def _backup_restore(deps, args, body, query):
+    return settings_api.handle_backup_restore(deps.backups, deps.journal, body)

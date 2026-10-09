@@ -159,6 +159,22 @@ def _journal_json(entry: JournalEntry | None, day: str) -> dict:
             "energy": entry.energy, "updated_at": entry.updated_at}
 
 
+def on_this_day(journal: JournalStore, when: date) -> list[dict]:
+    """Entries written exactly a month and a year before `when`."""
+    found = []
+    for label, months in (("1 month ago", 1), ("1 year ago", 12)):
+        year, month = when.year + (when.month - 1 - months) // 12, (when.month - 1 - months) % 12 + 1
+        try:
+            then = when.replace(year=year, month=month)
+        except ValueError:  # 31st into a 30-day month, 29 Feb
+            continue
+        entry = journal.get(then.isoformat())
+        if entry and entry.body.strip():
+            found.append({"label": label, "date": then.isoformat(), "mood": entry.mood,
+                          "preview": " ".join(entry.body.split())[:PREVIEW_CHARS * 2]})
+    return found
+
+
 def handle_get_journal(journal: JournalStore, day: str, today: date | None = None) -> dict:
     today = today or date.today()
     try:
@@ -171,6 +187,7 @@ def handle_get_journal(journal: JournalStore, day: str, today: date | None = Non
         "entry": _journal_json(journal.get(when.isoformat()), when.isoformat()),
         "today": today.isoformat(),
         "prompts": prompts_for(when),
+        "on_this_day": on_this_day(journal, when),
         "recent": [
             {"date": e.date, "mood": e.mood, "energy": e.energy,
              "preview": " ".join(e.body.split())[:PREVIEW_CHARS]}
