@@ -206,6 +206,10 @@
         box.appendChild(p);
       }
 
+      // A ready-made DOM node, for sheets that are more than one field
+      // (the widget editor).
+      if (opts.body) box.appendChild(opts.body);
+
       let field = null;
       if (opts.select) {
         // A plain <select> - natively keyboard-operable (Tab, arrows,
@@ -238,7 +242,7 @@
       const ok = document.createElement('button');
       ok.className = opts.danger ? 'btn-danger' : 'btn-primary';
       ok.textContent = opts.confirmLabel || 'OK';
-      actions.appendChild(cancel);
+      if (!opts.hideCancel) actions.appendChild(cancel);
       actions.appendChild(ok);
       box.appendChild(actions);
 

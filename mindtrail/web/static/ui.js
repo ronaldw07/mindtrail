@@ -399,3 +399,34 @@
                 {duration: 220, easing: 'cubic-bezier(0.23, 1, 0.32, 1)'});
     });
   }
+
+  // − / + control for a small whole number. format(n) is the label shown.
+  function stepper(value, min, max, format, onChange, label) {
+    const root = document.createElement('div');
+    root.className = 'stepper';
+    root.setAttribute('role', 'group');
+    if (label) root.setAttribute('aria-label', label);
+    const minus = document.createElement('button');
+    const plus = document.createElement('button');
+    const text = document.createElement('span');
+    text.className = 'stepper-label';
+    text.setAttribute('aria-live', 'polite');
+    [minus, plus].forEach(b => { b.type = 'button'; b.className = 'stepper-btn'; });
+    minus.textContent = '−';
+    plus.textContent = '+';
+    minus.setAttribute('aria-label', 'Less');
+    plus.setAttribute('aria-label', 'More');
+    const paint = () => {
+      text.textContent = format(value);
+      minus.disabled = value <= min;
+      plus.disabled = value >= max;
+    };
+    const step = by => () => { value = Math.max(min, Math.min(max, value + by)); paint(); onChange(value); };
+    minus.onclick = step(-1);
+    plus.onclick = step(1);
+    root.appendChild(minus);
+    root.appendChild(text);
+    root.appendChild(plus);
+    paint();
+    return root;
+  }

@@ -8,6 +8,7 @@
   // on the left, content on the right.
 
   const TODAY_WIDGETS = [
+    {id: 'activity', label: 'Activity rings', wide: true},
     {id: 'habits', label: 'Habit rings'},
     {id: 'mood', label: 'Mood & energy'},
     {id: 'week', label: 'Week ahead'},
@@ -126,13 +127,13 @@
     const row = tEl('section', 't-glance');
     row.setAttribute('aria-label', 'At a glance');
     layout.order.filter(id => !layout.hidden.includes(id)).forEach(id => {
-      const w = {habits: habitRings, mood: moodChart, week: weekStrip, pipeline: pipelineTiles,
+      const w = {activity: activityRings, habits: habitRings, mood: moodChart, week: weekStrip, pipeline: pipelineTiles,
                  focus: focusTile, health: healthTile}[id];
       const tile = w(summary, data);
       if (tile) row.appendChild(tile);
     });
-    const edit = tEl('button', 't-link t-customize', 'Customize');
-    edit.onclick = e => openLayoutMenu(e);
+    const edit = tEl('button', 't-link t-customize', 'Edit widgets');
+    edit.onclick = () => openWidgetSheet();
     row.appendChild(edit);
     return row;
   }
@@ -193,6 +194,24 @@
     const tile = glanceTile('Mood & energy · 14 days', () => openJournalView());
     if (!trend.length) {
       tile.appendChild(tEl('div', 't-empty', 'Rate a day in the journal to see a trend.'));
+      return tile;
+    }
+    // A line through one or two points says nothing: show the latest
+    // numbers until there are enough days to draw a trend.
+    if (trend.length < 3) {
+      const latest = trend[trend.length - 1];
+      const row = tEl('div', 't-mood-now');
+      MOOD_SERIES.forEach(series => {
+        const cell = tEl('div', 't-mood-cell');
+        const num = tEl('div', 't-stat-num', latest[series.key] ? latest[series.key] + '/5' : '–');
+        cell.appendChild(num);
+        const label = tEl('div', 't-stat-label', series.label);
+        label.style.setProperty('--dot', series.color);
+        cell.appendChild(label);
+        row.appendChild(cell);
+      });
+      tile.appendChild(row);
+      tile.appendChild(tEl('div', 't-note', 'A trend line appears after 3 days of ratings.'));
       return tile;
     }
     // Drawn at roughly its on-screen size so 11px labels stay 11px.
@@ -380,26 +399,116 @@
     return tile;
   }
 
-  function openLayoutMenu(e) {
-    const layout = todayLayout();
-    const save = next => { prefs.set('todayLayout', next); openDashboardView(); };
-    const items = [{label: (layout.art ? 'Hide' : 'Show') + ' daily painting',
-                    run: () => save({...layout, art: !layout.art})}, {divider: true}];
-    layout.order.forEach((id, i) => {
-      const w = TODAY_WIDGETS.find(x => x.id === id);
-      const hidden = layout.hidden.includes(id);
-      items.push({label: (hidden ? 'Show ' : 'Hide ') + w.label, run: () => save({...layout,
-        hidden: hidden ? layout.hidden.filter(h => h !== id) : layout.hidden.concat(id)})});
-      if (i > 0) {
-        items.push({label: '   Move ' + w.label + ' left', run: () => {
-          const order = layout.order.slice();
-          [order[i - 1], order[i]] = [order[i], order[i - 1]];
-          save({...layout, order});
-        }});
-      }
+  // ---------- activity rings ----------
+  // Three nested rings, each a validated categorical hue: habit check-ins
+  // against their weekly targets, focus time against a goal, and average
+  // sleep against a goal. Arcs fill with a spring when the tile appears.
+  const RING_DEFAULTS = {focusHours: 10, sleepHours: 8};
+  const ringGoals = () => ({...RING_DEFAULTS, ...(prefs.get('ringGoals', {}) || {})});
+
+  function activityRings(summary, data) {
+    const goals = ringGoals();
+    const habits = summary.habits || [];
+    const habitDone = habits.reduce((n, h) => n + Math.min(h.this_week, h.target_per_week), 0);
+    const habitTarget = habits.reduce((n, h) => n + h.target_per_week, 0);
+    const focusMin = (data && data.focus && data.focus.total) || 0;
+    const sleepMin = (summary.health && summary.health.avg_sleep) || 0;
+    const rings = [
+      {key: 'habits', label: 'Habits', color: '#3987e5', value: habitDone, goal: habitTarget,
+       text: habitTarget ? habitDone + ' of ' + habitTarget + ' check-ins' : 'No habits yet'},
+      {key: 'focus', label: 'Focus', color: '#d95926', value: focusMin, goal: goals.focusHours * 60,
+       text: fmtMinutes(focusMin) + ' of ' + goals.focusHours + 'h'},
+      {key: 'sleep', label: 'Sleep', color: '#199e70', value: sleepMin, goal: goals.sleepHours * 60,
+       text: sleepMin ? fmtMinutes(sleepMin) + ' avg of ' + goals.sleepHours + 'h' : 'No Health data'},
+    ];
+    const tile = glanceTile('Activity · this week', null);
+    tile.classList.add('wide');
+    const body = tEl('div', 't-activity');
+    const size = 120;
+    const s = svg('svg', {viewBox: `0 0 ${size} ${size}`, width: size, height: size, role: 'img',
+      'aria-label': rings.map(r => r.label + ': ' + r.text).join('. ')});
+    const arcs = [];
+    rings.forEach((r, i) => {
+      const radius = 50 - i * 14;
+      const circ = 2 * Math.PI * radius;
+      s.appendChild(svg('circle', {cx: 60, cy: 60, r: radius, class: 't-ring-track t-ring-wide'}));
+      const arc = svg('circle', {cx: 60, cy: 60, r: radius, class: 't-ring-arc t-ring-wide',
+        'stroke-dasharray': '0 ' + circ, transform: 'rotate(-90 60 60)'});
+      arc.style.stroke = r.color;
+      s.appendChild(arc);
+      arcs.push([arc, r.goal ? Math.min(r.value / r.goal, 1) * circ : 0, circ]);
     });
-    items.push({divider: true}, {label: 'Reset layout', run: () => save(DEFAULT_LAYOUT)});
-    showMenu(e, items);
+    body.appendChild(s);
+    const legend = tEl('div', 't-activity-legend');
+    rings.forEach(r => {
+      const row = tEl('div', 't-activity-row');
+      const dot = tEl('span', 't-swatch');
+      dot.style.background = r.color;
+      row.appendChild(dot);
+      row.appendChild(tEl('span', 't-activity-name', r.label));
+      row.appendChild(tEl('span', 't-activity-text', r.text));
+      legend.appendChild(row);
+    });
+    body.appendChild(legend);
+    tile.appendChild(body);
+    // Next frame, so the transition has a starting point to run from.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      arcs.forEach(([arc, len, circ]) => arc.setAttribute('stroke-dasharray', len + ' ' + circ));
+    }));
+    return tile;
+  }
+
+  // ---------- edit widgets ----------
+  // A sheet with a switch per widget, up/down to reorder, and the goals
+  // behind the rings. Every change saves at once; Today redraws on close.
+  async function openWidgetSheet() {
+    let layout = todayLayout();
+    const body = tEl('div', 'widget-sheet');
+    const save = next => { layout = next; prefs.set('todayLayout', next); paint(); };
+    const move = (i, by) => {
+      const order = layout.order.slice();
+      [order[i], order[i + by]] = [order[i + by], order[i]];
+      save({...layout, order});
+    };
+    function paint() {
+      body.innerHTML = '';
+      body.appendChild(tEl('div', 'widget-head', 'Widgets'));
+      const list = tEl('div', 'group-list');
+      layout.order.forEach((id, i) => {
+        const w = TODAY_WIDGETS.find(x => x.id === id);
+        const row = tEl('div', 'widget-row');
+        row.appendChild(switchEl(!layout.hidden.includes(id), on => save({...layout,
+          hidden: on ? layout.hidden.filter(h => h !== id) : layout.hidden.concat(id)}), 'Show ' + w.label));
+        row.appendChild(tEl('span', 'widget-name', w.label));
+        const up = tEl('button', 'stepper-btn', '↑');
+        const down = tEl('button', 'stepper-btn', '↓');
+        up.type = down.type = 'button';
+        up.setAttribute('aria-label', 'Move ' + w.label + ' up');
+        down.setAttribute('aria-label', 'Move ' + w.label + ' down');
+        up.disabled = i === 0;
+        down.disabled = i === layout.order.length - 1;
+        up.onclick = () => move(i, -1);
+        down.onclick = () => move(i, 1);
+        row.appendChild(up);
+        row.appendChild(down);
+        list.appendChild(row);
+      });
+      body.appendChild(list);
+      body.appendChild(settingRow('Daily painting', switchEl(layout.art, on => save({...layout, art: on}),
+        'Daily painting')));
+      const goals = ringGoals();
+      body.appendChild(tEl('div', 'widget-head', 'Ring goals'));
+      body.appendChild(settingRow('Focus per week', stepper(goals.focusHours, 1, 40, n => n + ' hours',
+        n => prefs.set('ringGoals', {...ringGoals(), focusHours: n}), 'Focus hours per week')));
+      body.appendChild(settingRow('Sleep per night', stepper(goals.sleepHours, 5, 11, n => n + ' hours',
+        n => prefs.set('ringGoals', {...ringGoals(), sleepHours: n}), 'Sleep hours per night')));
+      const reset = tEl('button', 'btn-plain', 'Reset layout');
+      reset.onclick = () => save({...DEFAULT_LAYOUT, order: TODAY_WIDGETS.map(w => w.id)});
+      body.appendChild(reset);
+    }
+    paint();
+    await modal({title: 'Edit widgets', body, confirmLabel: 'Done', hideCancel: true});
+    openDashboardView();
   }
 
   // ---------- sections ----------

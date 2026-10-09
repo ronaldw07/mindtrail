@@ -112,6 +112,8 @@
       --dot: transparent;
       --tile: #636366;
       --stage: #8e8e93;
+      --weeks: 52;
+      --habit-color: #3987e5;
       --avatar-size: 30px;
     }
     @supports (transition-timing-function: linear(0, 1)) {

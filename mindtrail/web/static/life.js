@@ -163,15 +163,8 @@
     name.className = 'jobs-link-input';
     name.placeholder = 'New habit';
     name.setAttribute('aria-label', 'Habit name');
-    const target = document.createElement('select');
-    target.className = 'job-field-input habit-select';
-    target.setAttribute('aria-label', 'How often');
-    HABIT_TARGETS.forEach(n => {
-      const o = document.createElement('option');
-      o.value = String(n);
-      o.textContent = targetLabel(n);
-      target.appendChild(o);
-    });
+    let perWeek = 7;
+    const target = stepper(perWeek, 1, 7, targetLabel, n => { perWeek = n; }, 'How often');
     const area = document.createElement('select');
     area.className = 'job-field-input habit-select';
     area.setAttribute('aria-label', 'Life area');
@@ -190,7 +183,7 @@
       e.preventDefault();
       if (!name.value.trim()) return;
       const res = await jsonSend('/api/habits', {
-        name: name.value, target_per_week: Number(target.value), area_id: area.value});
+        name: name.value, target_per_week: perWeek, area_id: area.value});
       if (res.error) { toast(res.error, {error: true}); return; }
       await renderHabitsView();
     };
@@ -222,6 +215,14 @@
     meta.textContent = targetLabel(h.target_per_week) + ' · ' + habitMeta(h);
     body.appendChild(meta);
     head.appendChild(body);
+    if (h.streak) {
+      const streak = document.createElement('div');
+      streak.className = 'habit-streak';
+      streak.innerHTML = '<span class="habit-streak-num"></span><span class="habit-streak-unit"></span>';
+      streak.querySelector('.habit-streak-num').textContent = h.streak;
+      streak.querySelector('.habit-streak-unit').textContent = h.unit === 'day' ? 'day streak' : 'week streak';
+      head.appendChild(streak);
+    }
     const more = document.createElement('button');
     more.className = 'menu-btn task-more';
     more.textContent = '⋯';
@@ -229,28 +230,74 @@
     more.onclick = e => openHabitMenu(e, h);
     head.appendChild(more);
     c.appendChild(head);
+    c.appendChild(habitWeekStrip(h, data));
     c.appendChild(habitHeatmap(h, data));
     return c;
   }
 
+  // This week at a glance: seven day circles, Monday first. Tap one of the
+  // last seven days to fix a missed check-in (the server enforces the same
+  // window as the heatmap below).
+  function habitWeekStrip(h, data) {
+    const done = new Set(h.logs);
+    const today = data.today;
+    const monday = addDays(today, -((new Date(today + 'T12:00:00').getDay() + 6) % 7));
+    const strip = document.createElement('div');
+    strip.className = 'week-strip';
+    strip.style.setProperty('--habit-color', habitColor(h));
+    'MTWTFSS'.split('').forEach((letter, i) => {
+      const day = addDays(monday, i);
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'week-dot' + (done.has(day) ? ' on' : '') + (day === today ? ' today' : '');
+      cell.disabled = day > today || day < addDays(today, -7);
+      cell.setAttribute('aria-label', fmtShortDate(day) + (done.has(day) ? ' — done' : ''));
+      cell.setAttribute('aria-pressed', done.has(day) ? 'true' : 'false');
+      cell.innerHTML = '<span class="week-dot-letter"></span><span class="week-dot-fill"></span>';
+      cell.querySelector('.week-dot-letter').textContent = letter;
+      cell.onclick = async () => { await toggleHabit(h, day); renderHabitsView(); };
+      strip.appendChild(cell);
+    });
+    return strip;
+  }
+
   // 52 weeks × 7 days, Monday on top, one column per week - the GitHub
-  // contribution layout. One hue per habit (its area's), so it's a single
-  // series: no legend, the card title names it. Cells in the last week
-  // are clickable to backfill a missed check-in; the server enforces the
-  // same window.
+  // contribution layout, stretched to the card's width. One hue per habit
+  // (its area's), so it's a single series: no legend, the card title names
+  // it. Cells in the last week are clickable to backfill a missed check-in.
   function habitHeatmap(h, data) {
     const done = new Set(h.logs);
     const today = data.today;
-    const first = addDays(today, -((new Date(today + 'T12:00:00').getDay() + 6) % 7)
-                                 - 7 * (data.heatmap_weeks - 1));
+    const weeks = data.heatmap_weeks;
+    const first = addDays(today, -((new Date(today + 'T12:00:00').getDay() + 6) % 7) - 7 * (weeks - 1));
+    const wrap = document.createElement('div');
+    wrap.className = 'heatmap-wrap';
+    wrap.style.setProperty('--habit-color', habitColor(h));
+    wrap.style.setProperty('--weeks', String(weeks));
+
+    const months = document.createElement('div');
+    months.className = 'heat-months';
+    let lastMonth = -1;
+    for (let w = 0; w < weeks; w++) {
+      const m = new Date(addDays(first, w * 7) + 'T12:00:00').getMonth();
+      if (m === lastMonth) continue;
+      lastMonth = m;
+      const label = document.createElement('span');
+      label.style.gridColumn = String(w + 1) + ' / span 4';
+      label.style.gridRow = '1';
+      label.textContent = new Date(addDays(first, w * 7) + 'T12:00:00')
+        .toLocaleDateString(undefined, {month: 'short'});
+      if (w <= weeks - 4) months.appendChild(label);
+    }
+    wrap.appendChild(months);
+
     const grid = document.createElement('div');
     grid.className = 'heatmap';
-    grid.style.setProperty('--habit-color', habitColor(h));
     grid.setAttribute('role', 'img');
     grid.setAttribute('aria-label', h.name + ': done ' + h.logs.length + ' times in the last '
-      + data.heatmap_weeks + ' weeks');
+      + weeks + ' weeks');
     const editableFrom = addDays(today, -7);
-    for (let w = 0; w < data.heatmap_weeks; w++) {
+    for (let w = 0; w < weeks; w++) {
       for (let d = 0; d < 7; d++) {
         const day = addDays(first, w * 7 + d);
         const cell = document.createElement('div');
@@ -269,7 +316,8 @@
         grid.appendChild(cell);
       }
     }
-    return grid;
+    wrap.appendChild(grid);
+    return wrap;
   }
 
   function openHabitMenu(e, h) {
