@@ -111,6 +111,7 @@
       --seg-count: 2;
       --dot: transparent;
       --tile: #636366;
+      --stage: #8e8e93;
       --avatar-size: 30px;
     }
     @supports (transition-timing-function: linear(0, 1)) {

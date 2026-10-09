@@ -9,6 +9,10 @@
     saved: 'Saved', applied: 'Applied', oa: 'Assessment', interview: 'Interview',
     offer: 'Offer', rejected: 'Rejected', withdrawn: 'Withdrawn',
   };
+  const JOB_STAGE_COLORS = {
+    saved: '#8e8e93', applied: '#0a84ff', oa: '#ff9f0a', interview: '#bf5af2',
+    offer: '#30d158', rejected: '#ff453a', withdrawn: '#8e8e93',
+  };
   let jobsData = null;        // last /api/jobs payload
   let jobsSelectedId = null;  // application open in the detail panel
 
@@ -118,16 +122,15 @@
     };
     bar.appendChild(form);
 
-    const manual = el('button', 'btn-ghost jobs-btn', 'Add manually');
-    manual.onclick = addJobManually;
-    bar.appendChild(manual);
+    const more = el('button', 'btn-tinted', 'More ▾');
+    more.setAttribute('aria-haspopup', 'menu');
+    more.onclick = e => showMenuFrom(e.currentTarget, [
+      {label: 'Add manually', run: addJobManually},
+      {label: data.sheet.link ? 'Sync sheet' : 'Import from Google Sheets', run: () => importSheet(more)},
+    ]);
+    bar.appendChild(more);
 
-    const sheet = el('button', 'btn-ghost jobs-btn',
-                     data.sheet.link ? 'Sync sheet' : 'Import sheet');
-    sheet.onclick = () => importSheet(sheet);
-    bar.appendChild(sheet);
-
-    const scan = el('button', 'btn-ghost jobs-btn', 'Check email');
+    const scan = el('button', 'btn-tinted', 'Check email');
     scan.onclick = async () => {
       setButtonBusy(scan, 'Checking…');
       const res = await jsonSend('/api/jobs/scan', {});
@@ -203,38 +206,37 @@
   function jobsColumn(stage, apps) {
     const col = el('div', 'jobs-col');
     col.dataset.stage = stage;
+    col.style.setProperty('--stage', JOB_STAGE_COLORS[stage] || '#636366');
     const head = el('div', 'jobs-col-head');
-    head.appendChild(el('span', '', JOB_STAGE_LABELS[stage]));
+    head.appendChild(el('span', 'jobs-col-dot'));
+    head.appendChild(el('span', 'jobs-col-name', JOB_STAGE_LABELS[stage]));
     head.appendChild(el('span', 'jobs-col-count', String(apps.length)));
     col.appendChild(head);
     apps.forEach(a => col.appendChild(jobCard(a)));
-
-    // Mouse drag between columns; the detail panel's stage picker is the
-    // keyboard path to the same change.
-    col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drop'); });
-    col.addEventListener('dragleave', e => {
-      if (!col.contains(e.relatedTarget)) col.classList.remove('drop');
-    });
-    col.addEventListener('drop', async e => {
-      e.preventDefault();
-      col.classList.remove('drop');
-      const id = e.dataTransfer.getData('text/plain');
-      const app = jobsData.applications.find(a => a.id === id);
-      if (app && app.stage !== stage) await patchJob(id, {stage});
-    });
+    // Dragging a card between columns: see enableJobDrag. The detail
+    // panel's stage picker is the keyboard path to the same change.
     return col;
   }
 
   function jobCard(a) {
     const c = el('div', 'job-card' + (a.id === jobsSelectedId ? ' selected' : ''));
     c.dataset.key = 'job:' + a.id;
-    c.draggable = true;
-    c.addEventListener('dragstart', e => {
-      e.dataTransfer.setData('text/plain', a.id);
-      e.dataTransfer.effectAllowed = 'move';
-    });
-    c.appendChild(el('div', 'job-card-company', a.company));
-    if (a.role) c.appendChild(el('div', 'job-card-role', a.role));
+    c.dataset.id = a.id;
+    const top = el('div', 'job-card-top');
+    top.appendChild(avatar(a.company, 26));
+    const names = el('div', 'job-card-names');
+    names.appendChild(el('div', 'job-card-company', a.company));
+    if (a.role) names.appendChild(el('div', 'job-card-role', a.role));
+    top.appendChild(names);
+    const since = a.applied_at || (a.created_at || '').slice(0, 10);
+    if (since) {
+      const days = Math.max(0, Math.round((Date.now() - new Date(since + 'T12:00:00')) / 86400000));
+      const age = el('div', 'job-card-age', days + 'd');
+      age.title = (a.applied_at ? 'Applied ' : 'Added ') + fmtShortDate(since);
+      top.appendChild(age);
+    }
+    c.appendChild(top);
+    enableJobDrag(c, a);
     const meta = el('div', 'job-card-meta');
     if (a.needs_review) meta.appendChild(el('span', 'job-chip review', 'Review'));
     if (a.deadline) meta.appendChild(el('span', 'job-chip', 'Due ' + fmtShortDate(a.deadline)));
@@ -260,7 +262,7 @@
   }
 
   function jobDetail(a) {
-    const panel = el('aside', 'job-detail');
+    const panel = el('aside', 'job-detail inspector');
     const top = el('div', 'job-detail-top');
     top.appendChild(el('div', 'job-detail-title', a.company));
     const close = el('button', 'nav-btn', '×');
@@ -405,4 +407,105 @@
     if (res.error) { toast(res.error, {error: true}); return; }
     toast('Added to your to-dos');
     if ($('dashboard-view').classList.contains('open')) openDashboardView();
+  }
+
+  // ---------- dragging a card between columns ----------
+  // Pointer-based rather than the browser's drag-and-drop, which shows a
+  // faded ghost and gives no say over the motion. Here the card lifts, the
+  // others glide aside to make room, and it settles into its slot.
+
+  function enableJobDrag(card, a) {
+    card.addEventListener('click', e => {
+      if (card._wasDragged) { card._wasDragged = false; e.stopImmediatePropagation(); }
+    }, true);
+    card.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || e.pointerType === 'touch') return;
+      const sx = e.clientX, sy = e.clientY;
+      let drag = null;
+      const move = ev => {
+        if (!drag) {
+          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
+          drag = beginJobDrag(card, a, sx, sy);
+        }
+        drag.move(ev);
+      };
+      const key = ev => { if (ev.key === 'Escape' && drag) end(ev, true); };
+      const end = (ev, cancel) => {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', end);
+        document.removeEventListener('pointercancel', end);
+        document.removeEventListener('keydown', key);
+        if (drag) { card._wasDragged = true; drag.drop(cancel || ev.type === 'pointercancel'); }
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', end);
+      document.addEventListener('pointercancel', end);
+      document.addEventListener('keydown', key);
+    });
+  }
+
+  function beginJobDrag(card, a, sx, sy) {
+    const rect = card.getBoundingClientRect();
+    const board = document.querySelector('.jobs-board');
+    const allCards = () => Array.from(document.querySelectorAll('.jobs-col .job-card'));
+    const originCol = card.parentElement;
+    const originNext = card.nextElementSibling;
+
+    const ghost = card.cloneNode(true);
+    ghost.classList.add('job-ghost');
+    ghost.style.cssText = `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;`;
+    document.body.appendChild(ghost);
+    card.classList.add('drag-source');
+    document.body.classList.add('dragging-card');
+
+    let overCol = null;
+    const place = (col, y) => {
+      const siblings = Array.from(col.querySelectorAll('.job-card:not(.drag-source)'));
+      const before = siblings.find(s => {
+        const r = s.getBoundingClientRect();
+        return y < r.top + r.height / 2;
+      }) || null;
+      if (card.parentElement === col && card.nextElementSibling === before) return;
+      flipNodes(allCards(), () => col.insertBefore(card, before));
+    };
+
+    return {
+      move(ev) {
+        ghost.style.transform = `translate(${ev.clientX - sx}px, ${ev.clientY - sy}px) scale(1.03)`;
+        const col = document.elementsFromPoint(ev.clientX, ev.clientY)
+          .find(n => n.classList && n.classList.contains('jobs-col')) || null;
+        if (col !== overCol) {
+          if (overCol) overCol.classList.remove('drop');
+          if (col) col.classList.add('drop');
+          overCol = col;
+        }
+        if (col) place(col, ev.clientY);
+        if (board) {
+          const b = board.getBoundingClientRect();
+          if (ev.clientX < b.left + 40) board.scrollLeft -= 14;
+          else if (ev.clientX > b.right - 40) board.scrollLeft += 14;
+        }
+      },
+      drop(cancelled) {
+        if (overCol) overCol.classList.remove('drop');
+        document.body.classList.remove('dragging-card');
+        const stage = overCol && overCol.dataset.stage;
+        const moved = !cancelled && stage && stage !== a.stage;
+        if (!moved) {
+          flipNodes(allCards(), () => originCol.insertBefore(card, originNext));
+        }
+        const to = card.getBoundingClientRect();
+        const finish = () => { ghost.remove(); card.classList.remove('drag-source'); };
+        if (reducedMotion()) { finish(); } else {
+          const anim = ghost.animate([
+            {transform: ghost.style.transform},
+            {transform: `translate(${to.left - rect.left}px, ${to.top - rect.top}px) scale(1)`},
+          ], {duration: cssVarMs('--dur-spring-snappy', 260),
+              easing: getComputedStyle(document.documentElement).getPropertyValue('--spring-snappy').trim() || 'ease-out',
+              fill: 'forwards'});
+          anim.onfinish = finish;
+        }
+        if (moved) patchJob(a.id, {stage});
+      },
+    };
   }

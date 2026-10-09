@@ -382,3 +382,20 @@
     }
     return box;
   }
+
+  // Run `mutate` (a DOM move) and glide every node in `nodes` from where it
+  // was to where it ended up.
+  function flipNodes(nodes, mutate) {
+    const before = new Map(nodes.map(n => [n, n.getBoundingClientRect()]));
+    mutate();
+    if (reducedMotion()) return;
+    nodes.forEach(n => {
+      const was = before.get(n);
+      const now = n.getBoundingClientRect();
+      const dx = was.left - now.left;
+      const dy = was.top - now.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      n.animate([{transform: `translate(${dx}px, ${dy}px)`}, {transform: 'none'}],
+                {duration: 220, easing: 'cubic-bezier(0.23, 1, 0.32, 1)'});
+    });
+  }
