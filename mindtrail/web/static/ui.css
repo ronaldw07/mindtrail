@@ -1,0 +1,117 @@
+/* Window shell and shared components: the sidebar, toolbar, segmented
+   control, switch, grouped lists. Colors come from the tokens in app.css
+   (and theme.css), so everything here follows light/dark and the accent. */
+
+/* ---------- window ---------- */
+/* The window is the --rail color; the sidebar sits straight on it and the
+   content is a rounded sheet above it, like a native Mac app. */
+body { background: var(--rail); font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+       letter-spacing: -0.003em; }
+#app { padding: 8px; gap: 8px; }
+#sidebar { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none;
+           border-right: none; width: 244px; }
+#sidebar.collapsed { width: 0; margin-right: -8px; }
+main { background: var(--bg); border-radius: 14px; overflow: hidden;
+       box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--hairline); }
+.brand { padding: 0.65rem 0.85rem 0.55rem; font-size: 0.95rem; letter-spacing: -0.01em; }
+
+/* ---------- sidebar ---------- */
+.side-group { margin-bottom: 0.15rem; }
+.side-title { padding: 0.7rem 0.85rem 0.25rem; font-size: var(--fs-xs); font-weight: 600;
+              color: var(--text-muted); letter-spacing: 0.01em; user-select: none; }
+.side-btn { display: flex; align-items: center; gap: 0.55rem; width: calc(100% - 1rem);
+            margin: 0 0.5rem 1px; padding: 0.32rem 0.5rem; border-radius: var(--r);
+            font-size: var(--fs-md); font-weight: 450; color: var(--text); }
+.side-btn:hover { background: var(--surface-hover); color: var(--text); }
+.side-btn.active { background: var(--accent); color: var(--on-accent); }
+.side-btn.active .side-badge { background: color-mix(in srgb, var(--on-accent) 28%, transparent);
+                               color: var(--on-accent); }
+.side-icon { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+             background: var(--tile, var(--text-muted)); color: #fff; flex-shrink: 0;
+             box-shadow: 0 0.5px 1px rgba(0,0,0,0.25); }
+.side-icon.plain { background: transparent; color: var(--text-2); box-shadow: none; }
+.side-btn.active .side-icon.plain { color: var(--on-accent); }
+.side-icon svg { display: block; }
+.side-label { flex: 1; text-align: left; }
+.side-badge { min-width: 1.35rem; padding: 0 0.4rem; height: 1.25rem; line-height: 1.25rem;
+              border-radius: 999px; background: var(--surface-active); color: var(--text-2);
+              font-size: var(--fs-xs); font-weight: 600; text-align: center;
+              font-variant-numeric: tabular-nums; }
+.side-badge[hidden] { display: none; }
+#side-foot { padding: 0.35rem 0 0.45rem; border-top: 0.5px solid var(--border-subtle); }
+#side-foot .side-btn { margin-bottom: 0; }
+#search-input { background: var(--surface-active); border-color: transparent; border-radius: 9px; }
+#search-input:focus { background: var(--surface); }
+
+/* ---------- toolbar ---------- */
+#topbar { background: color-mix(in srgb, var(--bg) 72%, transparent); border-bottom-color: transparent;
+          padding: 0.5rem 0.85rem; gap: 0.5rem; position: relative; z-index: 5;
+          transition: border-color var(--dur-pop) var(--ease-out); }
+#topbar.scrolled { border-bottom-color: var(--border-subtle); }
+.nav-capsule { display: flex; gap: 1px; padding: 2px; border-radius: 10px;
+               background: var(--surface-hover); }
+.nav-capsule .nav-btn { border-radius: 8px; padding: 0.3rem 0.5rem; }
+.nav-capsule .nav-btn:hover:not(:disabled) { background: var(--surface-active); }
+#breadcrumb { flex: 1; margin-left: 0.25rem; font-size: var(--fs-md); font-weight: 600;
+              color: var(--text-heading); transition: opacity var(--dur-pop) var(--ease-out); }
+#topbar.title-hidden #breadcrumb { opacity: 0; }
+.quick-add { color: var(--accent-text); border-radius: 50%; padding: 0.4rem; background: var(--accent-tint); }
+.quick-add:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 26%, transparent);
+                                   color: var(--accent-text); }
+.quick-add svg { display: block; }
+
+/* ---------- view transitions ---------- */
+/* A view fades in and rises a few px. Keyboard-driven switches skip it:
+   they happen hundreds of times a day and should land instantly. */
+@keyframes view-in { from { opacity: 0; transform: translateY(6px); } }
+#project-view.open, #profile-view.open, #dashboard-view.open, #jobs-view.open, #tasks-view.open,
+#habits-view.open, #journal-view.open, #week-view.open, #people-view.open {
+  animation: view-in var(--dur-view) var(--ease-out);
+}
+:root[data-input="keyboard"] .open { animation: none !important; }
+
+/* ---------- segmented control ---------- */
+.seg { --seg-index: 0; --seg-count: 2; position: relative; display: inline-grid;
+       grid-template-columns: repeat(var(--seg-count), 1fr); padding: 2px; border-radius: 9px;
+       background: var(--surface-hover); min-width: calc(var(--seg-count) * 4.4rem); }
+.seg-thumb { position: absolute; top: 2px; bottom: 2px; left: 2px;
+             width: calc((100% - 4px) / var(--seg-count)); border-radius: 7px;
+             background: var(--surface); box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--hairline);
+             transform: translateX(calc(var(--seg-index) * 100%));
+             transition: transform var(--dur-spring-snappy) var(--spring-snappy); }
+.seg-opt { position: relative; z-index: 1; border: none; background: transparent; cursor: pointer;
+           padding: 0.28rem 0.7rem; font-size: var(--fs-base); font-weight: 500; font-family: inherit;
+           color: var(--text-2); border-radius: 7px; transition: color var(--dur-press) ease; }
+.seg-opt[aria-checked="true"] { color: var(--text-heading); }
+
+/* ---------- switch ---------- */
+.switch { position: relative; width: 38px; height: 23px; padding: 0; border: none; cursor: pointer;
+          border-radius: 999px; background: var(--surface-active); flex-shrink: 0;
+          transition: background-color var(--dur-pop) var(--ease-out); }
+.switch[aria-checked="true"] { background: var(--success); }
+.switch-knob { position: absolute; top: 2px; left: 2px; width: 19px; height: 19px; border-radius: 50%;
+               background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+               transition: transform var(--dur-spring-snappy) var(--spring-snappy); }
+.switch[aria-checked="true"] .switch-knob { transform: translateX(15px); }
+.switch:active .switch-knob { width: 23px; }
+.switch[aria-checked="true"]:active .switch-knob { transform: translateX(11px); }
+
+/* ---------- accent picker ---------- */
+.accent-row { display: flex; gap: 0.5rem; }
+.accent-dot { width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer; padding: 0;
+              background: var(--dot); position: relative;
+              transition: transform var(--dur-press) var(--ease-out); }
+.accent-dot:active { transform: scale(0.9); }
+.accent-dot[aria-checked="true"]::after { content: ""; position: absolute; inset: -4px;
+              border-radius: 50%; border: 2px solid var(--dot); }
+
+/* ---------- setting rows (inside a grouped card) ---------- */
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+               padding: 0.6rem 0; }
+.setting-row + .setting-row { border-top: 0.5px solid var(--border-subtle); }
+.setting-label { font-size: var(--fs-md); color: var(--text); }
+.setting-hint { font-size: var(--fs-sm); color: var(--text-muted); margin-top: 0.1rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .seg-thumb, .switch-knob { transition: none; }
+}

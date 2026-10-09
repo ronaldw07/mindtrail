@@ -153,6 +153,11 @@
       if (view === name) btn.setAttribute('aria-current', 'page');
       else btn.removeAttribute('aria-current');
     });
+    // Views with their own big title show it in the toolbar only once it
+    // has scrolled away (see updateToolbarTitle in ui.js).
+    $('topbar').dataset.title = ['chat', 'project', 'roadmap'].includes(name) ? 'inline' : 'large';
+    updateToolbarTitle();
+    loadBadges();
     log.style.display = name === 'chat' ? '' : 'none';
     $('composer').style.display = name === 'chat' ? '' : 'none';
   }

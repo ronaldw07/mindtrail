@@ -259,6 +259,35 @@
       run: () => openPalette(),
     },
     {
+      keys: 'Cmd/Ctrl+1–7',
+      label: 'Go to Today, Week, To-dos, Habits, Journal, People, Jobs',
+      allowWhileTyping: true,
+      test: ev => (ev.metaKey || ev.ctrlKey) && !ev.shiftKey && !ev.altKey && /^[1-7]$/.test(ev.key),
+      run: ev => $(['open-today', 'open-week', 'open-tasks', 'open-habits', 'open-journal',
+                    'open-people', 'open-jobs'][Number(ev.key) - 1]).click(),
+    },
+    {
+      keys: 'Cmd/Ctrl+N',
+      label: 'New to-do',
+      allowWhileTyping: true,
+      test: ev => (ev.metaKey || ev.ctrlKey) && !ev.shiftKey && !ev.altKey && ev.key.toLowerCase() === 'n',
+      run: () => quickAddTask(),
+    },
+    {
+      keys: 'Cmd/Ctrl+,',
+      label: 'Open settings',
+      allowWhileTyping: true,
+      test: ev => (ev.metaKey || ev.ctrlKey) && ev.key === ',',
+      run: () => openProfileView(),
+    },
+    {
+      keys: 'Cmd/Ctrl+[ and ]',
+      label: 'Back and forward',
+      allowWhileTyping: true,
+      test: ev => (ev.metaKey || ev.ctrlKey) && (ev.key === '[' || ev.key === ']'),
+      run: ev => $(ev.key === '[' ? 'nav-back' : 'nav-fwd').click(),
+    },
+    {
       keys: '?',
       label: 'Show keyboard shortcuts',
       allowWhileTyping: false, // a bare key must not hijack typing a literal "?"
@@ -272,7 +301,7 @@
       if (!binding.test(ev)) continue;
       if (!binding.allowWhileTyping && isTypingTarget(ev.target)) continue;
       ev.preventDefault();
-      binding.run();
+      binding.run(ev);
       return;
     }
   });

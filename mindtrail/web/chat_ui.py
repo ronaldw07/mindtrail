@@ -10,58 +10,69 @@ render in the OS light theme regardless of the page, which breaks the
 dark UI. Everything goes through the in-page modal below.
 """
 
-# Sidebar buttons: (id, label, svg inner markup), grouped - navigation,
-# capture, then settings - with a small gap between groups.
+# Sidebar navigation: (title, items). Each item is (id, label, icon svg
+# inner markup, tile color, badge key or ""). Tile colors are all dark
+# enough that the white icon clears 3:1 (the floor for graphics).
 SIDE_GROUPS = (
     (
-        ("open-today", "Today",
-         '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4'
-         'M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
-        ("open-week", "Week",
-         '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/>'),
-        ("open-tasks", "To-dos", '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>'),
-        ("open-habits", "Habits",
-         '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/>'
-         '<path d="M8 14h2"/><path d="M14 14h2"/>'),
-        ("open-journal", "Journal",
-         '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8"/><path d="M8 13h6"/>'),
-        ("open-people", "People",
-         '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/>'
-         '<path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14c2.2.6 3.5 2.8 3.5 6"/>'),
-        ("open-jobs", "Jobs",
-         '<rect x="3" y="7" width="18" height="13" rx="2"/>'
-         '<path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+        "",
+        (
+            ("open-today", "Today", "#d9480f",
+             '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4'
+             'M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>', ""),
+        ),
     ),
     (
-        ("add-note", "Note",
-         '<path d="M4 19.5V6a2 2 0 0 1 2-2h9l5 5v10.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/>'
-         '<path d="M14 4v5h5"/><path d="M8 13h8"/><path d="M8 17h5"/>'),
-        ("save-url", "Save a link",
-         '<path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07l-1.5 1.5"/>'
-         '<path d="M14 11a5 5 0 0 0-7.07 0l-2.83 2.83a5 5 0 0 0 7.07 7.07l1.5-1.5"/>'),
+        "Library",
+        (
+            ("open-week", "Week", "#d70015",
+             '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/>', ""),
+            ("open-tasks", "To-dos", "#0071e3", '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>', "tasks"),
+            ("open-habits", "Habits", "#248a3d",
+             '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/>'
+             '<path d="M8 14h2"/><path d="M14 14h2"/>', ""),
+            ("open-journal", "Journal", "#8944ab",
+             '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8"/><path d="M8 13h6"/>', ""),
+            ("open-people", "People", "#0e7c86",
+             '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/>'
+             '<path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14c2.2.6 3.5 2.8 3.5 6"/>', "people"),
+            ("open-jobs", "Jobs", "#a0560a",
+             '<rect x="3" y="7" width="18" height="13" rx="2"/>'
+             '<path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>', "jobs"),
+        ),
     ),
-    (
-        ("open-profile", "Profile",
-         '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>'),
-        ("export-data", "Export",
-         '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
-         '<path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>'),
-    ),
+)
+
+ICON_ATTRS = (
+    'width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"'
 )
 
 
 def _side_nav() -> str:
     groups = []
-    for group in SIDE_GROUPS:
+    for title, items in SIDE_GROUPS:
+        head = f'        <div class="side-title">{title}</div>\n' if title else ""
         buttons = "\n".join(
-            f'        <button class="side-btn" id="{bid}">'
-            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-            'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
-            f'style="vertical-align:-2px;margin-right:0.4rem;">{paths}</svg>{label}</button>'
-            for bid, label, paths in group
+            f'        <button class="side-btn" id="{bid}" data-view="{bid[5:]}">'
+            f'<span class="side-icon" style="--tile:{color}"><svg {ICON_ATTRS}>{paths}</svg></span>'
+            f'<span class="side-label">{label}</span>'
+            + (f'<span class="side-badge" data-badge="{badge}" hidden></span>' if badge else "")
+            + "</button>"
+            for bid, label, color, paths, badge in items
         )
-        groups.append(f'      <div class="side-group">\n{buttons}\n      </div>')
+        groups.append(f'      <div class="side-group">\n{head}{buttons}\n      </div>')
     return "\n".join(groups)
+
+
+GEAR_ICON = (
+    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1'
+    'a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3'
+    'l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 '
+    '1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 '
+    '2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 '
+    '1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'
+)
 
 
 CHAT_HTML = """<!doctype html>
@@ -71,6 +82,7 @@ CHAT_HTML = """<!doctype html>
   <title>mindtrail</title>
   <link rel="stylesheet" href="/static/app.css">
   <link rel="stylesheet" href="/static/life.css">
+  <link rel="stylesheet" href="/static/ui.css">
   <link rel="stylesheet" href="/static/theme.css">
   <script>
     // Theme before first paint, so a light-mode user never sees a dark flash.
@@ -98,16 +110,29 @@ CHAT_HTML = """<!doctype html>
       </div>
 {side_nav}
       <div id="tree"></div>
+      <div id="side-foot">
+        <button class="side-btn" id="open-profile" data-view="profile">
+          <span class="side-icon plain"><svg {icon_attrs}>{gear}</svg></span>
+          <span class="side-label">Settings</span></button>
+      </div>
     </aside>
     <main>
       <div id="topbar">
-        <button class="nav-btn" id="toggle-sidebar" title="Toggle sidebar"
-                aria-label="Toggle sidebar">&#9707;</button>
-        <button class="nav-btn" id="nav-back" title="Back" aria-label="Back"
-                disabled>&#8592;</button>
-        <button class="nav-btn" id="nav-fwd" title="Forward" aria-label="Forward"
-                disabled>&#8594;</button>
+        <div class="nav-capsule">
+          <button class="nav-btn" id="toggle-sidebar" title="Toggle sidebar"
+                  aria-label="Toggle sidebar">&#9707;</button>
+          <button class="nav-btn" id="nav-back" title="Back" aria-label="Back"
+                  disabled>&#8592;</button>
+          <button class="nav-btn" id="nav-fwd" title="Forward" aria-label="Forward"
+                  disabled>&#8594;</button>
+        </div>
         <div id="breadcrumb">New chat</div>
+        <button class="nav-btn quick-add" id="quick-add" title="Add" aria-label="Add"
+                aria-haspopup="menu">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14"/></svg>
+        </button>
       </div>
       <div id="log"></div>
       <div id="project-view"></div>
@@ -164,4 +189,4 @@ CHAT_HTML = """<!doctype html>
   <script src="/static/palette.js"></script>
   <script src="/static/app.js"></script>
 </body>
-</html>""".format(side_nav=_side_nav())
+</html>""".format(side_nav=_side_nav(), icon_attrs=ICON_ATTRS, gear=GEAR_ICON)

@@ -93,3 +93,29 @@ def test_unknown_routes_answer_404_for_every_method(port):
     for method in ("GET", "POST", "PATCH", "DELETE"):
         resp, _ = request(port, method, "/api/no-such-thing", {"x": 1})
         assert resp.status == 404, method
+
+
+def test_badges_count_what_needs_attention(tmp_path):
+    from datetime import date
+
+    from mindtrail.organize.jobs import JobStore
+    from mindtrail.organize.people import PeopleStore
+    from mindtrail.organize.tasks import TaskStore
+    from mindtrail.web import life_api
+
+    from mindtrail.organize.db import initialize
+
+    db = str(tmp_path / "t.db")
+    initialize(db)
+    tasks, people, jobs = TaskStore(db), PeopleStore(db), JobStore(db)
+    today = date(2026, 10, 9)
+    tasks.add("overdue", due_date="2026-10-01")
+    tasks.add("today", due_date="2026-10-09")
+    tasks.add("later", due_date="2026-10-20")
+    tasks.add("no date")
+    jobs.create("Acme", needs_review=True)
+    jobs.create("Beta")
+
+    badges = life_api.handle_badges(tasks, people, jobs, today)
+
+    assert badges == {"tasks": 2, "people": 0, "jobs": 1}

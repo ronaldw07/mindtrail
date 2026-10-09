@@ -50,6 +50,14 @@ def find(method: str, path: str):
 _ID = r"([A-Za-z0-9-]+)"
 
 
+# --- sidebar badges -----------------------------------------------------------
+
+
+@route("GET", "/api/badges")
+def _badges(deps, args, body, query):
+    return life_api.handle_badges(deps.tasks, deps.people, deps.jobs)
+
+
 # --- jobs -------------------------------------------------------------------
 
 

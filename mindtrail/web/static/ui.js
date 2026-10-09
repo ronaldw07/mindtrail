@@ -158,3 +158,155 @@
                               {capture: true, passive: true}));
   document.addEventListener('keydown', () => { document.documentElement.dataset.input = 'keyboard'; },
                             {capture: true});
+
+  // ---------- toolbar ----------
+
+  // Big-title views: the toolbar shows the view's name only once the big
+  // title has scrolled out from under it, like a native large title.
+  function updateToolbarTitle() {
+    const bar = $('topbar');
+    const view = document.querySelector('main > div.open:not(#roadmap-view)');
+    const large = bar.dataset.title === 'large';
+    const scrolled = !!view && view.scrollTop > 28;
+    bar.classList.toggle('scrolled', large ? scrolled : false);
+    bar.classList.toggle('title-hidden', large && !scrolled);
+  }
+  document.addEventListener('scroll', e => {
+    if (e.target && e.target.nodeType === 1 && e.target.matches('main > div')) updateToolbarTitle();
+  }, {capture: true, passive: true});
+
+  // Counts on the sidebar rows: to-dos due, people due a nudge, jobs to review.
+  async function loadBadges() {
+    const counts = await api('/api/badges');
+    if (!counts || counts.error) return;
+    document.querySelectorAll('.side-badge').forEach(b => {
+      const n = counts[b.dataset.badge] || 0;
+      b.hidden = n === 0;
+      b.textContent = n > 99 ? '99+' : String(n);
+    });
+  }
+
+  // A menu that grows out of the button that opened it.
+  function showMenuFrom(button, items) {
+    const r = button.getBoundingClientRect();
+    showMenu({clientX: r.right - 190, clientY: r.bottom + 6}, items);
+    $('menu').style.transformOrigin = 'top right';
+  }
+
+  // ---------- components ----------
+
+  // Segmented control with a thumb that slides to the chosen option.
+  // options: [{value, label}]. onChange(value) runs after the thumb moves.
+  function segmented(options, value, onChange, label) {
+    const root = document.createElement('div');
+    root.className = 'seg';
+    root.setAttribute('role', 'radiogroup');
+    if (label) root.setAttribute('aria-label', label);
+    root.style.setProperty('--seg-count', String(options.length));
+    const thumb = document.createElement('div');
+    thumb.className = 'seg-thumb';
+    root.appendChild(thumb);
+    const buttons = options.map((opt, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'seg-opt';
+      b.setAttribute('role', 'radio');
+      b.textContent = opt.label;
+      b.onclick = () => select(i, true);
+      root.appendChild(b);
+      return b;
+    });
+    function select(i, notify) {
+      root.style.setProperty('--seg-index', String(i));
+      buttons.forEach((b, j) => {
+        b.setAttribute('aria-checked', j === i ? 'true' : 'false');
+        b.tabIndex = j === i ? 0 : -1;
+      });
+      if (notify) onChange(options[i].value);
+    }
+    root.addEventListener('keydown', e => {
+      const at = buttons.findIndex(b => b.getAttribute('aria-checked') === 'true');
+      const next = e.key === 'ArrowRight' ? at + 1 : e.key === 'ArrowLeft' ? at - 1 : null;
+      if (next === null || next < 0 || next >= buttons.length) return;
+      e.preventDefault();
+      select(next, true);
+      buttons[next].focus();
+    });
+    select(Math.max(0, options.findIndex(o => o.value === value)), false);
+    return root;
+  }
+
+  // iOS-style switch.
+  function switchEl(checked, onChange, label) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'switch';
+    b.setAttribute('role', 'switch');
+    b.setAttribute('aria-checked', checked ? 'true' : 'false');
+    if (label) b.setAttribute('aria-label', label);
+    const knob = document.createElement('span');
+    knob.className = 'switch-knob';
+    b.appendChild(knob);
+    b.onclick = () => {
+      const on = b.getAttribute('aria-checked') !== 'true';
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+      onChange(on);
+    };
+    return b;
+  }
+
+  // The 8 system-style accent colors as a row of swatches.
+  function accentPicker() {
+    const row = document.createElement('div');
+    row.className = 'accent-row';
+    row.setAttribute('role', 'radiogroup');
+    row.setAttribute('aria-label', 'Accent color');
+    const current = prefs.get('accent', 'blue');
+    ACCENTS.forEach(a => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'accent-dot';
+      b.style.setProperty('--dot', a.swatch);
+      b.title = a.label;
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-label', a.label);
+      b.setAttribute('aria-checked', a.key === current ? 'true' : 'false');
+      b.onclick = () => {
+        setAccent(a.key);
+        row.querySelectorAll('.accent-dot').forEach(d =>
+          d.setAttribute('aria-checked', d === b ? 'true' : 'false'));
+      };
+      row.appendChild(b);
+    });
+    return row;
+  }
+
+  // A labelled row inside a grouped list: label on the left, control on the right.
+  function settingRow(label, control, hint) {
+    const row = document.createElement('div');
+    row.className = 'setting-row';
+    const text = document.createElement('div');
+    text.className = 'setting-text';
+    const l = document.createElement('div');
+    l.className = 'setting-label';
+    l.textContent = label;
+    text.appendChild(l);
+    if (hint) {
+      const h = document.createElement('div');
+      h.className = 'setting-hint';
+      h.textContent = hint;
+      text.appendChild(h);
+    }
+    row.appendChild(text);
+    row.appendChild(control);
+    return row;
+  }
+
+  function appearanceCard() {
+    const c = card('Appearance', null, null);
+    c.appendChild(settingRow('Theme',
+      segmented(APPEARANCES, prefs.get('appearance', 'system'), setAppearance, 'Theme'),
+      'Auto follows your Mac.'));
+    c.appendChild(settingRow('Accent color', accentPicker()));
+    return c;
+  }

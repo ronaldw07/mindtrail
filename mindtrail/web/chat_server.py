@@ -59,6 +59,7 @@ STATIC_FILES = {
     "/static/app.css": ("app.css", "text/css; charset=utf-8"),
     "/static/app.js": ("app.js", "application/javascript; charset=utf-8"),
     "/static/life.css": ("life.css", "text/css; charset=utf-8"),
+    "/static/ui.css": ("ui.css", "text/css; charset=utf-8"),
     "/static/theme.css": ("theme.css", "text/css; charset=utf-8"),
     "/static/ui.js": ("ui.js", "application/javascript; charset=utf-8"),
     "/static/jobs.js": ("jobs.js", "application/javascript; charset=utf-8"),

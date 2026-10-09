@@ -5,7 +5,7 @@
     currentProject = null;
     current = null;
     showProfileView();
-    $('breadcrumb').textContent = 'Profile';
+    $('breadcrumb').textContent = 'Settings';
     // A background refresh (after the assistant saves a proposed
     // profile) must not wipe the chat history it's about to redraw, nor
     // overwrite what reload restores to.
@@ -24,7 +24,7 @@
 
     const title = document.createElement('div');
     title.className = 'proj-title';
-    title.textContent = 'Profile';
+    title.textContent = 'Settings';
     main.appendChild(title);
 
     const aboutCard = card('About you', 'Draft from my documents', async ev => {
@@ -73,6 +73,7 @@
       toast('Profile saved');
     };
 
+    main.appendChild(appearanceCard());
     main.appendChild(aboutCard);
     main.appendChild(areasCard());
     main.appendChild(canvasCard());
@@ -108,6 +109,12 @@
   $('open-tasks').onclick = () => openTasksView();
   $('open-habits').onclick = () => openHabitsView();
   $('open-journal').onclick = () => openJournalView();
+  $('quick-add').onclick = e => showMenuFrom(e.currentTarget, [
+    {label: 'New to-do', run: quickAddTask},
+    {label: 'New note', run: addNote},
+    {label: 'Save a link', run: saveUrl},
+    {label: 'New chat', run: () => newChat()},
+  ]);
 
   // Notes were CLI-only until now, and the CLI version stores them with
   // no conversation attached - unreachable from the browser even after
@@ -130,7 +137,6 @@
     await openConversation(res.conversation_id);
     toast('Note saved');
   }
-  $('add-note').onclick = addNote;
 
   // Same shape as addNote above: search and PDF upload were the only two
   // ways a page's content reached memory before this - a URL a user
@@ -152,18 +158,17 @@
     await openConversation(res.conversation_id);
     toast('Link saved');
   }
-  $('save-url').onclick = saveUrl;
 
   // Backs up the whole database plus profile to plain markdown on disk -
   // the CLI's `mindtrail export` had no browser entry point until now, so
   // the backup story was invisible to anyone who never reads --help.
-  async function exportData() {
-    const btn = $('export-data');
-    // setButtonBusy wipes the button's children for the spinner, so the
-    // original icon + label markup is kept aside and reattached afterwards
-    // rather than rebuilt from scratch or a plain-text fallback.
-    const original = Array.from(btn.childNodes);
-    setButtonBusy(btn, 'Exporting…');
+  async function exportData(btnEl) {
+    // The button that asked (Settings → Data), when there is one. setButtonBusy
+    // wipes a button's children for the spinner, so the original markup is
+    // kept aside and reattached afterwards.
+    const btn = btnEl || null;
+    const original = btn ? Array.from(btn.childNodes) : [];
+    if (btn) setButtonBusy(btn, 'Exporting…');
     try {
       const res = await jsonSend('/api/export', {});
       if (res.error) { toast(res.error, {error: true}); return; }
@@ -172,10 +177,11 @@
     } catch (err) {
       toast('Export failed', {error: true});
     } finally {
-      btn.disabled = false;
-      btn.innerHTML = '';
-      original.forEach(node => btn.appendChild(node));
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '';
+        original.forEach(node => btn.appendChild(node));
+      }
     }
   }
-  $('export-data').onclick = exportData;
 
