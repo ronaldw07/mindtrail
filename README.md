@@ -198,12 +198,20 @@ split; a separate dev split exists for tuning.
 
 | metric | score |
 |---|---|
-| recall@1 | 7/10 (70%) |
-| recall@3 | 7/10 (70%) |
+| recall@1 | 8/10 (80%) |
+| recall@3 | 8/10 (80%) |
 
 recall@3 equalling recall@1 is the interesting part: when retrieval misses,
-it misses badly rather than narrowly. The three failures rank the correct
-entry 4th, 6th, and 10th. So the fix is not reranking a near-miss — the
+it misses badly rather than narrowly. The two failures rank the correct
+entry 6th and 10th. (This was 7/10, with a third miss at rank 4.)
+
+The 7/10 had a bug behind it: the keyword half of hybrid search required
+every word of a question to appear in an entry, so for natural questions it
+returned nothing and search was effectively vector-only. It now ORs the
+meaningful words and lets BM25 rank them. That moved the rank-4 case to 1st.
+The dev split was already 10/10 so it couldn't show the change, and the
+test split was looked at while diagnosing - treat 8/10 as an upper bound,
+not a clean held-out number. So the fix is not reranking a near-miss — the
 right entry is nowhere near the top, and something about those probes
 (`how does Chroma differ from Pinecone` finding its parent entry at rank 10)
 is genuinely not captured by the embedding.
