@@ -281,6 +281,10 @@ ADDED_COLUMNS = [
     # applied when the node is marked done - see RoadmapNodeStore.set_status.
     ("roadmap_nodes", "repeat_days", "INTEGER NOT NULL DEFAULT 0"),
     ("projects", "area_id", "TEXT NOT NULL DEFAULT ''"),
+    # A repeat rule like "week:1:0" (see organize/repeats.py), and the id of
+    # the task whose check-off created this one.
+    ("tasks", "repeat", "TEXT NOT NULL DEFAULT ''"),
+    ("tasks", "spawned_from", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

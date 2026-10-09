@@ -152,3 +152,33 @@ def test_journal_on_this_day_skips_dates_that_do_not_exist(tmp_path):
     initialize(db)
 
     assert life_api.on_this_day(JournalStore(db), date(2026, 3, 31)) == []
+
+
+def test_adding_a_task_with_every_makes_it_repeat(tmp_path):
+    from mindtrail.organize.db import initialize
+    from mindtrail.organize.tasks import TaskStore
+    from mindtrail.web import jobs_api
+
+    db = str(tmp_path / "t.db")
+    initialize(db)
+    tasks = TaskStore(db)
+
+    out = jobs_api.handle_add_task(tasks, {"title": "Water plants every mon"})
+
+    assert out["task"]["title"] == "Water plants"
+    assert out["task"]["repeat"] == "week:1:0"
+    assert out["task"]["repeat_label"] == "Every Monday"
+    assert out["task"]["due_date"]
+
+
+def test_an_explicit_due_date_is_kept_when_the_title_also_repeats(tmp_path):
+    from mindtrail.organize.db import initialize
+    from mindtrail.organize.tasks import TaskStore
+    from mindtrail.web import jobs_api
+
+    db = str(tmp_path / "t.db")
+    initialize(db)
+
+    out = jobs_api.handle_add_task(TaskStore(db), {"title": "Stretch daily", "due_date": "2026-12-01"})
+
+    assert out["task"]["due_date"] == "2026-12-01" and out["task"]["repeat"] == "day:1"

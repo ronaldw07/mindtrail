@@ -108,7 +108,7 @@
   function taskAddForm() {
     const form = tEl('form', 'task-add task-add-wide');
     const input = tEl('input', 'task-add-input');
-    input.placeholder = 'New to-do — try “Call mom tmrw” or “Taxes oct 12”';
+    input.placeholder = 'New to-do — try “Call mom tmrw” or “Water plants every mon”';
     input.setAttribute('aria-label', 'New to-do');
     form.appendChild(input);
     form.onsubmit = async e => {
@@ -138,6 +138,11 @@
     const body = row.querySelector('.task-body');
     const due = body.querySelector('.task-due');
     if (due) body.appendChild(due);
+    if (t.repeat_label) {
+      const rep = tEl('span', 'task-repeat', '↻ ' + t.repeat_label);
+      rep.title = 'Repeats';
+      body.appendChild(rep);
+    }
     const dot = areaDot(t.area_id);
     if (dot) body.appendChild(dot);
     if (t.application_id) {
@@ -197,6 +202,21 @@
         quick.appendChild(b);
       });
     panel.appendChild(inspectorField('Due', due, quick));
+
+    const repeat = tEl('select', 'job-field-input');
+    repeat.setAttribute('aria-label', 'Repeat');
+    const presets = [['', 'Never'], ['day:1', 'Every day'], ['week:1', 'Every week'],
+                     ['week:2', 'Every 2 weeks'], ['month:1', 'Every month']];
+    // A rule typed in quick-add ("every mon") isn't one of the presets: show it as is.
+    if (t.repeat && !presets.some(p => p[0] === t.repeat)) presets.push([t.repeat, t.repeat_label]);
+    presets.forEach(([value, label]) => {
+      const o = tEl('option', '', label);
+      o.value = value;
+      repeat.appendChild(o);
+    });
+    repeat.value = t.repeat || '';
+    repeat.onchange = () => save({repeat: repeat.value});
+    panel.appendChild(inspectorField('Repeat', repeat));
 
     const area = tEl('select', 'job-field-input');
     area.setAttribute('aria-label', 'Life area');

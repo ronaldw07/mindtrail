@@ -402,3 +402,4 @@ body.dragging-card { cursor: grabbing; user-select: none; }
 .week-bar-fill { border-radius: 999px; transform-origin: left; animation: bar-in var(--dur-spring-smooth) var(--spring-smooth); }
 @keyframes bar-in { from { transform: scaleX(0); } }
 .card { border: none; border-radius: 14px; box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--hairline); }
+.task-repeat { font-size: var(--fs-xs); color: var(--text-muted); white-space: nowrap; }
