@@ -34,7 +34,6 @@
   async function renderPeopleView() {
     const data = await api('/api/people');
     const view = $('people-view');
-    view.innerHTML = '';
     const wrap = tEl('div', 'brief-wrap');
     wrap.appendChild(tEl('div', 'proj-title', 'People'));
 
@@ -73,7 +72,7 @@
       wrap.appendChild(tEl('div', 'empty-state',
         'Add the people you want to keep up with — a mentor, a recruiter, family.'));
     }
-    view.appendChild(wrap);
+    commitView(view, wrap);
   }
 
   function nudgeSelect(value) {
@@ -90,6 +89,7 @@
 
   function personRow(p, applications) {
     const row = tEl('div', 'person-row' + (p.due ? ' due' : ''));
+    row.dataset.key = 'person:' + p.id;
     const body = tEl('div', 'person-body');
     body.appendChild(tEl('div', 'person-name', p.name));
     const meta = [sinceLabel(p.days_since), nudgeLabel(p.nudge_every_days)];

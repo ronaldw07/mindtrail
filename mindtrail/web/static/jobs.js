@@ -55,7 +55,6 @@
 
   function renderJobs() {
     const view = $('jobs-view');
-    view.innerHTML = '';
     const data = jobsData;
     if (jobsSelectedId && !data.applications.some(a => a.id === jobsSelectedId)) {
       jobsSelectedId = null;
@@ -69,7 +68,7 @@
     layout.appendChild(main);
     const selected = data.applications.find(a => a.id === jobsSelectedId);
     if (selected) layout.appendChild(jobDetail(selected));
-    view.appendChild(layout);
+    commitView(view, layout);
   }
 
   function jobsHeader(data) {
@@ -228,6 +227,7 @@
 
   function jobCard(a) {
     const c = el('div', 'job-card' + (a.id === jobsSelectedId ? ' selected' : ''));
+    c.dataset.key = 'job:' + a.id;
     c.draggable = true;
     c.addEventListener('dragstart', e => {
       e.dataTransfer.setData('text/plain', a.id);
@@ -343,15 +343,29 @@
 
   function taskRow(t, afterChange) {
     const row = el('div', 'task-row' + (t.done ? ' done' : ''));
+    row.dataset.key = 'task:' + (t.task_id || t.id);
     const box = el('button', 'task-check');
     box.setAttribute('aria-label', (t.done ? 'Mark not done: ' : 'Mark done: ') + t.title);
     box.setAttribute('aria-pressed', t.done ? 'true' : 'false');
+    // Reminders-style: the circle fills at once and the row stays put for a
+    // beat, so a mis-click can be undone by clicking again; then it moves.
+    let done = !!t.done;
+    let settle = null;
     box.onclick = async e => {
       e.stopPropagation();
-      row.classList.toggle('done');
-      const res = await jsonSend('/api/tasks/' + (t.task_id || t.id), {done: !t.done}, 'PATCH');
-      if (res.error) toast(res.error, {error: true});
-      if (afterChange) await afterChange();
+      clearTimeout(settle);
+      done = !done;
+      row.classList.toggle('done', done);
+      box.setAttribute('aria-pressed', done ? 'true' : 'false');
+      const res = await jsonSend('/api/tasks/' + (t.task_id || t.id), {done}, 'PATCH');
+      if (res.error) {
+        done = !done;
+        row.classList.toggle('done', done);
+        box.setAttribute('aria-pressed', done ? 'true' : 'false');
+        toast(res.error, {error: true});
+        return;
+      }
+      if (afterChange) settle = setTimeout(afterChange, done ? 1100 : 250);
     };
     row.appendChild(box);
     const body = el('div', 'task-body');

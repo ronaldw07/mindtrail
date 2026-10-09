@@ -126,7 +126,6 @@
   async function renderTasksView(focusAdd) {
     const data = await api('/api/tasks?all=1');
     const view = $('tasks-view');
-    view.innerHTML = '';
     const wrap = document.createElement('div');
     wrap.className = 'brief-wrap';
     const title = document.createElement('div');
@@ -174,7 +173,7 @@
       empty.textContent = 'Nothing to do. Add one above.';
       wrap.appendChild(empty);
     }
-    view.appendChild(wrap);
+    commitView(view, wrap);
     if (focusAdd) wrap.querySelector('.jobs-link-input').focus();
   }
 
@@ -263,7 +262,6 @@
     const showArchived = prefs.get('habitsShowArchived', false);
     const data = await api('/api/habits' + (showArchived ? '?archived=1' : ''));
     const view = $('habits-view');
-    view.innerHTML = '';
     const wrap = document.createElement('div');
     wrap.className = 'brief-wrap habits-wrap';
     const title = document.createElement('div');
@@ -284,7 +282,7 @@
     toggle.textContent = showArchived ? 'Hide archived' : 'Show archived';
     toggle.onclick = () => { prefs.set('habitsShowArchived', !showArchived); renderHabitsView(); };
     wrap.appendChild(toggle);
-    view.appendChild(wrap);
+    commitView(view, wrap);
   }
 
   function habitAddForm() {
@@ -331,6 +329,7 @@
   function habitCard(h, data) {
     const c = document.createElement('div');
     c.className = 'card habit-card' + (h.archived ? ' archived' : '');
+    c.dataset.key = 'habit:' + h.id;
     const head = document.createElement('div');
     head.className = 'habit-head';
     const check = document.createElement('button');

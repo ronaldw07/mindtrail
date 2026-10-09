@@ -1,0 +1,86 @@
+/* Theme overrides. The dark values live in app.css :root; this file only
+   swaps them. data-theme / data-accent are set on <html> before first
+   paint by the inline script in the page head (and by ui.js after). */
+
+:root { color-scheme: dark; }
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --rail: #ececf1;
+  --bg: #f5f5f7;
+  --surface-sunken: #ececf0;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-hover: #e8e8ed;
+  --surface-active: #dcdce3;
+  --surface-chip: #ebebf0;
+
+  --border-subtle: #e4e4ea;
+  --border: #d9d9e0;
+  --border-strong: #c6c6ce;
+
+  --text-bright: #000000;
+  --text-heading: #1d1d1f;
+  --text: #1d1d1f;
+  --text-2: #515154;
+  --text-3: #3a3a3c;
+  --text-muted: #6a6a70;
+  --text-faint: #6a6a70;
+
+  --info: #0068d1;
+  --success: #1f7a3a;
+  --warn: #946200;
+  --danger: #c4271c;
+  --danger-solid: #d70015;
+  --danger-solid-hover: #b80012;
+  --danger-border: #f0b4ae;
+
+  --editorial: #8a6400;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.08);
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.12);
+  --shadow-lg: 0 18px 50px rgba(0,0,0,0.2);
+  --scrim: rgba(0,0,0,0.32);
+  --glass: rgba(255,255,255,0.72);
+  --glass-rail: rgba(236,236,241,0.72);
+  --hairline: rgba(0,0,0,0.06);
+}
+
+/* Reduce Transparency: glass becomes solid. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass: var(--surface-chip);
+    --glass-rail: var(--rail);
+  }
+  #sidebar, #roadmap-chat, #topbar, #menu, .toast, .palette-box, #zoom-controls {
+    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  }
+  #sidebar, #roadmap-chat { background: var(--rail) !important; }
+  #topbar { background: var(--bg) !important; }
+  #menu, .toast, .palette-box { background: var(--surface-chip) !important; }
+}
+
+/* Increase Contrast: stronger dividers and outlines. */
+@media (prefers-contrast: more) {
+  :root { --border-subtle: var(--border); --border: var(--border-strong); }
+  :root[data-theme="light"] { --border-strong: #8e8e96; --text-muted: #515154; --text-faint: #515154; }
+  :root:not([data-theme="light"]) { --border-strong: #6e6e6e; --text-muted: #b8b8b8; --text-faint: #b8b8b8; }
+}
+
+/* Accent fills clear 4.5:1 with white text; accent text clears 4.5:1 on the surfaces it lands on (generated). */
+:root[data-accent="blue"] { --accent: #0072e5; --accent-hover: #007ffe; --accent-text: #2993ff; }
+:root[data-theme="light"][data-accent="blue"] { --accent: #0072e5; --accent-hover: #0065cc; --accent-text: #0068d1; }
+:root[data-accent="purple"] { --accent: #a945dc; --accent-hover: #b35ae0; --accent-text: #bd70e4; }
+:root[data-theme="light"][data-accent="purple"] { --accent: #a945dc; --accent-hover: #9f30d8; --accent-text: #9f30d8; }
+:root[data-accent="pink"] { --accent: #ea0049; --accent-hover: #ff0453; --accent-text: #ff4c84; }
+:root[data-theme="light"][data-accent="pink"] { --accent: #ea0049; --accent-hover: #d00041; --accent-text: #d00041; }
+:root[data-accent="red"] { --accent: #ec0d00; --accent-hover: #ff1407; --accent-text: #ff5349; }
+:root[data-theme="light"][data-accent="red"] { --accent: #ec0d00; --accent-hover: #d30c00; --accent-text: #d20c00; }
+:root[data-accent="orange"] { --accent: #ad6500; --accent-hover: #c67400; --accent-text: #ff9500; }
+:root[data-theme="light"][data-accent="orange"] { --accent: #ad6500; --accent-hover: #945600; --accent-text: #995900; }
+:root[data-accent="green"] { --accent: #24843c; --accent-hover: #299845; --accent-text: #30b050; }
+:root[data-theme="light"][data-accent="green"] { --accent: #24843c; --accent-hover: #1f7033; --accent-text: #217837; }
+:root[data-accent="teal"] { --accent: #17818c; --accent-hover: #1b95a2; --accent-text: #20b2c0; }
+:root[data-theme="light"][data-accent="teal"] { --accent: #17818c; --accent-hover: #136d76; --accent-text: #15757f; }
+:root[data-accent="graphite"] { --accent: #74747a; --accent-hover: #818187; --accent-text: #919195; }
+:root[data-theme="light"][data-accent="graphite"] { --accent: #74747a; --accent-hover: #68686d; --accent-text: #6a6a70; }

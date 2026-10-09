@@ -71,6 +71,21 @@ CHAT_HTML = """<!doctype html>
   <title>mindtrail</title>
   <link rel="stylesheet" href="/static/app.css">
   <link rel="stylesheet" href="/static/life.css">
+  <link rel="stylesheet" href="/static/theme.css">
+  <script>
+    // Theme before first paint, so a light-mode user never sees a dark flash.
+    (function () {{
+      var get = function (k, d) {{
+        try {{ var v = localStorage.getItem('mindtrail:' + k); return v === null ? d : JSON.parse(v); }}
+        catch (e) {{ return d; }}
+      }};
+      var mode = get('appearance', 'system');
+      var dark = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+      var root = document.documentElement;
+      root.dataset.theme = mode === 'system' ? (dark ? 'dark' : 'light') : mode;
+      root.dataset.accent = get('accent', 'blue');
+    }})();
+  </script>
 </head>
 <body>
   <div id="app">
@@ -132,6 +147,7 @@ CHAT_HTML = """<!doctype html>
   <div id="palette"></div>
   <div id="shortcuts"></div>
 
+  <script src="/static/ui.js"></script>
   <script src="/static/jobs.js"></script>
   <script src="/static/life.js"></script>
   <script src="/static/today.js"></script>
