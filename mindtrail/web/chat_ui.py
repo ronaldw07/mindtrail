@@ -138,6 +138,14 @@ CHAT_HTML = """<!doctype html>
   <script src="/static/focus.js"></script>
   <script src="/static/review.js"></script>
   <script src="/static/admin.js"></script>
+  <script src="/static/core.js"></script>
+  <script src="/static/sidebar.js"></script>
+  <script src="/static/chat.js"></script>
+  <script src="/static/project.js"></script>
+  <script src="/static/roadmap.js"></script>
+  <script src="/static/profile.js"></script>
+  <script src="/static/composer.js"></script>
+  <script src="/static/palette.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>""".format(side_nav=_side_nav())

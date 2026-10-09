@@ -13,16 +13,15 @@ from mindtrail.organize.db import initialize
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.web import api
-from mindtrail.web.chat_server import STATIC_DIR
+from mindtrail.web.chat_server import STATIC_DIR, STATIC_FILES
 from mindtrail.web.chat_ui import CHAT_HTML
 
 # CSS and JS now live in real files, not inline in CHAT_HTML. The ui tests
 # below check substrings of what the browser actually receives, so glue the
 # shell back together with the assets it links to.
-FULL_PAGE = (
-    CHAT_HTML
-    + (STATIC_DIR / "app.css").read_text(encoding="utf-8")
-    + (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+FULL_PAGE = CHAT_HTML + "".join(
+    (STATIC_DIR / name).read_text(encoding="utf-8")
+    for name in sorted({name for name, _ in STATIC_FILES.values()})
 )
 
 

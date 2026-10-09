@@ -65,6 +65,14 @@ STATIC_FILES = {
     "/static/focus.js": ("focus.js", "application/javascript; charset=utf-8"),
     "/static/review.js": ("review.js", "application/javascript; charset=utf-8"),
     "/static/admin.js": ("admin.js", "application/javascript; charset=utf-8"),
+    "/static/core.js": ("core.js", "application/javascript; charset=utf-8"),
+    "/static/sidebar.js": ("sidebar.js", "application/javascript; charset=utf-8"),
+    "/static/chat.js": ("chat.js", "application/javascript; charset=utf-8"),
+    "/static/project.js": ("project.js", "application/javascript; charset=utf-8"),
+    "/static/roadmap.js": ("roadmap.js", "application/javascript; charset=utf-8"),
+    "/static/profile.js": ("profile.js", "application/javascript; charset=utf-8"),
+    "/static/composer.js": ("composer.js", "application/javascript; charset=utf-8"),
+    "/static/palette.js": ("palette.js", "application/javascript; charset=utf-8"),
 }
 
 
