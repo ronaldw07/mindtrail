@@ -28,6 +28,10 @@ LIFE_TABLES = (
     "journal",
     "focus_sessions",
     "people",
+    "interview_rounds",
+    "stories",
+    "practice",
+    "offers",
     "health_sleep",
     "health_workouts",
 )

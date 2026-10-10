@@ -36,6 +36,10 @@ from mindtrail.organize.email_log import EmailLog
 from mindtrail.organize.focus import FocusStore
 from mindtrail.organize.habits import HabitStore
 from mindtrail.organize.health import HealthStore
+from mindtrail.organize.interviews import InterviewStore
+from mindtrail.organize.offers import OfferStore
+from mindtrail.organize.practice import PracticeStore
+from mindtrail.organize.stories import StoryStore
 from mindtrail.organize.journal import JournalStore
 from mindtrail.organize.people import PeopleStore
 from mindtrail.organize.jobs import JobStore
@@ -141,6 +145,10 @@ class Deps:
         self.github = GitHubUpdates(self.state)
         self.health = HealthStore(db_path)
         self.weather = WeatherClient(self.state)
+        self.rounds = InterviewStore(db_path)
+        self.stories = StoryStore(db_path)
+        self.practice = PracticeStore(db_path)
+        self.offers = OfferStore(db_path)
         self.backups = BackupStore(db_path, self.state)
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)

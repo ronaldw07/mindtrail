@@ -197,6 +197,64 @@ CREATE TABLE IF NOT EXISTS focus_sessions (
 -- People you want to keep in touch with. nudge_every_days 0 means no
 -- reminder; otherwise Today nudges once that many days pass since
 -- last_contacted (a local YYYY-MM-DD, '' if never).
+CREATE TABLE IF NOT EXISTS interview_rounds (
+    id             TEXT PRIMARY KEY,
+    application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    date           TEXT NOT NULL DEFAULT '',
+    -- phone | technical | behavioral | onsite | other
+    kind           TEXT NOT NULL DEFAULT 'other',
+    interviewer    TEXT NOT NULL DEFAULT '',
+    person_id      TEXT NOT NULL DEFAULT '',
+    prep_notes     TEXT NOT NULL DEFAULT '',
+    questions      TEXT NOT NULL DEFAULT '',
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rounds_application ON interview_rounds(application_id);
+
+-- Behavioral stories, situation / task / action / result.
+CREATE TABLE IF NOT EXISTS stories (
+    id         TEXT PRIMARY KEY,
+    title      TEXT NOT NULL,
+    situation  TEXT NOT NULL DEFAULT '',
+    task       TEXT NOT NULL DEFAULT '',
+    action     TEXT NOT NULL DEFAULT '',
+    result     TEXT NOT NULL DEFAULT '',
+    -- comma-separated themes: leadership, conflict, failure...
+    themes     TEXT NOT NULL DEFAULT '',
+    -- free text: which interviews it has been used in
+    used_in    TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+-- Coding problems you've done, brought back on a spacing schedule.
+CREATE TABLE IF NOT EXISTS practice (
+    id            TEXT PRIMARY KEY,
+    title         TEXT NOT NULL,
+    url           TEXT NOT NULL DEFAULT '',
+    -- easy | medium | hard
+    difficulty    TEXT NOT NULL DEFAULT 'medium',
+    topic         TEXT NOT NULL DEFAULT '',
+    -- solo | help | stuck
+    outcome       TEXT NOT NULL DEFAULT 'solo',
+    solved_on     TEXT NOT NULL,
+    reviews_done  INTEGER NOT NULL DEFAULT 0,
+    last_reviewed TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS offers (
+    application_id  TEXT PRIMARY KEY REFERENCES applications(id) ON DELETE CASCADE,
+    base            INTEGER NOT NULL DEFAULT 0,
+    bonus           INTEGER NOT NULL DEFAULT 0,
+    equity_per_year INTEGER NOT NULL DEFAULT 0,
+    signing         INTEGER NOT NULL DEFAULT 0,
+    location        TEXT NOT NULL DEFAULT '',
+    start_date      TEXT NOT NULL DEFAULT '',
+    notes           TEXT NOT NULL DEFAULT '',
+    updated_at      TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS people (
     id               TEXT PRIMARY KEY,
     name             TEXT NOT NULL,

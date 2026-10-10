@@ -12,10 +12,10 @@ Each handler takes (deps, path_args, body, query) and returns a dict.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date
 
-from mindtrail.web import admin_api, jobs_api, life_api, review, settings_api
+from mindtrail.web import admin_api, jobs_api, life_api, recruit_api, review, settings_api
 
 ROUTES: list[tuple[str, re.Pattern, object]] = []
 
@@ -63,7 +63,10 @@ def _badges(deps, args, body, query):
 
 @route("GET", "/api/jobs")
 def _list_jobs(deps, args, body, query):
-    return jobs_api.handle_list_jobs(deps.jobs, deps.tasks, deps.job_emails, deps.state)
+    data = jobs_api.handle_list_jobs(deps.jobs, deps.tasks, deps.job_emails, deps.state)
+    for a in data["applications"]:
+        a["rounds"] = [asdict(r) for r in deps.rounds.for_application(a["id"])]
+    return data
 
 
 @route("POST", "/api/jobs")
@@ -359,3 +362,81 @@ def _weather(deps, args, body, query):
 @route("POST", "/api/weather")
 def _set_weather(deps, args, body, query):
     return settings_api.handle_set_weather(deps.weather, body)
+
+
+# --- recruiting: rounds, stories, practice, offers ----------------------------
+
+
+@route("POST", f"/api/jobs/{_ID}/rounds")
+def _add_round(deps, args, body, query):
+    return recruit_api.handle_add_round(deps.rounds, args[0], body)
+
+
+@route("PATCH", f"/api/rounds/{_ID}")
+def _update_round(deps, args, body, query):
+    return recruit_api.handle_update_round(deps.rounds, args[0], body)
+
+
+@route("DELETE", f"/api/rounds/{_ID}")
+def _delete_round(deps, args, body, query):
+    return recruit_api.handle_delete_round(deps.rounds, args[0])
+
+
+@route("GET", "/api/recruiting/today")
+def _recruiting_today(deps, args, body, query):
+    return recruit_api.handle_recruiting_today(deps.rounds, deps.practice)
+
+
+@route("GET", "/api/stories")
+def _list_stories(deps, args, body, query):
+    return recruit_api.handle_list_stories(deps.stories)
+
+
+@route("POST", "/api/stories")
+def _create_story(deps, args, body, query):
+    return recruit_api.handle_create_story(deps.stories, body)
+
+
+@route("PATCH", f"/api/stories/{_ID}")
+def _update_story(deps, args, body, query):
+    return recruit_api.handle_update_story(deps.stories, args[0], body)
+
+
+@route("DELETE", f"/api/stories/{_ID}")
+def _delete_story(deps, args, body, query):
+    return recruit_api.handle_delete_story(deps.stories, args[0])
+
+
+@route("GET", "/api/practice")
+def _list_practice(deps, args, body, query):
+    return recruit_api.handle_list_practice(deps.practice)
+
+
+@route("POST", "/api/practice")
+def _add_problem(deps, args, body, query):
+    return recruit_api.handle_add_problem(deps.practice, body)
+
+
+@route("POST", f"/api/practice/{_ID}/review")
+def _review_problem(deps, args, body, query):
+    return recruit_api.handle_review_problem(deps.practice, args[0], body)
+
+
+@route("DELETE", f"/api/practice/{_ID}")
+def _delete_problem(deps, args, body, query):
+    return recruit_api.handle_delete_problem(deps.practice, args[0])
+
+
+@route("GET", "/api/offers")
+def _list_offers(deps, args, body, query):
+    return recruit_api.handle_list_offers(deps.offers, deps.jobs)
+
+
+@route("POST", f"/api/offers/{_ID}")
+def _save_offer(deps, args, body, query):
+    return recruit_api.handle_save_offer(deps.offers, args[0], body)
+
+
+@route("DELETE", f"/api/offers/{_ID}")
+def _delete_offer(deps, args, body, query):
+    return recruit_api.handle_delete_offer(deps.offers, args[0])
