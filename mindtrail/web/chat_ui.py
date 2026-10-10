@@ -80,6 +80,12 @@ CHAT_HTML = """<!doctype html>
 <head>
   <meta charset="utf-8">
   <title>mindtrail</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1a1a1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="icon" href="/static/favicon.png">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
   <link rel="stylesheet" href="/static/app.css">
   <link rel="stylesheet" href="/static/life.css">
   <link rel="stylesheet" href="/static/ui.css">

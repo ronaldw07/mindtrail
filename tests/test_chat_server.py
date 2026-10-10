@@ -22,6 +22,7 @@ from mindtrail.web.chat_ui import CHAT_HTML
 FULL_PAGE = CHAT_HTML + "".join(
     (STATIC_DIR / name).read_text(encoding="utf-8")
     for name in sorted({name for name, _ in STATIC_FILES.values()})
+    if name.endswith((".css", ".js"))
 )
 
 
