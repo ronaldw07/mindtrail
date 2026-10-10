@@ -349,3 +349,13 @@ def _backup_enable(deps, args, body, query):
 @route("POST", "/api/backups/restore")
 def _backup_restore(deps, args, body, query):
     return settings_api.handle_backup_restore(deps.backups, deps.journal, body)
+
+
+@route("GET", "/api/weather")
+def _weather(deps, args, body, query):
+    return settings_api.handle_weather(deps.weather)
+
+
+@route("POST", "/api/weather")
+def _set_weather(deps, args, body, query):
+    return settings_api.handle_set_weather(deps.weather, body)

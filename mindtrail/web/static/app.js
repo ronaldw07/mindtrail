@@ -39,6 +39,7 @@
 
   restoreLastView();
   resumeFocus();
+  startReminders();
   updateNav();
   loadSidebar();
   

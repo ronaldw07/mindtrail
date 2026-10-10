@@ -112,3 +112,30 @@ def test_enabling_backups_sets_the_folder_and_turns_them_on(parts, tmp_path):
     assert out["enabled"] is True and out["folder"] == str(target) and target.is_dir()
     assert out["last"] == "2026-10-09"
     assert settings_api.handle_backup_enable(backups, {"enabled": False})["enabled"] is False
+
+
+def test_weather_handlers_set_a_city_and_report_it(tmp_path):
+    from mindtrail.integrations.weather import WeatherClient
+
+    db = str(tmp_path / "t.db")
+    initialize(db)
+    geocode = {"results": [{"name": "Irvine", "latitude": 33.7, "longitude": -117.8}]}
+    forecast = {"current": {"temperature_2m": 70, "weather_code": 0},
+                "daily": {"temperature_2m_max": [75], "temperature_2m_min": [60],
+                          "precipitation_probability_max": [0]}}
+    weather = WeatherClient(AppState(db), get=lambda url, p: geocode if "geocoding" in url else forecast)
+
+    assert settings_api.handle_weather(weather) == {"configured": False}
+    out = settings_api.handle_set_weather(weather, {"city": "Irvine"})
+
+    assert out["place"] == "Irvine" and out["temp"] == 70 and out["summary"] == "Clear"
+
+
+def test_weather_handler_reports_an_unknown_city(tmp_path):
+    from mindtrail.integrations.weather import WeatherClient
+
+    db = str(tmp_path / "t.db")
+    initialize(db)
+    weather = WeatherClient(AppState(db), get=lambda url, p: {"results": []})
+
+    assert "couldn't find" in settings_api.handle_set_weather(weather, {"city": "Zzz"})["error"]

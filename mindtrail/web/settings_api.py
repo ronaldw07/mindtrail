@@ -98,3 +98,23 @@ def handle_backup_restore(backups, journal, body: dict) -> dict:
         return {"error": str(exc)}
     journal.reindex_all()  # the memory copies of journal entries are derived
     return {"restored": created, "failed": failed, "warnings": warnings[:5]}
+
+
+def handle_weather(weather) -> dict:
+    """The cached forecast. Never waits on the network: a stale cache is
+    refreshed in the background and the next visit sees it."""
+    weather.refresh_in_background_if_stale()
+    return weather.cached()
+
+
+def handle_set_weather(weather, body: dict) -> dict:
+    try:
+        if "unit" in body:
+            weather.set_unit(str(body["unit"]))
+        if "city" in body:
+            weather.set_city(str(body["city"]))
+        if weather.place():
+            weather.refresh()  # the first look right away, not on the next visit
+    except (ValueError, Exception) as exc:  # noqa: BLE001 - WeatherError and bad input both read as a message
+        return {"error": str(exc)}
+    return weather.cached()

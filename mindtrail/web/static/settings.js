@@ -110,3 +110,34 @@
       'Chats, projects, roadmaps and journal as plain files you can keep anywhere.'));
     return c;
   }
+
+  function weatherCard() {
+    const c = card('Weather', null, null);
+    const body = tEl('div', 'weather-body');
+    c.appendChild(body);
+    const paint = w => {
+      body.innerHTML = '';
+      const input = tEl('input', 'jobs-link-input');
+      input.placeholder = 'City, e.g. Irvine';
+      input.setAttribute('aria-label', 'City');
+      input.value = w.place || '';
+      const save = tEl('button', 'btn-tinted', 'Save');
+      save.onclick = async () => {
+        setButtonBusy(save, 'Looking up…');
+        const res = await jsonSend('/api/weather', {city: input.value});
+        setButtonIdle(save, 'Save');
+        if (res.error) toast(res.error, {error: true}); else paint(res);
+      };
+      input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); save.click(); } };
+      const row = tEl('div', 'task-add habit-add');
+      row.appendChild(input);
+      row.appendChild(save);
+      body.appendChild(settingRow('City', row,
+        'Shown on Today. Only the city name is sent to look up its location (Open-Meteo, no account).'));
+      body.appendChild(settingRow('Units', segmented(
+        [{value: 'fahrenheit', label: '°F'}, {value: 'celsius', label: '°C'}], w.unit || 'fahrenheit',
+        async unit => paint(await jsonSend('/api/weather', {unit})), 'Temperature units')));
+    };
+    api('/api/weather').then(paint);
+    return c;
+  }

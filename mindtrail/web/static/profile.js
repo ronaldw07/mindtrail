@@ -75,6 +75,8 @@
 
     main.appendChild(setupCard());
     main.appendChild(appearanceCard());
+    main.appendChild(notificationsCard());
+    main.appendChild(weatherCard());
     main.appendChild(aboutCard);
     main.appendChild(areasCard());
     main.appendChild(canvasCard());

@@ -22,6 +22,7 @@ from mindtrail.ingest.researcher import Researcher
 from mindtrail.integrations.artwork import ArtworkClient
 from mindtrail.integrations.canvas import CanvasFeed
 from mindtrail.integrations.github import GitHubUpdates
+from mindtrail.integrations.weather import WeatherClient
 from mindtrail.integrations.gmail import GmailClient
 from mindtrail.integrations.google_calendar import GoogleCalendarClient
 from mindtrail.integrations.google_sheets import SheetsClient
@@ -73,6 +74,7 @@ STATIC_FILES = {
     "/static/today.js": ("today.js", "application/javascript; charset=utf-8"),
     "/static/tasks.js": ("tasks.js", "application/javascript; charset=utf-8"),
     "/static/settings.js": ("settings.js", "application/javascript; charset=utf-8"),
+    "/static/notify.js": ("notify.js", "application/javascript; charset=utf-8"),
     "/static/focus.js": ("focus.js", "application/javascript; charset=utf-8"),
     "/static/review.js": ("review.js", "application/javascript; charset=utf-8"),
     "/static/admin.js": ("admin.js", "application/javascript; charset=utf-8"),
@@ -138,6 +140,7 @@ class Deps:
         self.canvas = CanvasFeed(self.state)
         self.github = GitHubUpdates(self.state)
         self.health = HealthStore(db_path)
+        self.weather = WeatherClient(self.state)
         self.backups = BackupStore(db_path, self.state)
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)

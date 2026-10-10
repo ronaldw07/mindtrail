@@ -8,6 +8,7 @@
   // on the left, content on the right.
 
   const TODAY_WIDGETS = [
+    {id: 'weather', label: 'Weather'},
     {id: 'activity', label: 'Activity rings', wide: true},
     {id: 'habits', label: 'Habit rings'},
     {id: 'mood', label: 'Mood & energy'},
@@ -127,7 +128,7 @@
     const row = tEl('section', 't-glance');
     row.setAttribute('aria-label', 'At a glance');
     layout.order.filter(id => !layout.hidden.includes(id)).forEach(id => {
-      const w = {activity: activityRings, habits: habitRings, mood: moodChart, week: weekStrip, pipeline: pipelineTiles,
+      const w = {weather: weatherTile, activity: activityRings, habits: habitRings, mood: moodChart, week: weekStrip, pipeline: pipelineTiles,
                  focus: focusTile, health: healthTile}[id];
       const tile = w(summary, data);
       if (tile) row.appendChild(tile);
@@ -396,6 +397,28 @@
       stats.appendChild(s);
     });
     tile.appendChild(stats);
+    return tile;
+  }
+
+  // ---------- weather ----------
+  // Filled in after the tile is on screen; Today never waits on it. Hidden
+  // until a city is set in Settings.
+  function weatherTile() {
+    const tile = glanceTile('Weather', () => openProfileView());
+    tile.hidden = true;
+    api('/api/weather').then(w => {
+      if (!w.configured || w.error && !w.temp) return;
+      tile.hidden = false;
+      const unit = w.unit === 'celsius' ? '°C' : '°F';
+      const head = tEl('div', 't-focus-head');
+      head.appendChild(tEl('span', 't-stat-num', w.temp === undefined ? '–' : w.temp + unit));
+      head.appendChild(tEl('span', 't-stat-label', (w.summary || '') + (w.place ? ' · ' + w.place : '')));
+      tile.appendChild(head);
+      if (w.high !== undefined) {
+        tile.appendChild(tEl('div', 't-item-sub', 'High ' + w.high + unit + ' · Low ' + w.low + unit
+          + (w.rain ? ' · ' + w.rain + '% chance of rain' : '')));
+      }
+    });
     return tile;
   }
 
