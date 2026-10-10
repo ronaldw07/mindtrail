@@ -459,3 +459,14 @@ a.problem-title:hover { color: var(--accent-text); }
 .story-tags { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.4rem; }
 .story-inspector { width: 380px; max-height: calc(100vh - 7rem); overflow-y: auto; }
 .story-field { min-height: 78px; }
+
+.nav-capsule .nav-btn { color: var(--text-2); }
+.nav-capsule .nav-btn:disabled { color: var(--text-muted); }
+
+/* ---------- chat ---------- */
+#log { max-width: 720px; }
+form { max-width: 720px; box-shadow: var(--shadow-md), 0 0 0 0.5px var(--hairline); border: none;
+       background: color-mix(in srgb, var(--surface) 82%, transparent);
+       backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+form:focus-within { box-shadow: var(--shadow-md), 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent); }
+#composer { padding-bottom: 1.25rem; }

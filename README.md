@@ -521,7 +521,7 @@ silently.
 ## Other integrations (optional)
 
 - **Canvas assignments** - in Canvas, Calendar → Calendar Feed, copy the
-  link, and paste it under Profile → School calendar. The link is private
+  link, and paste it under Settings → School calendar (Canvas). The link is private
   (it works without a login), so it stays on your machine and is left out
   of exports.
 - **GitHub** - if you're signed in to the GitHub CLI (`gh auth login`),
@@ -531,7 +531,46 @@ silently.
   then `mindtrail health import export.zip` for sleep and workouts.
 - **Daily painting** - Today's masthead is a public-domain painting from
   the Art Institute of Chicago, fetched once a day and cached. Turn it off
-  under Customize on Today.
+  under Edit widgets on Today.
+- **Weather** - set a city under Settings → Weather. The city name is
+  looked up once on Open-Meteo (free, no account) and only the resulting
+  coordinates are used after that.
+- **Notifications** - Settings → Notifications turns on Mac notifications
+  for interviews and assessments due today, people due a nudge, and when
+  a focus session ends. They fire only while Mind Trail is open.
+
+## Look and feel
+
+Settings → Appearance switches between Auto (follows macOS), Light and
+Dark, and picks one of eight accent colors. Every accent's fill clears
+4.5:1 contrast with white text. Today's widgets (activity rings, habits,
+mood, week, jobs, interviews, practice, weather, focus, sleep) can be
+shown, hidden and reordered with Edit widgets.
+
+Keyboard: Cmd+K command palette (finds to-dos, jobs and people too),
+Cmd+1-9 jump between views, Cmd+N new to-do, Cmd+, settings, Cmd+[ and ]
+back and forward. Browsers reserve some of these (Cmd+N especially); they
+work once the page is installed as an app (below).
+
+**Install as an app**: in Chrome or Dia, use Install / Add to Dock from the
+address bar menu; in Safari, File → Add to Dock. The page ships an icon
+and a web manifest, so it opens in its own window with a Dock icon. It
+still needs `mindtrail chat` running.
+
+## Recruiting tools
+
+- **Jobs** - pipeline board (drag a card between columns), interview
+  rounds per application (date, kind, interviewer, prep notes, the
+  questions you were asked), and an offer section whose numbers feed a
+  side-by-side comparison with a first-year total (base + bonus + a year
+  of equity + signing).
+- **Practice** - log coding problems; each comes back after 1, 3, 7 and
+  21 days. A chart shows coverage by topic and how many you solved alone.
+- **Stories** - behavioral stories as situation / task / action / result,
+  tagged by theme, with a note of where each was used.
+- **To-dos** repeat: "Water plants every mon", "Stretch daily",
+  "Pay rent 1st of every month". Checking one off creates the next.
+
 
 ## CLI reference
 
@@ -624,9 +663,16 @@ command prints a created/skipped/failed count plus a warning per problem
 (an unresolvable roadmap dependency, a project name that no longer
 matches, and so on).
 
-There is deliberately no way to restore from the web UI — it's a
-CLI-only, out-of-band operation. A button that can silently replace your
-database is the wrong thing to put one click away.
+Restoring a full export is deliberately CLI-only: a button that can
+silently replace your database is the wrong thing to put one click away.
+
+**Daily backups** (Settings → Backups, off until you turn them on) save a
+database copy and a `life.json` once a day into a folder you pick - iCloud
+Drive keeps a copy off the Mac - and keep the newest 14. Restoring one
+from Settings is a *merge* of the life tables (to-dos, habits, journal,
+jobs, ...): what was deleted or changed since comes back, what you added
+since is left alone, and it asks first. The Canvas feed link is left out
+of both files.
 
 Conversation entries go back in through the same embedding path a fresh
 `ask` or `note` uses, so semantic search finds a restored entry exactly
