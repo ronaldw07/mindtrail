@@ -69,6 +69,7 @@
     main.appendChild(jobsHeader(data));
     main.appendChild(jobsToolbar(data));
     main.appendChild(jobsBoard(data));
+    main.appendChild(offersPanel());
     layout.appendChild(main);
     const selected = data.applications.find(a => a.id === jobsSelectedId);
     if (selected) layout.appendChild(jobDetail(selected));
@@ -310,6 +311,8 @@
       panel.appendChild(link);
     }
     panel.appendChild(detailField(a, 'notes', 'Notes', 'textarea'));
+    panel.appendChild(roundsSection(a));
+    if (a.stage === 'offer') panel.appendChild(offerSection(a));
 
     panel.appendChild(el('div', 'brief-section-label', 'To-dos'));
     a.tasks.forEach(t => panel.appendChild(taskRow(t, reloadJobs)));

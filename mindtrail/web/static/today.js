@@ -9,6 +9,8 @@
 
   const TODAY_WIDGETS = [
     {id: 'weather', label: 'Weather'},
+    {id: 'interviews', label: 'Interviews'},
+    {id: 'practice', label: 'Practice to review'},
     {id: 'activity', label: 'Activity rings', wide: true},
     {id: 'habits', label: 'Habit rings'},
     {id: 'mood', label: 'Mood & energy'},
@@ -128,7 +130,7 @@
     const row = tEl('section', 't-glance');
     row.setAttribute('aria-label', 'At a glance');
     layout.order.filter(id => !layout.hidden.includes(id)).forEach(id => {
-      const w = {weather: weatherTile, activity: activityRings, habits: habitRings, mood: moodChart, week: weekStrip, pipeline: pipelineTiles,
+      const w = {interviews: interviewsTile, practice: practiceTile, weather: weatherTile, activity: activityRings, habits: habitRings, mood: moodChart, week: weekStrip, pipeline: pipelineTiles,
                  focus: focusTile, health: healthTile}[id];
       const tile = w(summary, data);
       if (tile) row.appendChild(tile);

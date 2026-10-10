@@ -34,6 +34,8 @@
     if (last.type === 'journal') { await openJournalView(); return; }
     if (last.type === 'week') { await openWeekView(); return; }
     if (last.type === 'people') { await openPeopleView(); return; }
+    if (last.type === 'practice') { await openPracticeView(); return; }
+    if (last.type === 'stories') { await openStoriesView(); return; }
     openDashboardView();
   }
 

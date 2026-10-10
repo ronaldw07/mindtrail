@@ -39,6 +39,11 @@ SIDE_GROUPS = (
             ("open-jobs", "Jobs", "#a0560a",
              '<rect x="3" y="7" width="18" height="13" rx="2"/>'
              '<path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>', "jobs"),
+            ("open-practice", "Practice", "#1d6f5f",
+             '<path d="M8 6l-5 6 5 6"/><path d="M16 6l5 6-5 6"/><path d="M14 4l-4 16"/>', "practice"),
+            ("open-stories", "Stories", "#6e3fb5",
+             '<path d="M12 6c-2-2-5-2.5-8-2v14c3-.5 6 0 8 2 2-2 5-2.5 8-2V4c-3-.5-6 0-8 2z"/>'
+             '<path d="M12 6v14"/>', ""),
         ),
     ),
 )
@@ -151,6 +156,8 @@ CHAT_HTML = """<!doctype html>
       <div id="journal-view"></div>
       <div id="week-view"></div>
       <div id="people-view"></div>
+      <div id="practice-view"></div>
+      <div id="stories-view"></div>
       <div id="composer">
         <form id="form">
           <button type="button" class="icon-btn" id="attach" title="Upload a PDF"
@@ -185,6 +192,9 @@ CHAT_HTML = """<!doctype html>
   <script src="/static/tasks.js"></script>
   <script src="/static/settings.js"></script>
   <script src="/static/notify.js"></script>
+  <script src="/static/recruit.js"></script>
+  <script src="/static/stories.js"></script>
+  <script src="/static/practice.js"></script>
   <script src="/static/focus.js"></script>
   <script src="/static/review.js"></script>
   <script src="/static/admin.js"></script>

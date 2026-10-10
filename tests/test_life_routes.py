@@ -118,7 +118,7 @@ def test_badges_count_what_needs_attention(tmp_path):
 
     badges = life_api.handle_badges(tasks, people, jobs, today)
 
-    assert badges == {"tasks": 2, "people": 0, "jobs": 1}
+    assert badges == {"tasks": 2, "people": 0, "jobs": 1, "practice": 0}
 
 
 def test_journal_on_this_day_finds_a_month_and_a_year_back(tmp_path):

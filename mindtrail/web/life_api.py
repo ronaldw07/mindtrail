@@ -253,7 +253,7 @@ def handle_focus_week(focus: FocusStore, today: date | None = None) -> dict:
     return focus_week(focus, today or date.today())
 
 
-def handle_badges(tasks, people, jobs, today: date | None = None) -> dict:
+def handle_badges(tasks, people, jobs, today: date | None = None, practice=None) -> dict:
     """Counts for the sidebar: to-dos due today or overdue, people due a
     nudge, and job applications waiting for a keep/discard decision."""
     from mindtrail.organize.people import is_due
@@ -264,4 +264,5 @@ def handle_badges(tasks, people, jobs, today: date | None = None) -> dict:
         "tasks": sum(1 for t in tasks.open() if t.due_date and t.due_date <= iso),
         "people": sum(1 for p in people.all() if is_due(p, today)),
         "jobs": sum(1 for a in jobs.all() if a.needs_review),
+        "practice": len(practice.due(today)) if practice else 0,
     }

@@ -138,11 +138,12 @@
     return c;
   }
 
-  const VIEW_NAMES = ['project', 'roadmap', 'profile', 'dashboard', 'jobs', 'tasks', 'habits', 'journal', 'week', 'people'];
+  const VIEW_NAMES = ['project', 'roadmap', 'profile', 'dashboard', 'jobs', 'tasks', 'habits', 'journal', 'week', 'people', 'practice', 'stories'];
 
   // Which sidebar button lights up for each view.
   const VIEW_NAV = {dashboard: 'open-today', week: 'open-week', tasks: 'open-tasks', habits: 'open-habits',
                     journal: 'open-journal', jobs: 'open-jobs', people: 'open-people',
+                    practice: 'open-practice', stories: 'open-stories',
                     profile: 'open-profile'};
 
   function setActiveView(name) {

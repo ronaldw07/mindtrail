@@ -55,7 +55,7 @@ _ID = r"([A-Za-z0-9-]+)"
 
 @route("GET", "/api/badges")
 def _badges(deps, args, body, query):
-    return life_api.handle_badges(deps.tasks, deps.people, deps.jobs)
+    return life_api.handle_badges(deps.tasks, deps.people, deps.jobs, practice=deps.practice)
 
 
 # --- jobs -------------------------------------------------------------------
