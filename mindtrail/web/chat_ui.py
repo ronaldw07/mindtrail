@@ -20,6 +20,9 @@ SIDE_GROUPS = (
             ("open-today", "Today", "#d9480f",
              '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4'
              'M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>', ""),
+            ("open-journey", "Journey", "#5e5ce6",
+             '<circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/>'
+             '<path d="M8.5 18H14a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h5.5"/>', ""),
         ),
     ),
     (
@@ -94,6 +97,7 @@ CHAT_HTML = """<!doctype html>
   <link rel="stylesheet" href="/static/app.css">
   <link rel="stylesheet" href="/static/life.css">
   <link rel="stylesheet" href="/static/ui.css">
+  <link rel="stylesheet" href="/static/journey.css">
   <link rel="stylesheet" href="/static/theme.css">
   <script>
     // Theme before first paint, so a light-mode user never sees a dark flash.
@@ -158,6 +162,7 @@ CHAT_HTML = """<!doctype html>
       <div id="people-view"></div>
       <div id="practice-view"></div>
       <div id="stories-view"></div>
+      <div id="journey-view"></div>
       <div id="composer">
         <form id="form">
           <button type="button" class="icon-btn" id="attach" title="Upload a PDF"
@@ -195,6 +200,8 @@ CHAT_HTML = """<!doctype html>
   <script src="/static/recruit.js"></script>
   <script src="/static/stories.js"></script>
   <script src="/static/practice.js"></script>
+  <script src="/static/journey.js"></script>
+  <script src="/static/journey_panel.js"></script>
   <script src="/static/focus.js"></script>
   <script src="/static/review.js"></script>
   <script src="/static/admin.js"></script>

@@ -115,6 +115,7 @@
       --bar: #3987e5;
       --weeks: 52;
       --habit-color: #3987e5;
+      --c: #3987e5;                 /* journey: the track colour on a step chip */
       --avatar-size: 30px;
     }
     @supports (transition-timing-function: linear(0, 1)) {

@@ -63,6 +63,7 @@
       {label: 'Go to People', run: () => { closePalette(); openPeopleView(); }},
       {label: 'Go to Practice', run: () => { closePalette(); openPracticeView(); }},
       {label: 'Go to Stories', run: () => { closePalette(); openStoriesView(); }},
+      {label: 'Go to Journey', run: () => { closePalette(); openJourneyView(); }},
       {label: 'Write in journal', run: () => { closePalette(); openJournalView(); }},
       {label: 'Go to Profile', run: () => { closePalette(); openProfileView(); }},
       {label: 'Add a to-do', run: () => { closePalette(); quickAddTask(); }},

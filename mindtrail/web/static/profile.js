@@ -116,6 +116,7 @@
   $('open-journal').onclick = () => openJournalView();
   $('open-practice').onclick = () => openPracticeView();
   $('open-stories').onclick = () => openStoriesView();
+  $('open-journey').onclick = () => openJourneyView();
   $('quick-add').onclick = e => showMenuFrom(e.currentTarget, [
     {label: 'New to-do', run: quickAddTask},
     {label: 'New note', run: addNote},

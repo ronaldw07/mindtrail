@@ -36,6 +36,7 @@
     if (last.type === 'people') { await openPeopleView(); return; }
     if (last.type === 'practice') { await openPracticeView(); return; }
     if (last.type === 'stories') { await openStoriesView(); return; }
+    if (last.type === 'journey') { await openJourneyView(); return; }
     openDashboardView();
   }
 

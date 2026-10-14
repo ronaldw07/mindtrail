@@ -572,6 +572,36 @@ still needs `mindtrail chat` running.
   "Pay rent 1st of every month". Checking one off creates the next.
 
 
+## Journey: a four-year plan
+
+**Journey** (sidebar, under Today) lays out four school years as a timeline of
+terms (Fall, Winter, Spring, Summer) with a "Now" marker, and holds several
+**tracks** at once - say AI/ML, SWE, Product Eng - each a roadmap whose steps
+sit in terms. Steps shared by every track (classes, recruiting seasons) live
+in one shared track.
+
+- **Edit it any way**: click a step to edit it, drag it to another term,
+  `+` in a term to add one, click the active track tab to rename, copy or
+  delete it. Or use the **Assistant** tab: "make a research track with 3
+  steps", "copy SWE as a backup plan", "move LeetCode prep to winter".
+  Every change is proposed first; accepting one lights the changed steps up.
+- **Look back**: the pencil on a past term opens a box for what you actually
+  did. **Review Year 1** sends those notes to the AI model and saves an
+  honest review (what went well, gaps, a verdict per track) and queues
+  finished steps and next steps as suggestions.
+- **Stay current**: *Suggestions* collect proposed changes from Mind Trail's
+  own data (practice, jobs, interviews, chats, GitHub), Gmail (club, course,
+  hackathon and research emails), a pasted chat, or a **Gemini export**.
+  Google has no API for Gemini history, so export it with Takeout
+  (takeout.google.com, deselect all, My Activity, Gemini Apps, JSON or HTML)
+  and upload the file under Update from. Only your prompts are read, and
+  only newer ones on a re-import. Nothing changes a track until you accept.
+- **Brought in, not moved**: setup can copy an existing roadmap into the
+  journey as its own track; the original project is left as it is.
+- Text from reviews, chat and these sources is sent to the AI model (Groq)
+  and nowhere else. The journey is part of the backup and `life.json`.
+
+
 ## CLI reference
 
 ```bash
