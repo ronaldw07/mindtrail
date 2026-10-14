@@ -34,6 +34,9 @@ LIFE_TABLES = (
     "offers",
     "health_sleep",
     "health_workouts",
+    "journey_reflections",
+    "journey_reviews",
+    "journey_suggestions",
 )
 
 # Derived columns rebuilt on import rather than carried over: a journal

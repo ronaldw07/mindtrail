@@ -37,6 +37,7 @@ from mindtrail.organize.focus import FocusStore
 from mindtrail.organize.habits import HabitStore
 from mindtrail.organize.health import HealthStore
 from mindtrail.organize.interviews import InterviewStore
+from mindtrail.organize.journey import JourneyStore
 from mindtrail.organize.offers import OfferStore
 from mindtrail.organize.practice import PracticeStore
 from mindtrail.organize.stories import StoryStore
@@ -67,6 +68,7 @@ STATIC_FILES = {
     "/static/life.css": ("life.css", "text/css; charset=utf-8"),
     "/static/ui.css": ("ui.css", "text/css; charset=utf-8"),
     "/static/theme.css": ("theme.css", "text/css; charset=utf-8"),
+    "/static/journey.css": ("journey.css", "text/css; charset=utf-8"),
     "/static/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
     "/static/favicon.png": ("favicon.png", "image/png"),
     "/static/apple-touch-icon.png": ("apple-touch-icon.png", "image/png"),
@@ -82,6 +84,8 @@ STATIC_FILES = {
     "/static/recruit.js": ("recruit.js", "application/javascript; charset=utf-8"),
     "/static/stories.js": ("stories.js", "application/javascript; charset=utf-8"),
     "/static/practice.js": ("practice.js", "application/javascript; charset=utf-8"),
+    "/static/journey.js": ("journey.js", "application/javascript; charset=utf-8"),
+    "/static/journey_panel.js": ("journey_panel.js", "application/javascript; charset=utf-8"),
     "/static/focus.js": ("focus.js", "application/javascript; charset=utf-8"),
     "/static/review.js": ("review.js", "application/javascript; charset=utf-8"),
     "/static/admin.js": ("admin.js", "application/javascript; charset=utf-8"),
@@ -153,6 +157,7 @@ class Deps:
         self.practice = PracticeStore(db_path)
         self.offers = OfferStore(db_path)
         self.backups = BackupStore(db_path, self.state)
+        self.journey = JourneyStore(db_path, self.state, self.roadmaps, self.roadmap_nodes)
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)
         self.job_emails = self.email_log.for_application

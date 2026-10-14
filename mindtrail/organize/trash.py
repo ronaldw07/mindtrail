@@ -79,6 +79,7 @@ def _node_to_json(node: RoadmapNode) -> str:
             "depends_on": list(node.depends_on),
             "created_at": node.created_at,
             "due_date": node.due_date,
+            "term": node.term,
         }
     )
 
@@ -97,6 +98,7 @@ def _node_from_json(raw: str) -> RoadmapNode:
         depends_on=tuple(data["depends_on"]),
         created_at=data["created_at"],
         due_date=data["due_date"],
+        term=data.get("term", ""),
     )
 
 

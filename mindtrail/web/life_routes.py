@@ -15,7 +15,7 @@ import re
 from dataclasses import asdict, dataclass
 from datetime import date
 
-from mindtrail.web import admin_api, jobs_api, life_api, recruit_api, review, settings_api
+from mindtrail.web import admin_api, jobs_api, journey_api, life_api, recruit_api, review, settings_api
 
 ROUTES: list[tuple[str, re.Pattern, object]] = []
 
@@ -440,3 +440,101 @@ def _save_offer(deps, args, body, query):
 @route("DELETE", f"/api/offers/{_ID}")
 def _delete_offer(deps, args, body, query):
     return recruit_api.handle_delete_offer(deps.offers, args[0])
+
+
+# --- the 4-year journey --------------------------------------------------------
+
+
+@route("GET", "/api/journey")
+def _journey(deps, args, body, query):
+    return journey_api.handle_get(deps.journey, deps.projects)
+
+
+@route("GET", "/api/journey/today")
+def _journey_today(deps, args, body, query):
+    return journey_api.handle_today(deps.journey, deps.projects)
+
+
+@route("POST", "/api/journey/setup")
+def _journey_setup(deps, args, body, query):
+    return journey_api.handle_setup(deps.journey, deps.projects, body)
+
+
+@route("POST", "/api/journey/tracks")
+def _journey_create_track(deps, args, body, query):
+    return journey_api.handle_create_track(deps.journey, body)
+
+
+@route("PATCH", f"/api/journey/tracks/{_ID}")
+def _journey_update_track(deps, args, body, query):
+    return journey_api.handle_update_track(deps.journey, args[0], body)
+
+
+@route("POST", f"/api/journey/tracks/{_ID}/duplicate")
+def _journey_duplicate_track(deps, args, body, query):
+    return journey_api.handle_duplicate_track(deps.journey, args[0], body)
+
+
+@route("DELETE", f"/api/journey/tracks/{_ID}")
+def _journey_delete_track(deps, args, body, query):
+    return journey_api.handle_delete_track(deps.journey, args[0])
+
+
+@route("POST", "/api/journey/steps")
+def _journey_add_step(deps, args, body, query):
+    return journey_api.handle_add_step(deps.journey, body)
+
+
+@route("POST", f"/api/journey/steps/{_ID}/move")
+def _journey_move_step(deps, args, body, query):
+    return journey_api.handle_move_step(deps.journey, args[0], body)
+
+
+@route("POST", "/api/journey/reflection")
+def _journey_reflection(deps, args, body, query):
+    return journey_api.handle_set_reflection(deps.journey, body)
+
+
+@route("POST", "/api/journey/review")
+def _journey_review(deps, args, body, query):
+    return journey_api.handle_review(deps.journey, deps.projects, deps.llm, deps.profile, body)
+
+
+@route("POST", "/api/journey/chat")
+def _journey_chat(deps, args, body, query):
+    return journey_api.handle_chat(deps.journey, deps.llm, deps.profile, body)
+
+
+@route("POST", "/api/journey/apply")
+def _journey_apply(deps, args, body, query):
+    return journey_api.handle_apply(deps.journey, body)
+
+
+@route("POST", f"/api/journey/suggestions/{_ID}/accept")
+def _journey_accept(deps, args, body, query):
+    return journey_api.handle_accept(deps.journey, args[0], body)
+
+
+@route("POST", f"/api/journey/suggestions/{_ID}/dismiss")
+def _journey_dismiss(deps, args, body, query):
+    return journey_api.handle_dismiss(deps.journey, args[0])
+
+
+@route("POST", "/api/journey/scan/mindtrail")
+def _journey_scan_mindtrail(deps, args, body, query):
+    return journey_api.handle_scan_mindtrail(deps.journey, deps.profile, deps.llm, deps)
+
+
+@route("POST", "/api/journey/scan/gmail")
+def _journey_scan_gmail(deps, args, body, query):
+    return journey_api.handle_scan_gmail(deps.journey, deps.profile, deps.llm, deps.scanner._gmail)
+
+
+@route("POST", "/api/journey/import/gemini")
+def _journey_gemini(deps, args, body, query):
+    return journey_api.handle_import_gemini(deps.journey, deps.profile, deps.llm, deps.state, body)
+
+
+@route("POST", "/api/journey/import/paste")
+def _journey_paste(deps, args, body, query):
+    return journey_api.handle_paste(deps.journey, deps.profile, deps.llm, body)

@@ -280,6 +280,44 @@ CREATE TABLE IF NOT EXISTS health_workouts (
     minutes INTEGER NOT NULL
 );
 
+-- The 4-year journey (organize/journey.py). A reflection is what you
+-- wrote about one past term; a review is the model's read of a year,
+-- kept as JSON; a suggestion is a proposed change to a track, waiting
+-- for you to accept or dismiss it.
+CREATE TABLE IF NOT EXISTS journey_reflections (
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    term       TEXT NOT NULL,
+    text       TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (project_id, term)
+);
+
+CREATE TABLE IF NOT EXISTS journey_reviews (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    year       INTEGER NOT NULL,
+    body       TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS journey_suggestions (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    -- add_step | add_done | mark_done
+    kind       TEXT NOT NULL,
+    roadmap_id TEXT NOT NULL DEFAULT '',
+    node_id    TEXT NOT NULL DEFAULT '',
+    title      TEXT NOT NULL DEFAULT '',
+    detail     TEXT NOT NULL DEFAULT '',
+    term       TEXT NOT NULL DEFAULT '',
+    reason     TEXT NOT NULL DEFAULT '',
+    -- review | mindtrail | gmail | gemini | paste
+    source     TEXT NOT NULL,
+    -- pending | accepted | dismissed
+    status     TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL
+);
+
 -- Small named values that don't deserve a table each: last scan time,
 -- the linked sheet, the cached brief. Values are JSON text.
 CREATE TABLE IF NOT EXISTS app_state (
@@ -343,6 +381,12 @@ ADDED_COLUMNS = [
     # the task whose check-off created this one.
     ("tasks", "repeat", "TEXT NOT NULL DEFAULT ''"),
     ("tasks", "spawned_from", "TEXT NOT NULL DEFAULT ''"),
+    # A project can hold several roadmaps ("tracks"): a tab label, and
+    # whether this one is the journey's shared track.
+    ("roadmaps", "name", "TEXT NOT NULL DEFAULT ''"),
+    ("roadmaps", "kind", "TEXT NOT NULL DEFAULT ''"),
+    # School term like "2026-fall" - see organize/terms.py.
+    ("roadmap_nodes", "term", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 
