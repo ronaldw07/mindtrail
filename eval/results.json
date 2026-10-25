@@ -1,8 +1,8 @@
 {
   "retrieval": {
     "total": 10,
-    "recall_at_1": 7,
-    "recall_at_3": 7,
+    "recall_at_1": 8,
+    "recall_at_3": 8,
     "cases": [
       {
         "followup": "how does Chroma differ from Pinecone",
@@ -42,7 +42,7 @@
       {
         "followup": "what is the tradeoff between recall and speed in approximate search",
         "expected": "how does HNSW indexing work",
-        "rank": 4
+        "rank": 1
       },
       {
         "followup": "how do I structure prompts so the cache actually hits",
