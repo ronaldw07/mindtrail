@@ -28,7 +28,7 @@ STATE_KEY = "journey"
 YEARS = 4
 MAX_TEXT = 6000
 SUGGESTION_KINDS = ("add_step", "add_done", "mark_done")
-SOURCES = ("review", "mindtrail", "gmail", "gemini", "paste")
+SOURCES = ("review", "mindtrail", "gmail", "calendar", "gemini", "paste")
 
 DEFAULT_TRACKS = (
     ("AI/ML", "Land an AI/ML engineering internship"),

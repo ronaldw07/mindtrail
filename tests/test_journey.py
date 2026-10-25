@@ -266,3 +266,54 @@ def test_create_track_action_carries_its_starting_steps(env):
     assert [(s.title, s.term, s.status) for s in steps] == [
         ("Email professors", "2027-winter", "accepted"), ("Read two papers", "", "accepted")]
     assert res["changed"] == [s.id for s in steps]
+
+
+def test_calendar_events_parse_and_become_suggestions(env):
+    from mindtrail.integrations.calendar_events import CalendarEvents, parse_event
+    from mindtrail.integrations.google_api import GoogleAuthError
+
+    assert parse_event({"status": "cancelled", "summary": "x", "start": {"date": "2026-11-02"}}) is None
+    assert parse_event({"summary": "  ", "start": {"date": "2026-11-02"}}) is None
+    midterm = parse_event({"summary": "CS 161  Midterm", "start": {"date": "2026-11-02"}})
+    assert (midterm.date, midterm.title, midterm.all_day) == ("2026-11-02", "CS 161 Midterm", True)
+    timed = parse_event({"summary": "Interview", "start": {"dateTime": "2026-11-04T10:00:00-08:00"}})
+    assert timed.all_day is False and timed.date.startswith("2026-11")
+
+    journey, projects, *_ = env
+    journey.setup(projects, 2025)
+    llm = FakeLLM('{"suggestions": [{"kind": "add_step", "title": "Prep for CS 161 midterm", '
+                  '"term": "2026-fall", "reason": "Midterm on Nov 2"}]}')
+
+    class FakeCreds(CalendarEvents):
+        def between(self, start, end, limit=100):
+            return [midterm]
+
+    out = journey_api.handle_scan_calendar(journey, None, llm, FakeCreds(), TODAY)
+    assert out == {"added": 1, "looked_at": 1}
+    assert "2026-11-02: CS 161 Midterm (all day)" in llm.last_user
+    assert journey.pending(journey.settings()["project_id"])[0].source == "calendar"
+
+    class Disconnected(CalendarEvents):
+        def between(self, start, end, limit=100):
+            raise GoogleAuthError("Google isn't connected")
+
+    assert "isn't connected" in journey_api.handle_scan_calendar(journey, None, llm, Disconnected(), TODAY)["error"]
+
+
+def test_calendar_between_asks_for_the_window_and_drops_cancelled(monkeypatch):
+    from datetime import date as d
+    from mindtrail.integrations import calendar_events
+
+    monkeypatch.setattr(calendar_events, "credentials_for", lambda *a, **k: ("creds", "path"))
+    seen = {}
+
+    def fake_get(creds, path, url, params):
+        seen.update(url=url, params=params)
+        return {"items": [{"summary": "Hackathon", "start": {"date": "2026-11-14"}},
+                          {"summary": "Gone", "status": "cancelled", "start": {"date": "2026-11-15"}}]}
+
+    got = calendar_events.CalendarEvents(get=fake_get).between(d(2026, 10, 25), d(2026, 12, 24))
+
+    assert [e.title for e in got] == ["Hackathon"]
+    assert seen["params"]["singleEvents"] == "true" and seen["params"]["timeMin"].startswith("2026-10-25")
+    assert seen["params"]["timeMax"].startswith("2026-12-24")

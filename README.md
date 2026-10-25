@@ -591,7 +591,9 @@ in one shared track.
   finished steps and next steps as suggestions.
 - **Stay current**: *Suggestions* collect proposed changes from Mind Trail's
   own data (practice, jobs, interviews, chats, GitHub), Gmail (club, course,
-  hackathon and research emails), a pasted chat, or a **Gemini export**.
+  hackathon and research emails), Google Calendar (event titles and dates for
+  the next two months, read-only, so an exam or deadline becomes a step in the
+  right term), a pasted chat, or a **Gemini export**.
   Google has no API for Gemini history, so export it with Takeout
   (takeout.google.com, deselect all, My Activity, Gemini Apps, JSON or HTML)
   and upload the file under Update from. Only your prompts are read, and

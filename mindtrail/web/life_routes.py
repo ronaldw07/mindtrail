@@ -532,6 +532,11 @@ def _journey_scan_gmail(deps, args, body, query):
     return journey_api.handle_scan_gmail(deps.journey, deps.profile, deps.llm, deps.scanner._gmail)
 
 
+@route("POST", "/api/journey/scan/calendar")
+def _journey_scan_calendar(deps, args, body, query):
+    return journey_api.handle_scan_calendar(deps.journey, deps.profile, deps.llm, deps.calendar_events)
+
+
 @route("POST", "/api/journey/import/gemini")
 def _journey_gemini(deps, args, body, query):
     return journey_api.handle_import_gemini(deps.journey, deps.profile, deps.llm, deps.state, body)

@@ -5,7 +5,7 @@
   // that reshapes the journey. Nothing here changes a track on its own:
   // suggestions and chat actions wait for Accept.
 
-  const SUGGESTION_SOURCES = {review: 'Review', mindtrail: 'Mind Trail', gmail: 'Gmail', gemini: 'Gemini', paste: 'Pasted chat'};
+  const SUGGESTION_SOURCES = {review: 'Review', mindtrail: 'Mind Trail', gmail: 'Gmail', calendar: 'Calendar', gemini: 'Gemini', paste: 'Pasted chat'};
   const SUGGESTION_KINDS = {add_done: 'Did', add_step: 'Next', mark_done: 'Finished'};
   let journeyChatLog = [];
 
@@ -144,6 +144,8 @@
       b => journeyScan(b, 'Read', '/api/journey/scan/mindtrail'));
     add('Gmail', 'Club, course, hackathon and research emails',
       b => journeyScan(b, 'Read', '/api/journey/scan/gmail'));
+    add('Google Calendar', 'Exams, deadlines and events in the next two months',
+      b => journeyScan(b, 'Read', '/api/journey/scan/calendar'));
     add('Gemini export', 'Takeout → My Activity → Gemini Apps', b => journeyPickGemini(b));
     add('Paste a chat', 'Any conversation you want counted', async b => {
       const text = await modal({title: 'Paste a chat', input: true, multiline: true,

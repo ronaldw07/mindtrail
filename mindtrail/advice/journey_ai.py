@@ -306,6 +306,8 @@ EVIDENCE_SYSTEM = (
 SOURCE_NAMES = {
     "mindtrail": "their Mind Trail practice log, job applications, interviews and chats",
     "gmail": "their recent email",
+    "calendar": ("their Google Calendar events for the next two months (these are upcoming, so "
+                 "propose steps placed in the term of the event date, never mark anything done)"),
     "gemini": "their questions to Google Gemini",
     "paste": "a chat they pasted in",
 }

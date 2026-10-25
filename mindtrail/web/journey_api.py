@@ -11,6 +11,7 @@ from dataclasses import asdict
 from datetime import date, timedelta
 
 from mindtrail.advice import journey_ai
+from mindtrail.integrations.calendar_events import CalendarEvents
 from mindtrail.integrations.gemini_takeout import parse_takeout
 from mindtrail.integrations.google_api import GoogleAuthError, GoogleFetchError
 from mindtrail.llm import LLMError
@@ -31,6 +32,7 @@ GMAIL_QUERY = ("-category:promotions -category:social (hackathon OR research OR 
                "internship OR interview OR offer OR program OR certificate)")
 GMAIL_LIMIT = 40
 GMAIL_DAYS = 120
+CALENDAR_DAYS = 60
 GEMINI_STATE_KEY = "journey_gemini_through"
 
 
@@ -419,6 +421,22 @@ def handle_scan_gmail(journey, profile, llm, gmail) -> dict:
         items = [f"{m.received_at[:10]}: email from {m.sender}: {m.subject} - {m.body[:300]}"
                  for m in messages]
         return _queue(journey, profile, llm, "gmail", items)
+    return _try(run)
+
+
+def handle_scan_calendar(journey, profile, llm, events: CalendarEvents, today: date | None = None) -> dict:
+    """Upcoming events become suggested steps; nothing is marked done."""
+    def run():
+        _settings(journey)
+        start = today or date.today()
+        try:
+            found = events.between(start, start + timedelta(days=CALENDAR_DAYS))
+        except GoogleAuthError as exc:
+            return {"error": f"Calendar isn't connected: {exc}"}
+        except GoogleFetchError as exc:
+            return {"error": f"couldn't reach Calendar: {exc}"}
+        items = [f"{e.date}: {e.title}" + (" (all day)" if e.all_day else "") for e in found]
+        return _queue(journey, profile, llm, "calendar", items)
     return _try(run)
 
 

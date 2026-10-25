@@ -23,6 +23,7 @@ from mindtrail.integrations.artwork import ArtworkClient
 from mindtrail.integrations.canvas import CanvasFeed
 from mindtrail.integrations.github import GitHubUpdates
 from mindtrail.integrations.weather import WeatherClient
+from mindtrail.integrations.calendar_events import CalendarEvents
 from mindtrail.integrations.gmail import GmailClient
 from mindtrail.integrations.google_calendar import GoogleCalendarClient
 from mindtrail.integrations.google_sheets import SheetsClient
@@ -161,6 +162,7 @@ class Deps:
         self.backups = BackupStore(db_path, self.state)
         self.journey = JourneyStore(db_path, self.state, self.roadmaps, self.roadmap_nodes)
         self.timelog = TimeLogStore(db_path)
+        self.calendar_events = CalendarEvents()
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)
         self.job_emails = self.email_log.for_application

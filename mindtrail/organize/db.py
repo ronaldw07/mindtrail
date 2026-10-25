@@ -311,7 +311,7 @@ CREATE TABLE IF NOT EXISTS journey_suggestions (
     detail     TEXT NOT NULL DEFAULT '',
     term       TEXT NOT NULL DEFAULT '',
     reason     TEXT NOT NULL DEFAULT '',
-    -- review | mindtrail | gmail | gemini | paste
+    -- review | mindtrail | gmail | calendar | gemini | paste
     source     TEXT NOT NULL,
     -- pending | accepted | dismissed
     status     TEXT NOT NULL DEFAULT 'pending',
