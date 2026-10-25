@@ -1,0 +1,820 @@
+{
+ "_note": "One shared corpus of stored research entries. Each followup should surface the entry it expects ahead of every other entry. 'tune' is for choosing retrieval strategies; 'heldout' is scored once at the end and never used to choose anything. Entries alternate between the two sets, so confusable neighbours land in both.",
+ "_written": "All 90 entries and questions were written before any retrieval change, and the baseline scored before tuning began.",
+ "corpus": [
+  {
+   "id": "c00",
+   "stored": "what is overfitting",
+   "summary": "Overfitting happens when a model memorizes noise in the training data, so training error keeps falling while error on unseen data rises. Signs are a growing gap between training and validation scores. More data, simpler models, and early stopping reduce it."
+  },
+  {
+   "id": "c01",
+   "stored": "what is regularization",
+   "summary": "Regularization adds a penalty on model complexity to the loss so weights stay small. L2 shrinks all weights smoothly, while L1 pushes some exactly to zero and so selects features. The penalty strength is a hyperparameter tuned on validation data."
+  },
+  {
+   "id": "c02",
+   "stored": "what is the bias variance tradeoff",
+   "summary": "Error splits into bias from overly simple assumptions and variance from sensitivity to the particular training sample. Flexible models have low bias but high variance. The best model balances the two, and more data mainly reduces variance."
+  },
+  {
+   "id": "c03",
+   "stored": "what is cross validation",
+   "summary": "Cross-validation estimates how a model generalizes by splitting data into k folds, training on k minus one and validating on the held-out fold, rotating through all folds and averaging. It uses scarce data efficiently and gives a spread, not one lucky number."
+  },
+  {
+   "id": "c04",
+   "stored": "what are precision and recall",
+   "summary": "Precision is the share of predicted positives that are truly positive; recall is the share of true positives that were found. Raising the decision threshold trades recall for precision. F1 is their harmonic mean and punishes imbalance between them."
+  },
+  {
+   "id": "c05",
+   "stored": "what is ROC AUC",
+   "summary": "The ROC curve plots true positive rate against false positive rate across every threshold, and AUC is the area under it. An AUC of 0.5 is random ranking and 1.0 is perfect. It measures ranking quality independent of any one threshold."
+  },
+  {
+   "id": "c06",
+   "stored": "what is stochastic gradient descent",
+   "summary": "Stochastic gradient descent updates parameters using the gradient from a small random batch rather than the full dataset. Updates are noisy but cheap, which scales to huge data, and the noise can help escape poor local minima. Learning rate decay stabilizes the end of training."
+  },
+  {
+   "id": "c07",
+   "stored": "what is the Adam optimizer",
+   "summary": "Adam keeps running averages of both the gradient and its square, and scales each parameter's step by them, giving per-parameter adaptive learning rates with momentum. It usually needs less tuning than plain SGD, though SGD can generalize slightly better on some vision tasks."
+  },
+  {
+   "id": "c08",
+   "stored": "what is batch normalization",
+   "summary": "Batch normalization normalizes each layer's inputs to zero mean and unit variance over the mini-batch, then applies a learned scale and shift. It stabilizes and speeds up training and allows higher learning rates. At inference it uses running statistics instead of batch ones."
+  },
+  {
+   "id": "c09",
+   "stored": "what is dropout",
+   "summary": "Dropout randomly zeroes a fraction of activations during training so units cannot rely on specific partners. It acts like averaging many thinned networks and reduces overfitting. At test time all units are used and outputs are scaled to compensate."
+  },
+  {
+   "id": "c10",
+   "stored": "what is gradient boosting",
+   "summary": "Gradient boosting builds trees sequentially, each one fitted to the residual errors of the ensemble so far, and adds it with a small learning rate. It often wins on tabular data. Libraries like XGBoost and LightGBM add regularization and fast histogram splits."
+  },
+  {
+   "id": "c11",
+   "stored": "what is a random forest",
+   "summary": "A random forest trains many decision trees on bootstrap samples, each split considering only a random subset of features, and averages their votes. Decorrelated trees cut variance without raising bias much. Out-of-bag samples give a free validation estimate."
+  },
+  {
+   "id": "c12",
+   "stored": "what is k-means clustering",
+   "summary": "K-means alternates between assigning each point to its nearest centroid and moving each centroid to the mean of its points until assignments stop changing. It needs k chosen in advance, assumes round similar-sized clusters, and depends on the initialization, so k-means++ is used."
+  },
+  {
+   "id": "c13",
+   "stored": "what is PCA",
+   "summary": "Principal component analysis finds orthogonal directions of maximum variance, via the eigenvectors of the covariance matrix or the SVD, and projects data onto the top few. It compresses features and removes correlation, but components can be hard to interpret."
+  },
+  {
+   "id": "c14",
+   "stored": "what is a confusion matrix",
+   "summary": "A confusion matrix tabulates predicted against actual classes, showing true positives, false positives, true negatives and false negatives. Accuracy, precision and recall all derive from it, and it reveals which classes get confused with which."
+  },
+  {
+   "id": "c15",
+   "stored": "what is a convolutional neural network",
+   "summary": "A CNN slides small learned filters across an image, sharing weights across positions, so it detects local patterns like edges and builds them into textures and objects through depth. Pooling adds some translation invariance and weight sharing keeps parameter counts low."
+  },
+  {
+   "id": "c16",
+   "stored": "what is a recurrent neural network",
+   "summary": "An RNN processes a sequence one step at a time, carrying a hidden state forward, so each output depends on everything before it. Plain RNNs suffer vanishing gradients on long sequences, which LSTMs and GRUs address with gates, but they cannot be parallelized across time."
+  },
+  {
+   "id": "c17",
+   "stored": "what is the attention mechanism",
+   "summary": "Attention lets each position compute a weighted sum over all positions, with weights from the similarity of a query to keys, applied to values. It captures long-range dependencies directly and the weights are interpretable. Cost grows quadratically with sequence length."
+  },
+  {
+   "id": "c18",
+   "stored": "what is positional encoding",
+   "summary": "Self-attention has no notion of order, so transformers add positional information to token embeddings. The original used fixed sinusoids; many models learn positions, or use rotary embeddings that rotate queries and keys by position so relative distance is captured."
+  },
+  {
+   "id": "c19",
+   "stored": "what is retrieval augmented generation",
+   "summary": "Retrieval augmented generation fetches relevant documents at query time and places them in the model's prompt so answers are grounded in current, private sources. It reduces hallucination without retraining, but quality depends on retrieval, chunking and how much context fits."
+  },
+  {
+   "id": "c20",
+   "stored": "what is fine tuning an LLM",
+   "summary": "Fine-tuning continues training a pretrained model on a smaller task-specific dataset to change its behavior or style. Parameter-efficient methods like LoRA train small low-rank adapters instead of all weights, cutting memory enormously. It teaches format and tone better than new facts."
+  },
+  {
+   "id": "c21",
+   "stored": "what are text embeddings",
+   "summary": "An embedding maps text to a dense vector so that texts with similar meaning land close together, measured by cosine similarity. They power semantic search and clustering. Models are trained contrastively, and quality varies by domain and by how long the input is."
+  },
+  {
+   "id": "c22",
+   "stored": "what is a vector database",
+   "summary": "A vector database stores embeddings and answers nearest-neighbor queries quickly, using approximate indexes such as HNSW graphs or IVF partitions that trade a little recall for large speedups. Many also support metadata filters alongside the similarity search."
+  },
+  {
+   "id": "c23",
+   "stored": "what is tokenization in language models",
+   "summary": "Tokenization splits text into subword units, commonly with byte-pair encoding, so rare words become several pieces and common ones stay whole. The vocabulary size sets embedding table size, and token counts, not words, determine cost and context limits."
+  },
+  {
+   "id": "c24",
+   "stored": "what is temperature in text generation",
+   "summary": "Temperature rescales the logits before sampling. Low values sharpen the distribution toward the most likely token and make output near deterministic, while high values flatten it and add variety and risk. Top-p sampling is a complementary way to trim the tail."
+  },
+  {
+   "id": "c25",
+   "stored": "what is prompt injection",
+   "summary": "Prompt injection is an attack where untrusted text, such as a web page or email the model reads, contains instructions that override the developer's. Mitigations include separating trusted and untrusted content, limiting tool permissions, and confirming risky actions with a human."
+  },
+  {
+   "id": "c26",
+   "stored": "what is RLHF",
+   "summary": "Reinforcement learning from human feedback first trains a reward model on human preference comparisons between outputs, then optimizes the language model against it with a policy gradient method, with a penalty keeping it near the original model. It aligns style and helpfulness."
+  },
+  {
+   "id": "c27",
+   "stored": "what is the difference between a process and a thread",
+   "summary": "A process has its own address space and resources, while threads inside a process share memory and file handles but have their own stacks and registers. Threads are cheaper to create and switch, but shared memory makes them prone to races, whereas processes are isolated."
+  },
+  {
+   "id": "c28",
+   "stored": "what is a mutex versus a semaphore",
+   "summary": "A mutex is a lock owned by one thread at a time, used for mutual exclusion around a critical section. A semaphore is a counter permitting up to n holders and can be signaled by a different thread, which suits resource pools and producer-consumer coordination."
+  },
+  {
+   "id": "c29",
+   "stored": "what is a deadlock",
+   "summary": "A deadlock occurs when threads each hold a resource and wait for another that is held in a circle, so none can proceed. It needs mutual exclusion, hold and wait, no preemption and circular wait; breaking any one, for example by ordering lock acquisition, prevents it."
+  },
+  {
+   "id": "c30",
+   "stored": "what is a race condition",
+   "summary": "A race condition is when correctness depends on the timing of concurrent operations, such as two threads incrementing a counter by read-modify-write and losing an update. Fixes include locks, atomic operations, and avoiding shared mutable state."
+  },
+  {
+   "id": "c31",
+   "stored": "what is virtual memory",
+   "summary": "Virtual memory gives each process its own address space that the OS and hardware map to physical frames through page tables, allowing isolation, memory larger than RAM via swapping, and sharing. A TLB caches translations to keep lookups fast."
+  },
+  {
+   "id": "c32",
+   "stored": "what is paging versus segmentation",
+   "summary": "Paging divides memory into fixed-size pages, avoiding external fragmentation at the cost of some internal waste. Segmentation uses variable-size logical units like code and stack, matching program structure but suffering external fragmentation. Modern systems mostly use paging."
+  },
+  {
+   "id": "c33",
+   "stored": "what is context switching",
+   "summary": "A context switch saves the registers and state of the running thread and loads another's, so the CPU can multiplex. It has direct cost and indirect cost, since caches and the TLB go cold. Too many switches waste throughput."
+  },
+  {
+   "id": "c34",
+   "stored": "how does CPU scheduling work",
+   "summary": "Schedulers choose which ready task runs next. First-come first-served is simple but suffers convoys, shortest-job-first minimizes average wait but needs predictions, round robin gives fairness with a time quantum, and multilevel feedback queues adapt priorities to behavior."
+  },
+  {
+   "id": "c35",
+   "stored": "what is a system call",
+   "summary": "A system call is the controlled entry from user mode into the kernel, for services like file I/O or process creation. The program triggers a trap instruction, the CPU switches to kernel mode and runs a handler, then returns the result, which costs more than a normal function call."
+  },
+  {
+   "id": "c36",
+   "stored": "what is the difference between a stack and a heap",
+   "summary": "The stack holds function call frames and locals, allocated and freed automatically in last-in first-out order and very fast. The heap holds dynamically allocated objects with lifetimes the program controls, which costs more and can fragment or leak if mismanaged."
+  },
+  {
+   "id": "c37",
+   "stored": "what is the difference between TCP and UDP",
+   "summary": "TCP provides reliable ordered delivery through handshakes, acknowledgements, retransmission and congestion control, at the price of latency. UDP just sends datagrams with no guarantees, which suits real-time video, games and DNS where late data is useless."
+  },
+  {
+   "id": "c38",
+   "stored": "how does DNS work",
+   "summary": "DNS translates names to IP addresses through a hierarchy: a resolver asks root servers, then the top-level domain servers, then the domain's authoritative server, caching each answer for its time-to-live. Records include A, AAAA, CNAME and MX."
+  },
+  {
+   "id": "c39",
+   "stored": "what is HTTPS and TLS",
+   "summary": "HTTPS is HTTP over TLS. During the handshake the server presents a certificate signed by a trusted authority, client and server agree on keys, and then traffic is encrypted and integrity checked, preventing eavesdropping and tampering."
+  },
+  {
+   "id": "c40",
+   "stored": "what is a CDN",
+   "summary": "A content delivery network caches static assets on edge servers near users, cutting latency and offloading the origin. Requests route to the nearest edge by DNS or anycast, and cache headers and purges control freshness."
+  },
+  {
+   "id": "c41",
+   "stored": "what is REST versus GraphQL",
+   "summary": "REST exposes resources at URLs with fixed responses, which caches well but can over-fetch or need several round trips. GraphQL has one endpoint where the client specifies exactly the fields it needs, reducing over-fetching but complicating caching and query cost control."
+  },
+  {
+   "id": "c42",
+   "stored": "what is JWT versus session authentication",
+   "summary": "Session auth stores state on the server and gives the client an opaque cookie, so it is easy to revoke. A JWT is a signed token carrying claims the server verifies without a lookup, which scales statelessly but is hard to revoke before expiry."
+  },
+  {
+   "id": "c43",
+   "stored": "what is CORS",
+   "summary": "Cross-origin resource sharing is the browser mechanism that blocks scripts from reading responses from another origin unless the server opts in with Access-Control-Allow-Origin headers. Non-simple requests trigger a preflight OPTIONS check first."
+  },
+  {
+   "id": "c44",
+   "stored": "what is load balancing",
+   "summary": "A load balancer spreads requests across servers to improve capacity and availability, using round robin, least connections or consistent hashing, and removes servers that fail health checks. Layer 4 balancers route on connections, layer 7 on HTTP content."
+  },
+  {
+   "id": "c45",
+   "stored": "what is a websocket",
+   "summary": "A WebSocket upgrades an HTTP connection into a persistent full-duplex channel, so the server can push messages without the client polling. It suits chat, live dashboards and games, though it complicates scaling and proxies compared with plain requests."
+  },
+  {
+   "id": "c46",
+   "stored": "what is rate limiting",
+   "summary": "Rate limiting caps how many requests a client may make in a period to protect services from abuse and overload. Common algorithms are fixed window, sliding window, token bucket allowing bursts, and leaky bucket smoothing output."
+  },
+  {
+   "id": "c47",
+   "stored": "what are ACID properties",
+   "summary": "ACID describes transaction guarantees: atomicity means all or nothing, consistency means constraints hold before and after, isolation means concurrent transactions do not see each other's partial work, and durability means committed data survives crashes."
+  },
+  {
+   "id": "c48",
+   "stored": "what is the CAP theorem",
+   "summary": "The CAP theorem says that during a network partition a distributed store must choose between consistency and availability. Systems like Spanner favor consistency, while Dynamo-style stores stay available and reconcile later with eventual consistency."
+  },
+  {
+   "id": "c49",
+   "stored": "what is a B-tree index",
+   "summary": "A B-tree keeps keys sorted in a shallow, wide tree whose nodes match disk pages, so lookups, range scans and ordered traversal take few reads. Inserts split nodes as they fill. It is the default index in most relational databases."
+  },
+  {
+   "id": "c50",
+   "stored": "what is a hash index",
+   "summary": "A hash index maps a key through a hash function to a bucket, giving average constant-time equality lookups. It cannot serve range queries or ordering, and it suffers if many keys collide or the table must be rebuilt as it grows."
+  },
+  {
+   "id": "c51",
+   "stored": "what are SQL join types",
+   "summary": "An inner join keeps rows matching on both sides, a left join keeps all left rows with nulls where the right has no match, right is the mirror, full outer keeps everything, and cross join produces every combination."
+  },
+  {
+   "id": "c52",
+   "stored": "what is database normalization",
+   "summary": "Normalization organizes tables to reduce redundancy and update anomalies: first normal form requires atomic values, second removes partial dependencies on a composite key, third removes transitive dependencies. Denormalizing deliberately can speed reads."
+  },
+  {
+   "id": "c53",
+   "stored": "what is a database transaction isolation level",
+   "summary": "Isolation levels trade safety for concurrency. Read committed prevents dirty reads, repeatable read also stabilizes rows you have read, and serializable behaves as if transactions ran one at a time. Weaker levels allow anomalies such as phantoms."
+  },
+  {
+   "id": "c54",
+   "stored": "what is an LSM tree",
+   "summary": "A log-structured merge tree buffers writes in memory, flushes them as sorted immutable files, and merges files in the background through compaction. It gives very high write throughput at the cost of read amplification, softened with bloom filters. RocksDB and Cassandra use it."
+  },
+  {
+   "id": "c55",
+   "stored": "what is a bloom filter",
+   "summary": "A bloom filter is a compact bit array with several hash functions that answers whether an item is possibly present or definitely absent. It never gives false negatives but can give false positives, and is used to skip pointless disk lookups."
+  },
+  {
+   "id": "c56",
+   "stored": "what is database sharding",
+   "summary": "Sharding splits a dataset across machines by a shard key, such as a hash of user id, to scale storage and throughput beyond one node. Costs include cross-shard queries, rebalancing when adding nodes, and hot shards from skewed keys."
+  },
+  {
+   "id": "c57",
+   "stored": "how does quicksort work",
+   "summary": "Quicksort picks a pivot, partitions the array into elements smaller and larger than it, and recurses on both sides. Average time is n log n, but a bad pivot on sorted input degrades to n squared, so random or median-of-three pivots are used. It sorts in place."
+  },
+  {
+   "id": "c58",
+   "stored": "how does merge sort work",
+   "summary": "Merge sort splits the array in halves, sorts each recursively, and merges the sorted halves. It is always n log n and stable, but needs extra linear memory for the merge. It is preferred for linked lists and external sorting."
+  },
+  {
+   "id": "c59",
+   "stored": "what is breadth first search",
+   "summary": "Breadth-first search explores a graph level by level using a queue, so the first time it reaches a node is along a shortest path in an unweighted graph. It takes time proportional to vertices plus edges and memory proportional to the frontier."
+  },
+  {
+   "id": "c60",
+   "stored": "what is depth first search",
+   "summary": "Depth-first search follows one path as far as possible before backtracking, using recursion or a stack. It is suited to detecting cycles, topological sorting, and finding connected components, and uses memory proportional to depth rather than width."
+  },
+  {
+   "id": "c61",
+   "stored": "what is Dijkstra's algorithm",
+   "summary": "Dijkstra's algorithm finds shortest paths from a source in a graph with non-negative weights by repeatedly settling the closest unsettled vertex from a priority queue and relaxing its edges. With a binary heap it runs in E log V."
+  },
+  {
+   "id": "c62",
+   "stored": "what is A star search",
+   "summary": "A star extends Dijkstra by ordering the frontier by path cost so far plus a heuristic estimate of remaining cost. If the heuristic never overestimates, the result is optimal, and a good heuristic expands far fewer nodes, which is why game pathfinding uses it."
+  },
+  {
+   "id": "c63",
+   "stored": "what is dynamic programming",
+   "summary": "Dynamic programming solves problems with overlapping subproblems and optimal substructure by solving each subproblem once and storing results, either top-down with memoization or bottom-up with a table. Knapsack, edit distance and longest common subsequence are classic examples."
+  },
+  {
+   "id": "c64",
+   "stored": "what is big O notation",
+   "summary": "Big O describes how running time or memory grows with input size, ignoring constants and lower-order terms, as an upper bound. Common classes are constant, logarithmic, linear, n log n, quadratic and exponential, and it compares algorithms at scale, not for small inputs."
+  },
+  {
+   "id": "c65",
+   "stored": "how do hash tables handle collisions",
+   "summary": "When two keys hash to the same slot, chaining stores a list per bucket, while open addressing probes for another free slot by linear, quadratic or double hashing. Resizing when the load factor grows keeps lookups near constant time."
+  },
+  {
+   "id": "c66",
+   "stored": "what is a heap data structure",
+   "summary": "A binary heap is a complete tree stored in an array where each parent is no larger than its children in a min-heap, giving constant-time access to the minimum and logarithmic insert and delete. It powers priority queues and heapsort."
+  },
+  {
+   "id": "c67",
+   "stored": "what is a trie",
+   "summary": "A trie stores strings in a tree keyed one character per edge, so shared prefixes share nodes. Lookup and insert take time proportional to string length, and it supports prefix queries naturally, powering autocomplete, at the cost of memory."
+  },
+  {
+   "id": "c68",
+   "stored": "what is union find",
+   "summary": "Union-find tracks a partition of elements into disjoint sets, supporting find of a set's representative and union of two sets. With path compression and union by rank both operations are nearly constant, and it is used in Kruskal's minimum spanning tree."
+  },
+  {
+   "id": "c69",
+   "stored": "what is a topological sort",
+   "summary": "A topological sort orders the vertices of a directed acyclic graph so every edge points forward, computed by DFS finishing times or Kahn's algorithm removing zero in-degree nodes. A cycle makes it impossible. It schedules tasks with dependencies."
+  },
+  {
+   "id": "c70",
+   "stored": "what is binary search",
+   "summary": "Binary search finds a target in a sorted array by repeatedly halving the search range, comparing with the middle element, in logarithmic time. The same idea applies to searching an answer space, and off-by-one errors in the bounds are the usual bug."
+  },
+  {
+   "id": "c71",
+   "stored": "what is the Python GIL",
+   "summary": "The global interpreter lock lets only one thread execute Python bytecode at a time in CPython, so CPU-bound threads do not run in parallel, though I/O-bound threads still help. Multiprocessing or native extensions that release the lock work around it."
+  },
+  {
+   "id": "c72",
+   "stored": "what is asyncio in Python",
+   "summary": "Asyncio runs many coroutines on one thread with an event loop, switching at await points while waiting on I/O. It handles thousands of concurrent connections cheaply, but a blocking call inside a coroutine stalls the whole loop."
+  },
+  {
+   "id": "c73",
+   "stored": "what are Python generators",
+   "summary": "A generator function uses yield to produce values lazily, pausing and resuming its state between calls, so it can stream huge or infinite sequences in constant memory. Generator expressions give the same laziness in a compact form."
+  },
+  {
+   "id": "c74",
+   "stored": "what are Python decorators",
+   "summary": "A decorator is a callable that takes a function and returns a replacement, applied with the at-sign syntax, to add behavior like logging, caching or auth checks. functools.wraps preserves the wrapped function's name and docstring."
+  },
+  {
+   "id": "c75",
+   "stored": "what is a closure",
+   "summary": "A closure is a function that remembers variables from the scope where it was defined even after that scope has returned. It underlies callbacks, decorators and partial application, and capturing a loop variable by reference is a common surprise."
+  },
+  {
+   "id": "c76",
+   "stored": "what is garbage collection",
+   "summary": "Garbage collection automatically reclaims memory no longer reachable. Reference counting frees objects the moment their count hits zero but cannot free cycles, while tracing collectors mark reachable objects and sweep the rest, sometimes by generation to favor short-lived ones."
+  },
+  {
+   "id": "c77",
+   "stored": "what is the difference between a compiled and interpreted language",
+   "summary": "A compiled language is translated ahead of time to machine code, giving speed and early error detection, while an interpreter executes source or bytecode directly, trading speed for flexibility. Many languages blur this with bytecode virtual machines and just-in-time compilers."
+  },
+  {
+   "id": "c78",
+   "stored": "what is a pointer versus a reference in C++",
+   "summary": "A pointer holds an address, can be null and can be reassigned, and needs explicit dereferencing. A reference is an alias bound once at initialization, cannot be null or reseated, and behaves like the object itself, which makes interfaces safer."
+  },
+  {
+   "id": "c79",
+   "stored": "what are smart pointers in C++",
+   "summary": "Smart pointers manage heap lifetime through RAII. unique_ptr has sole ownership and is move-only, shared_ptr reference-counts shared ownership, and weak_ptr observes without owning to break cycles. They replace manual new and delete."
+  },
+  {
+   "id": "c80",
+   "stored": "what is the difference between std::vector and a Python list",
+   "summary": "A C++ vector stores elements of one type contiguously, so access is cache friendly and fast, and growth doubles capacity with amortized constant push_back. A Python list holds references to objects of any type, adding indirection and overhead."
+  },
+  {
+   "id": "c81",
+   "stored": "what is Docker versus a virtual machine",
+   "summary": "A virtual machine emulates hardware and runs a full guest operating system, which is heavy but strongly isolated. A container shares the host kernel and isolates processes with namespaces and cgroups, so it starts in moments and uses far less memory."
+  },
+  {
+   "id": "c82",
+   "stored": "what is Kubernetes",
+   "summary": "Kubernetes schedules containers onto a cluster of machines, grouped into pods. You declare desired state in manifests and controllers reconcile reality to it, restarting failed pods, rolling out updates, scaling replicas and routing traffic through services."
+  },
+  {
+   "id": "c83",
+   "stored": "what is continuous integration",
+   "summary": "Continuous integration merges changes to a shared branch frequently and automatically builds and runs tests on each push, catching breakage within minutes. Continuous delivery extends it to automated, repeatable releases, with fast and reliable tests as the key."
+  },
+  {
+   "id": "c84",
+   "stored": "what is git rebase versus merge",
+   "summary": "Merge joins two histories with a merge commit, preserving what actually happened. Rebase replays your commits on top of another branch for a linear history, but rewrites commit ids, so it should not be done on commits others have pulled."
+  },
+  {
+   "id": "c85",
+   "stored": "what is a unit test versus an integration test",
+   "summary": "A unit test checks one small piece in isolation, usually with dependencies faked, so it is fast and pinpoints failures. An integration test exercises several components together, such as the code and a real database, catching wiring bugs but running slower."
+  },
+  {
+   "id": "c86",
+   "stored": "what is dependency injection",
+   "summary": "Dependency injection passes an object's collaborators in from outside rather than constructing them inside, so implementations can be swapped. It makes code easier to test with fakes and decouples modules, without requiring a framework."
+  },
+  {
+   "id": "c87",
+   "stored": "what are microservices versus a monolith",
+   "summary": "A monolith deploys as one unit, which is simple to develop, test and debug. Microservices split capabilities into independently deployable services with their own data, enabling team autonomy and separate scaling but adding network failures, versioning and operational complexity."
+  },
+  {
+   "id": "c88",
+   "stored": "what is idempotency",
+   "summary": "An operation is idempotent if repeating it has the same effect as doing it once. PUT and DELETE should be, and clients can then safely retry after timeouts. Payment APIs use idempotency keys so a retried charge is not applied twice."
+  },
+  {
+   "id": "c89",
+   "stored": "what is observability",
+   "summary": "Observability is the ability to understand a system's internal state from its outputs, built from logs, metrics and distributed traces. Traces follow one request across services, so you can find where latency or errors arise, not just that they exist."
+  }
+ ],
+ "tune": [
+  {
+   "followup": "my model aces the training set but flops on new data, what is going wrong",
+   "expects": "c00"
+  },
+  {
+   "followup": "why does making a model more flexible stop helping at some point",
+   "expects": "c02"
+  },
+  {
+   "followup": "when would I care more about catching every case than about false alarms",
+   "expects": "c04"
+  },
+  {
+   "followup": "why do we train on random mini-batches instead of all the data at once",
+   "expects": "c06"
+  },
+  {
+   "followup": "why do deep networks train faster when I normalize activations between layers",
+   "expects": "c08"
+  },
+  {
+   "followup": "why do XGBoost style models dominate spreadsheets of features",
+   "expects": "c10"
+  },
+  {
+   "followup": "how do I group unlabeled points when I already know how many groups I want",
+   "expects": "c12"
+  },
+  {
+   "followup": "how can I see exactly which classes my classifier mixes up",
+   "expects": "c14"
+  },
+  {
+   "followup": "which kind of network keeps a hidden state while reading tokens in order",
+   "expects": "c16"
+  },
+  {
+   "followup": "how does a transformer know the order of words if attention ignores it",
+   "expects": "c18"
+  },
+  {
+   "followup": "when is it better to adapt the weights than to just prompt the model",
+   "expects": "c20"
+  },
+  {
+   "followup": "where do I store millions of embeddings and search them fast",
+   "expects": "c22"
+  },
+  {
+   "followup": "which setting makes a language model's answers more random or more repeatable",
+   "expects": "c24"
+  },
+  {
+   "followup": "how are models taught to prefer answers that people rank higher",
+   "expects": "c26"
+  },
+  {
+   "followup": "when would I want a counter that lets several threads in rather than just one",
+   "expects": "c28"
+  },
+  {
+   "followup": "why does my counter come out wrong when two threads update it at once",
+   "expects": "c30"
+  },
+  {
+   "followup": "which memory scheme uses equal sized blocks and avoids leftover gaps between them",
+   "expects": "c32"
+  },
+  {
+   "followup": "how does the OS decide who gets the processor and for how long",
+   "expects": "c34"
+  },
+  {
+   "followup": "where do local variables live versus memory I allocate manually",
+   "expects": "c36"
+  },
+  {
+   "followup": "what happens between typing a domain name and getting an address",
+   "expects": "c38"
+  },
+  {
+   "followup": "how do websites serve images quickly to users all around the world",
+   "expects": "c40"
+  },
+  {
+   "followup": "should I keep login state on the server or in a signed token",
+   "expects": "c42"
+  },
+  {
+   "followup": "how do I spread traffic over several servers and skip the dead ones",
+   "expects": "c44"
+  },
+  {
+   "followup": "how do I stop one user from hammering my API",
+   "expects": "c46"
+  },
+  {
+   "followup": "when the network splits can a distributed database stay both correct and responsive",
+   "expects": "c48"
+  },
+  {
+   "followup": "when is an index only good for exact matches and not for ranges",
+   "expects": "c50"
+  },
+  {
+   "followup": "how do I avoid storing the same fact in many places in a schema",
+   "expects": "c52"
+  },
+  {
+   "followup": "which storage design makes heavy writes cheap by batching them into sorted files",
+   "expects": "c54"
+  },
+  {
+   "followup": "how do I split one giant table across many servers",
+   "expects": "c56"
+  },
+  {
+   "followup": "which stable sort guarantees n log n at the cost of extra memory",
+   "expects": "c58"
+  },
+  {
+   "followup": "which traversal goes deep first and is used for topological sorting",
+   "expects": "c60"
+  },
+  {
+   "followup": "how do game characters find routes faster by guessing the remaining distance",
+   "expects": "c62"
+  },
+  {
+   "followup": "how do I describe how an algorithm slows down as the input grows",
+   "expects": "c64"
+  },
+  {
+   "followup": "which structure gives me the smallest item quickly for a priority queue",
+   "expects": "c66"
+  },
+  {
+   "followup": "how do I quickly check whether two nodes are already connected as I add edges",
+   "expects": "c68"
+  },
+  {
+   "followup": "how can I look up a value in a sorted list without scanning it all",
+   "expects": "c70"
+  },
+  {
+   "followup": "how can one python thread juggle thousands of network requests",
+   "expects": "c72"
+  },
+  {
+   "followup": "how do I wrap a function with extra behavior using the at sign",
+   "expects": "c74"
+  },
+  {
+   "followup": "how does a runtime free memory that my program no longer uses",
+   "expects": "c76"
+  },
+  {
+   "followup": "which C++ feature must be initialized and can never be null",
+   "expects": "c78"
+  },
+  {
+   "followup": "why is a contiguous typed array faster than a list of references to objects",
+   "expects": "c80"
+  },
+  {
+   "followup": "what tool keeps my containers running across a cluster and restarts the ones that die",
+   "expects": "c82"
+  },
+  {
+   "followup": "how can I put my commits on top of main for a straight line history",
+   "expects": "c84"
+  },
+  {
+   "followup": "how do I make a class testable by handing it its dependencies",
+   "expects": "c86"
+  },
+  {
+   "followup": "how can an API safely handle a retried request without charging twice",
+   "expects": "c88"
+  }
+ ],
+ "heldout": [
+  {
+   "followup": "how can I make weights shrink or drop to zero by changing the loss",
+   "expects": "c01"
+  },
+  {
+   "followup": "how do I get a trustworthy score when I only have a small dataset",
+   "expects": "c03"
+  },
+  {
+   "followup": "how do I compare classifiers without picking a cutoff first",
+   "expects": "c05"
+  },
+  {
+   "followup": "which optimizer adapts the step size for every weight separately",
+   "expects": "c07"
+  },
+  {
+   "followup": "what trick randomly switches off neurons while training",
+   "expects": "c09"
+  },
+  {
+   "followup": "how does averaging lots of de-correlated trees reduce variance",
+   "expects": "c11"
+  },
+  {
+   "followup": "how do I shrink hundreds of correlated features down to a few directions",
+   "expects": "c13"
+  },
+  {
+   "followup": "why are filters that slide over an image good for vision",
+   "expects": "c15"
+  },
+  {
+   "followup": "how does a model decide which earlier words to focus on for each word",
+   "expects": "c17"
+  },
+  {
+   "followup": "how can a chatbot answer from my own documents without retraining it",
+   "expects": "c19"
+  },
+  {
+   "followup": "how do computers compare sentences by meaning instead of exact words",
+   "expects": "c21"
+  },
+  {
+   "followup": "why do models count tokens instead of words and how are words split",
+   "expects": "c23"
+  },
+  {
+   "followup": "how can a web page trick an AI agent into ignoring its instructions",
+   "expects": "c25"
+  },
+  {
+   "followup": "which gets its own memory space, and which one shares it with siblings",
+   "expects": "c27"
+  },
+  {
+   "followup": "two threads are stuck forever each waiting on the other's lock, how do I avoid this",
+   "expects": "c29"
+  },
+  {
+   "followup": "how can a program use more memory than the machine physically has",
+   "expects": "c31"
+  },
+  {
+   "followup": "what does the cpu do when it moves from running one task to another",
+   "expects": "c33"
+  },
+  {
+   "followup": "how does a user program ask the kernel to read a file",
+   "expects": "c35"
+  },
+  {
+   "followup": "why do video calls and games avoid the protocol that guarantees delivery",
+   "expects": "c37"
+  },
+  {
+   "followup": "how does the browser know a site is really who it claims to be and encrypt the traffic",
+   "expects": "c39"
+  },
+  {
+   "followup": "which API style lets the client choose exactly which fields come back",
+   "expects": "c41"
+  },
+  {
+   "followup": "why does my browser block my frontend from calling an API on another domain",
+   "expects": "c43"
+  },
+  {
+   "followup": "how can a server push updates to the browser the moment they happen",
+   "expects": "c45"
+  },
+  {
+   "followup": "what guarantees make a bank transfer either fully happen or not at all",
+   "expects": "c47"
+  },
+  {
+   "followup": "which index structure supports range queries and sorted order on disk",
+   "expects": "c49"
+  },
+  {
+   "followup": "how do I keep every row from one table even when the other has no match",
+   "expects": "c51"
+  },
+  {
+   "followup": "which setting stops one transaction from seeing another's uncommitted changes",
+   "expects": "c53"
+  },
+  {
+   "followup": "how can I cheaply check that something is definitely not in a huge set",
+   "expects": "c55"
+  },
+  {
+   "followup": "which sort chooses a pivot and has a worst case on already sorted input",
+   "expects": "c57"
+  },
+  {
+   "followup": "how do I find the fewest hops between two nodes in an unweighted graph",
+   "expects": "c59"
+  },
+  {
+   "followup": "how do I get cheapest routes over weighted edges that are never negative",
+   "expects": "c61"
+  },
+  {
+   "followup": "how do I stop recomputing the same subproblems in a recursive solution",
+   "expects": "c63"
+  },
+  {
+   "followup": "what happens when two keys land in the same bucket of a dictionary",
+   "expects": "c65"
+  },
+  {
+   "followup": "how do I implement autocomplete that finds all words with a given start",
+   "expects": "c67"
+  },
+  {
+   "followup": "how do I order build steps so every dependency comes first",
+   "expects": "c69"
+  },
+  {
+   "followup": "why do python threads not speed up number crunching",
+   "expects": "c71"
+  },
+  {
+   "followup": "how do I iterate a huge file or sequence without loading it all in memory",
+   "expects": "c73"
+  },
+  {
+   "followup": "how can an inner function keep using its parent's variables after it returns",
+   "expects": "c75"
+  },
+  {
+   "followup": "why is C++ usually faster than python at running the same logic",
+   "expects": "c77"
+  },
+  {
+   "followup": "how do I avoid manual delete and memory leaks in modern C++",
+   "expects": "c79"
+  },
+  {
+   "followup": "why do containers start faster and use less memory than full virtual machines",
+   "expects": "c81"
+  },
+  {
+   "followup": "how do teams automatically run the test suite on every push",
+   "expects": "c83"
+  },
+  {
+   "followup": "what is the difference between testing one function and testing parts working together",
+   "expects": "c85"
+  },
+  {
+   "followup": "when is it worth splitting an app into many small services",
+   "expects": "c87"
+  },
+  {
+   "followup": "how do I find which service made a slow request slow",
+   "expects": "c89"
+  }
+ ]
+}
