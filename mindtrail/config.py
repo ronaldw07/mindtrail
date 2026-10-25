@@ -43,3 +43,7 @@ SEARCH_RESULTS_PER_QUERY = 6
 # this stays inside the free tier's per-minute token budget.
 PAGES_FETCHED_PER_QUERY = 4
 RELATED_MEMORIES_TO_INJECT = 3
+# Recall related notes with query expansion and a model re-rank (two extra
+# model calls, run while the web search is already under way). Off with
+# MINDTRAIL_DEEP_RECALL=0. See README's "Retrieval recall" section.
+DEEP_RECALL = os.getenv("MINDTRAIL_DEEP_RECALL", "1") != "0"

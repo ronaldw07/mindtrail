@@ -1,0 +1,522 @@
+{
+  "split": "tune",
+  "commit": "b0ade91",
+  "corpus_size": 90,
+  "strategies": {
+    "hybrid": {
+      "questions": 45,
+      "recall@1": 0.689,
+      "recall@1_ci95": [
+        0.543,
+        0.805
+      ],
+      "recall@3": 0.778,
+      "recall@5": 0.8,
+      "mrr": 0.744,
+      "latency_p50_ms": 46.9,
+      "latency_p95_ms": 48.3,
+      "misses": [
+        {
+          "followup": "when would I care more about catching every case than about false alarms",
+          "expected": "c04",
+          "rank": 0,
+          "top": [
+            "c14",
+            "c55",
+            "c05"
+          ]
+        },
+        {
+          "followup": "why do deep networks train faster when I normalize activations between layers",
+          "expected": "c08",
+          "rank": 7,
+          "top": [
+            "c09",
+            "c20",
+            "c00"
+          ]
+        },
+        {
+          "followup": "which setting makes a language model's answers more random or more repeatable",
+          "expected": "c24",
+          "rank": 0,
+          "top": [
+            "c19",
+            "c23",
+            "c26"
+          ]
+        },
+        {
+          "followup": "how are models taught to prefer answers that people rank higher",
+          "expected": "c26",
+          "rank": 10,
+          "top": [
+            "c19",
+            "c20",
+            "c21"
+          ]
+        },
+        {
+          "followup": "when would I want a counter that lets several threads in rather than just one",
+          "expected": "c28",
+          "rank": 3,
+          "top": [
+            "c30",
+            "c71",
+            "c28"
+          ]
+        },
+        {
+          "followup": "how does the OS decide who gets the processor and for how long",
+          "expected": "c34",
+          "rank": 3,
+          "top": [
+            "c31",
+            "c17",
+            "c34"
+          ]
+        },
+        {
+          "followup": "where do local variables live versus memory I allocate manually",
+          "expected": "c36",
+          "rank": 0,
+          "top": [
+            "c32",
+            "c75",
+            "c31"
+          ]
+        },
+        {
+          "followup": "how do I stop one user from hammering my API",
+          "expected": "c46",
+          "rank": 0,
+          "top": [
+            "c35",
+            "c72",
+            "c56"
+          ]
+        },
+        {
+          "followup": "how do I avoid storing the same fact in many places in a schema",
+          "expected": "c52",
+          "rank": 0,
+          "top": [
+            "c65",
+            "c22",
+            "c19"
+          ]
+        },
+        {
+          "followup": "how do I split one giant table across many servers",
+          "expected": "c56",
+          "rank": 2,
+          "top": [
+            "c44",
+            "c56",
+            "c87"
+          ]
+        },
+        {
+          "followup": "how do I quickly check whether two nodes are already connected as I add edges",
+          "expected": "c68",
+          "rank": 7,
+          "top": [
+            "c60",
+            "c59",
+            "c61"
+          ]
+        },
+        {
+          "followup": "how can I look up a value in a sorted list without scanning it all",
+          "expected": "c70",
+          "rank": 6,
+          "top": [
+            "c58",
+            "c65",
+            "c49"
+          ]
+        },
+        {
+          "followup": "how can one python thread juggle thousands of network requests",
+          "expected": "c72",
+          "rank": 2,
+          "top": [
+            "c71",
+            "c72",
+            "c46"
+          ]
+        },
+        {
+          "followup": "how do I make a class testable by handing it its dependencies",
+          "expected": "c86",
+          "rank": 4,
+          "top": [
+            "c85",
+            "c17",
+            "c69"
+          ]
+        }
+      ]
+    },
+    "vector": {
+      "questions": 45,
+      "recall@1": 0.711,
+      "recall@1_ci95": [
+        0.566,
+        0.823
+      ],
+      "recall@3": 0.911,
+      "recall@5": 0.933,
+      "mrr": 0.823,
+      "latency_p50_ms": 51.9,
+      "latency_p95_ms": 56.7,
+      "misses": [
+        {
+          "followup": "when would I care more about catching every case than about false alarms",
+          "expected": "c04",
+          "rank": 8,
+          "top": [
+            "c88",
+            "c53",
+            "c25"
+          ]
+        },
+        {
+          "followup": "why do we train on random mini-batches instead of all the data at once",
+          "expected": "c06",
+          "rank": 2,
+          "top": [
+            "c08",
+            "c06",
+            "c09"
+          ]
+        },
+        {
+          "followup": "which kind of network keeps a hidden state while reading tokens in order",
+          "expected": "c16",
+          "rank": 3,
+          "top": [
+            "c23",
+            "c60",
+            "c16"
+          ]
+        },
+        {
+          "followup": "which setting makes a language model's answers more random or more repeatable",
+          "expected": "c24",
+          "rank": 4,
+          "top": [
+            "c19",
+            "c23",
+            "c26"
+          ]
+        },
+        {
+          "followup": "how are models taught to prefer answers that people rank higher",
+          "expected": "c26",
+          "rank": 2,
+          "top": [
+            "c19",
+            "c26",
+            "c24"
+          ]
+        },
+        {
+          "followup": "when would I want a counter that lets several threads in rather than just one",
+          "expected": "c28",
+          "rank": 2,
+          "top": [
+            "c30",
+            "c28",
+            "c27"
+          ]
+        },
+        {
+          "followup": "which memory scheme uses equal sized blocks and avoids leftover gaps between them",
+          "expected": "c32",
+          "rank": 2,
+          "top": [
+            "c31",
+            "c32",
+            "c54"
+          ]
+        },
+        {
+          "followup": "how do I avoid storing the same fact in many places in a schema",
+          "expected": "c52",
+          "rank": 6,
+          "top": [
+            "c22",
+            "c65",
+            "c04"
+          ]
+        },
+        {
+          "followup": "how do I split one giant table across many servers",
+          "expected": "c56",
+          "rank": 2,
+          "top": [
+            "c65",
+            "c56",
+            "c48"
+          ]
+        },
+        {
+          "followup": "which structure gives me the smallest item quickly for a priority queue",
+          "expected": "c66",
+          "rank": 2,
+          "top": [
+            "c34",
+            "c66",
+            "c59"
+          ]
+        },
+        {
+          "followup": "how do I quickly check whether two nodes are already connected as I add edges",
+          "expected": "c68",
+          "rank": 2,
+          "top": [
+            "c59",
+            "c68",
+            "c67"
+          ]
+        },
+        {
+          "followup": "how can I look up a value in a sorted list without scanning it all",
+          "expected": "c70",
+          "rank": 7,
+          "top": [
+            "c50",
+            "c57",
+            "c58"
+          ]
+        },
+        {
+          "followup": "how can one python thread juggle thousands of network requests",
+          "expected": "c72",
+          "rank": 2,
+          "top": [
+            "c71",
+            "c72",
+            "c44"
+          ]
+        }
+      ]
+    },
+    "keyword": {
+      "questions": 45,
+      "recall@1": 0.556,
+      "recall@1_ci95": [
+        0.412,
+        0.691
+      ],
+      "recall@3": 0.667,
+      "recall@5": 0.689,
+      "mrr": 0.617,
+      "latency_p50_ms": 3.5,
+      "latency_p95_ms": 5.5,
+      "misses": [
+        {
+          "followup": "when would I care more about catching every case than about false alarms",
+          "expected": "c04",
+          "rank": 0,
+          "top": [
+            "c05",
+            "c14",
+            "c55"
+          ]
+        },
+        {
+          "followup": "why do we train on random mini-batches instead of all the data at once",
+          "expected": "c06",
+          "rank": 3,
+          "top": [
+            "c20",
+            "c03",
+            "c06"
+          ]
+        },
+        {
+          "followup": "why do deep networks train faster when I normalize activations between layers",
+          "expected": "c08",
+          "rank": 0,
+          "top": [
+            "c09",
+            "c20",
+            "c48"
+          ]
+        },
+        {
+          "followup": "how do I group unlabeled points when I already know how many groups I want",
+          "expected": "c12",
+          "rank": 3,
+          "top": [
+            "c72",
+            "c69",
+            "c12"
+          ]
+        },
+        {
+          "followup": "which setting makes a language model's answers more random or more repeatable",
+          "expected": "c24",
+          "rank": 0,
+          "top": [
+            "c19",
+            "c02",
+            "c00"
+          ]
+        },
+        {
+          "followup": "how are models taught to prefer answers that people rank higher",
+          "expected": "c26",
+          "rank": 0,
+          "top": [
+            "c08",
+            "c68",
+            "c20"
+          ]
+        },
+        {
+          "followup": "when would I want a counter that lets several threads in rather than just one",
+          "expected": "c28",
+          "rank": 5,
+          "top": [
+            "c71",
+            "c30",
+            "c60"
+          ]
+        },
+        {
+          "followup": "which memory scheme uses equal sized blocks and avoids leftover gaps between them",
+          "expected": "c32",
+          "rank": 7,
+          "top": [
+            "c73",
+            "c27",
+            "c12"
+          ]
+        },
+        {
+          "followup": "how does the OS decide who gets the processor and for how long",
+          "expected": "c34",
+          "rank": 0,
+          "top": [
+            "c31",
+            "c17",
+            "c21"
+          ]
+        },
+        {
+          "followup": "where do local variables live versus memory I allocate manually",
+          "expected": "c36",
+          "rank": 0,
+          "top": [
+            "c75",
+            "c32",
+            "c81"
+          ]
+        },
+        {
+          "followup": "what happens between typing a domain name and getting an address",
+          "expected": "c38",
+          "rank": 2,
+          "top": [
+            "c00",
+            "c38",
+            "c27"
+          ]
+        },
+        {
+          "followup": "how do I spread traffic over several servers and skip the dead ones",
+          "expected": "c44",
+          "rank": 6,
+          "top": [
+            "c55",
+            "c41",
+            "c39"
+          ]
+        },
+        {
+          "followup": "how do I stop one user from hammering my API",
+          "expected": "c46",
+          "rank": 0,
+          "top": [
+            "c56",
+            "c12",
+            "c35"
+          ]
+        },
+        {
+          "followup": "when is an index only good for exact matches and not for ranges",
+          "expected": "c50",
+          "rank": 3,
+          "top": [
+            "c71",
+            "c49",
+            "c50"
+          ]
+        },
+        {
+          "followup": "how do I avoid storing the same fact in many places in a schema",
+          "expected": "c52",
+          "rank": 0,
+          "top": [
+            "c63",
+            "c19",
+            "c73"
+          ]
+        },
+        {
+          "followup": "how do I split one giant table across many servers",
+          "expected": "c56",
+          "rank": 6,
+          "top": [
+            "c44",
+            "c11",
+            "c50"
+          ]
+        },
+        {
+          "followup": "which structure gives me the smallest item quickly for a priority queue",
+          "expected": "c66",
+          "rank": 2,
+          "top": [
+            "c61",
+            "c66",
+            "c55"
+          ]
+        },
+        {
+          "followup": "how do I quickly check whether two nodes are already connected as I add edges",
+          "expected": "c68",
+          "rank": 0,
+          "top": [
+            "c43",
+            "c22",
+            "c60"
+          ]
+        },
+        {
+          "followup": "how can I look up a value in a sorted list without scanning it all",
+          "expected": "c70",
+          "rank": 9,
+          "top": [
+            "c80",
+            "c65",
+            "c63"
+          ]
+        },
+        {
+          "followup": "how do I make a class testable by handing it its dependencies",
+          "expected": "c86",
+          "rank": 0,
+          "top": [
+            "c52",
+            "c46",
+            "c24"
+          ]
+        }
+      ]
+    }
+  }
+}

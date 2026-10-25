@@ -1,6 +1,6 @@
 """Repeating to-dos: parsing "every mon" and friends, and the next date."""
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -97,13 +97,17 @@ def tasks(tmp_path):
 
 
 def test_checking_off_a_repeating_task_creates_the_next_one(tasks):
-    t = tasks.add("Water plants", due_date="2026-10-05", repeat="week:1:0")
+    # A future Monday, so "the next occurrence after today" is a week later
+    # whenever the test runs (a past due date skips the missed ones).
+    today = date.today()
+    monday = today + timedelta(days=(7 - today.weekday()) % 7 or 7)
+    t = tasks.add("Water plants", due_date=monday.isoformat(), repeat="week:1:0")
 
     tasks.update(t.id, {"done": True})
 
     open_tasks = tasks.open()
     assert [(x.title, x.due_date, x.repeat) for x in open_tasks] == [
-        ("Water plants", "2026-10-12", "week:1:0")]
+        ("Water plants", (monday + timedelta(days=7)).isoformat(), "week:1:0")]
 
 
 def test_unchecking_removes_the_task_it_created(tasks):

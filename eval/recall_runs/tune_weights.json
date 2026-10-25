@@ -1,0 +1,98 @@
+{
+  "split": "tune",
+  "commit": "b0ade91",
+  "corpus_size": 90,
+  "strategies": {
+    "hybrid": {
+      "questions": 45,
+      "recall@1": 0.689,
+      "recall@1_ci95": [
+        0.543,
+        0.805
+      ],
+      "recall@3": 0.778,
+      "recall@5": 0.8,
+      "mrr": 0.744,
+      "latency_p50_ms": 76.9,
+      "latency_p95_ms": 228.7
+    },
+    "vector": {
+      "questions": 45,
+      "recall@1": 0.711,
+      "recall@1_ci95": [
+        0.566,
+        0.823
+      ],
+      "recall@3": 0.911,
+      "recall@5": 0.933,
+      "mrr": 0.823,
+      "latency_p50_ms": 53.1,
+      "latency_p95_ms": 56.3
+    },
+    "keyword": {
+      "questions": 45,
+      "recall@1": 0.556,
+      "recall@1_ci95": [
+        0.412,
+        0.691
+      ],
+      "recall@3": 0.667,
+      "recall@5": 0.689,
+      "mrr": 0.617,
+      "latency_p50_ms": 2.9,
+      "latency_p95_ms": 4.9
+    },
+    "hybrid_kw0.5": {
+      "questions": 45,
+      "recall@1": 0.689,
+      "recall@1_ci95": [
+        0.543,
+        0.805
+      ],
+      "recall@3": 0.778,
+      "recall@5": 0.844,
+      "mrr": 0.75,
+      "latency_p50_ms": 63.5,
+      "latency_p95_ms": 755.3
+    },
+    "hybrid_kw0.3": {
+      "questions": 45,
+      "recall@1": 0.689,
+      "recall@1_ci95": [
+        0.543,
+        0.805
+      ],
+      "recall@3": 0.822,
+      "recall@5": 0.867,
+      "mrr": 0.77,
+      "latency_p50_ms": 69.8,
+      "latency_p95_ms": 263.3
+    },
+    "hybrid_kw0.2": {
+      "questions": 45,
+      "recall@1": 0.667,
+      "recall@1_ci95": [
+        0.521,
+        0.786
+      ],
+      "recall@3": 0.844,
+      "recall@5": 0.867,
+      "mrr": 0.77,
+      "latency_p50_ms": 48.0,
+      "latency_p95_ms": 50.2
+    },
+    "hybrid_kw0.1": {
+      "questions": 45,
+      "recall@1": 0.689,
+      "recall@1_ci95": [
+        0.543,
+        0.805
+      ],
+      "recall@3": 0.844,
+      "recall@5": 0.956,
+      "mrr": 0.792,
+      "latency_p50_ms": 57.2,
+      "latency_p95_ms": 152.1
+    }
+  }
+}

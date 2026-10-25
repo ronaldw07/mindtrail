@@ -92,7 +92,44 @@ def keyword_only(store, question):
             if e is not None][:SEARCH_DEPTH]
 
 
-STRATEGIES = {"hybrid": hybrid, "vector": vector_only, "keyword": keyword_only}
+def weighted(weight: float):
+    """Hybrid search with the keyword list scaled by `weight` in the fusion."""
+    return lambda store, question: store.search(question, k=SEARCH_DEPTH, keyword_weight=weight)
+
+
+def model_strategies():
+    """Strategies that call the model."""
+    from mindtrail import config
+    from mindtrail.llm import LLMClient
+    from mindtrail.memory import retrieval
+
+    calls = ModelCalls(LLMClient(temperature=config.EVAL_TEMPERATURE))
+
+    def expansion(q):
+        return calls.call(("expand", q), lambda: retrieval.expand_query(calls.llm, q))
+
+    def expanded(weight):
+        return lambda store, q: retrieval.search_expanded(
+            store, calls.llm, q, k=SEARCH_DEPTH, keyword_weight=weight, queries=expansion(q))
+
+    def tag(fn):
+        fn.calls = calls
+        return fn
+
+    def reranked(name, base):
+        """Re-rank whatever `base` returns; the call is cached per variant."""
+        return tag(lambda store, q: calls.call(
+            ("rerank", name, q), lambda: retrieval.rerank(calls.llm, q, base(store, q))))
+
+    exp1, exp3 = expanded(1.0), expanded(0.3)
+    return {"expanded": tag(exp1), "expanded_kw0.3": tag(exp3),
+            "expanded_rerank": reranked("expanded", exp1),
+            "expanded_kw0.3_rerank": reranked("expanded_kw0.3", exp3),
+            "rerank_only": reranked("hybrid", hybrid)}
+
+
+STRATEGIES = {"hybrid": hybrid, "vector": vector_only, "keyword": keyword_only,
+              **{f"hybrid_kw{w}": weighted(w) for w in (0.5, 0.3, 0.2, 0.1)}}
 
 
 def build_store(tmp: Path, corpus: list[dict]) -> tuple[MemoryStore, dict]:
@@ -104,12 +141,45 @@ def build_store(tmp: Path, corpus: list[dict]) -> tuple[MemoryStore, dict]:
     return store, ids_by_query
 
 
-def run_strategy(store, ids_by_query: dict, questions: list[dict], strategy) -> tuple[list[int], list[float], list[dict]]:
+class ModelCalls:
+    """Memoizes model calls so strategies that share one (the same question
+    expansion, say) compare like for like, while each still reports a latency
+    that includes the call. `pause` spaces real calls out to stay under the
+    free tier's rate limit and is never counted as latency."""
+
+    def __init__(self, llm, pause: float = 2.2):
+        self.llm, self.pause = llm, pause
+        self._memo: dict = {}
+        self.reused_seconds = 0.0   # cost of cached calls this search used
+        self.slept = 0.0            # pause time inside this search
+
+    def begin(self) -> None:
+        self.reused_seconds = self.slept = 0.0
+
+    def call(self, key, fn):
+        if key not in self._memo:
+            started = time.perf_counter()
+            result = fn()
+            self._memo[key] = (result, time.perf_counter() - started)
+            time.sleep(self.pause)
+            self.slept += self.pause
+            return result
+        result, seconds = self._memo[key]
+        self.reused_seconds += seconds
+        return result
+
+
+def run_strategy(store, ids_by_query: dict, questions: list[dict], strategy
+                 ) -> tuple[list[int], list[float], list[dict]]:
     ranks, seconds, misses = [], [], []
+    calls = getattr(strategy, "calls", None)
     for q in questions:
+        if calls:
+            calls.begin()
         started = time.perf_counter()
         found = strategy(store, q["followup"])
-        seconds.append(time.perf_counter() - started)
+        elapsed = time.perf_counter() - started
+        seconds.append(elapsed - calls.slept + calls.reused_seconds if calls else elapsed)
         got = [ids_by_query.get(e.query) for e in found]
         rank = got.index(q["expects"]) + 1 if q["expects"] in got else 0
         ranks.append(rank)
@@ -142,12 +212,15 @@ def main(argv: list[str] | None = None) -> int:
     pairs = json.loads(PAIRS_FILE.read_text())
     questions = pairs[args.split]
     names = [s for s in args.strategies.split(",") if s]
+    strategies = dict(STRATEGIES)
+    if any(n not in strategies for n in names):
+        strategies.update(model_strategies())
     report = {"split": args.split, "commit": _git_commit(), "corpus_size": len(pairs["corpus"]),
               "strategies": {}}
     with tempfile.TemporaryDirectory() as tmp:
         store, ids_by_query = build_store(Path(tmp), pairs["corpus"])
         for name in names:
-            ranks, seconds, misses = run_strategy(store, ids_by_query, questions, STRATEGIES[name])
+            ranks, seconds, misses = run_strategy(store, ids_by_query, questions, strategies[name])
             report["strategies"][name] = summarize(ranks, seconds)
             if args.show_misses:
                 report["strategies"][name]["misses"] = misses

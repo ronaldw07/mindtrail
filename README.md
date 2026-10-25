@@ -286,6 +286,61 @@ number to trust, and it says three prior questions plus their answers is
 not enough evidence to name what someone asks next. That is a legitimate
 negative result about trajectory-only prediction, not a bug to chase.
 
+### Retrieval recall on a 90-entry corpus (`eval/recall.py`)
+
+The ten-pair set above is too small to separate strategies (the practice set
+scores 10/10). This one stores 90 research entries on CS and ML topics, many
+of them close neighbours (overfitting and regularization, TCP and UDP,
+quicksort and merge sort), and asks 90 questions, one per entry, worded
+differently from the entry's title. Entries alternate between a **tune** set
+of 45 questions, used to choose strategies, and a **held-out** set of 45,
+scored once with `--confirm-final` (the runner refuses without it). All
+questions were written and committed before any retrieval change; the raw
+runs are in `eval/recall_runs/`.
+
+Held-out, 45 questions, recall@1 with a 95% Wilson interval:
+
+| | recall@1 | recall@5 | MRR | search time (p50 / p95) |
+|---|---|---|---|---|
+| before (vector + keyword, as on `main`) | 80% (66-89%) | 98% | 0.87 | 47 ms / 49 ms |
+| keyword fix, equal weight | 80% (66-89%) | 93% | 0.85 | 46 ms / 47 ms |
+| + question expansion, keyword weight 0.3 | 87% (74-94%) | 100% | 0.92 | 1.2 s / 1.6 s |
+| + model re-rank of the top 8 (**deep recall**) | 100% (92-100%) | 100% | 1.00 | 2.4 s / 6.4 s |
+
+What the tuning showed (tune set, so nothing here was chosen on the held-out one):
+
+- On `main` the keyword half returned nothing for a natural-language question
+  (it required every word to match), so "hybrid" was really vector search.
+- Fixing that did not help on this set: with the keyword list at full weight,
+  hybrid fell *behind* vector-only at recall@3 (78% vs 91%), and weights of
+  0.5 down to 0.1 did not recover it. Paraphrased questions share few words
+  with their answers, so the keyword list mostly adds noise here.
+- Rewording the question and searching every phrasing, with the keyword list
+  down-weighted to 0.3, was the first change that beat vector-only (recall@5
+  100%). Letting the model re-rank the best eight candidates took recall@1
+  from 76% to 100% on the tune set, and held on the held-out one.
+
+Deep recall costs two model calls per question. In the app it runs alongside
+the web search (so it rarely adds wall-clock time to an answer) and falls
+back to plain search if a call fails; turn it off with
+`MINDTRAIL_DEEP_RECALL=0`. The sidebar search stays on the fast path.
+
+Read the 100% with care:
+
+- I wrote the questions from the stored summaries, so each question is a
+  fair paraphrase of an answer the entry really contains. Real follow-ups
+  ("what about its drawbacks?") are vaguer, and a perfect score on a set this
+  clean says the ceiling is reachable, not that production recall is 100%.
+- The interval's lower bound is 92% for 45 questions; it says nothing about
+  questions unlike these.
+- Exact-term lookups (an error code, a function name), which the keyword half
+  exists for, are not in this set, so it can't credit keyword search for them.
+- The tune set also reached 100% with the final pipeline, so the held-out
+  result is a confirmation, not a surprise.
+
+Reproduce: `python -m eval.recall --split tune --strategies vector,hybrid,expanded_kw0.3,expanded_kw0.3_rerank`
+(model strategies need `GROQ_API_KEY` and take a few minutes at the free tier's rate limit).
+
 ### What these numbers do not say
 
 - **n is small.** Six sessions and eight retrieval pairs. Each session is
