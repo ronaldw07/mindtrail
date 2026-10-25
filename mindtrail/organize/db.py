@@ -318,6 +318,17 @@ CREATE TABLE IF NOT EXISTS journey_suggestions (
     created_at TEXT NOT NULL
 );
 
+-- Minutes spent planning or re-finding research, logged by hand so the
+-- Measure card can compare a baseline period with a Mind Trail one.
+CREATE TABLE IF NOT EXISTS time_logs (
+    id         TEXT PRIMARY KEY,
+    kind       TEXT NOT NULL,
+    minutes    INTEGER NOT NULL,
+    day        TEXT NOT NULL,
+    note       TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
 -- Small named values that don't deserve a table each: last scan time,
 -- the linked sheet, the cached brief. Values are JSON text.
 CREATE TABLE IF NOT EXISTS app_state (

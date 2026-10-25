@@ -41,6 +41,7 @@ from mindtrail.organize.journey import JourneyStore
 from mindtrail.organize.offers import OfferStore
 from mindtrail.organize.practice import PracticeStore
 from mindtrail.organize.stories import StoryStore
+from mindtrail.organize.timelog import TimeLogStore
 from mindtrail.organize.journal import JournalStore
 from mindtrail.organize.people import PeopleStore
 from mindtrail.organize.jobs import JobStore
@@ -80,6 +81,7 @@ STATIC_FILES = {
     "/static/today.js": ("today.js", "application/javascript; charset=utf-8"),
     "/static/tasks.js": ("tasks.js", "application/javascript; charset=utf-8"),
     "/static/settings.js": ("settings.js", "application/javascript; charset=utf-8"),
+    "/static/measure.js": ("measure.js", "application/javascript; charset=utf-8"),
     "/static/notify.js": ("notify.js", "application/javascript; charset=utf-8"),
     "/static/recruit.js": ("recruit.js", "application/javascript; charset=utf-8"),
     "/static/stories.js": ("stories.js", "application/javascript; charset=utf-8"),
@@ -158,6 +160,7 @@ class Deps:
         self.offers = OfferStore(db_path)
         self.backups = BackupStore(db_path, self.state)
         self.journey = JourneyStore(db_path, self.state, self.roadmaps, self.roadmap_nodes)
+        self.timelog = TimeLogStore(db_path)
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)
         self.job_emails = self.email_log.for_application

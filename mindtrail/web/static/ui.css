@@ -470,3 +470,16 @@ form { max-width: 720px; box-shadow: var(--shadow-md), 0 0 0 0.5px var(--hairlin
        backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
 form:focus-within { box-shadow: var(--shadow-md), 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent); }
 #composer { padding-bottom: 1.25rem; }
+
+/* Measure card (Settings) */
+.measure-form { flex-wrap: wrap; }
+.measure-mins { width: 90px; }
+.measure-results { margin-top: 0.8rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.measure-line { display: flex; justify-content: space-between; gap: 1rem; font-size: var(--fs-base); }
+.measure-label { color: var(--text-2); }
+.measure-nums { display: flex; gap: 0.6rem; color: var(--text); font-variant-numeric: tabular-nums; }
+.measure-change { color: var(--text-muted); }
+.measure-change.good { color: var(--success); font-weight: 600; }
+.measure-empty, .measure-foot { font-size: var(--fs-sm); color: var(--text-muted); }
+.measure-recent { margin-top: 0.8rem; display: flex; flex-direction: column; gap: 0.2rem; }
+.measure-row { display: flex; justify-content: space-between; align-items: center; font-size: var(--fs-sm); color: var(--text-2); }

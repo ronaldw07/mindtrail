@@ -37,6 +37,7 @@ LIFE_TABLES = (
     "journey_reflections",
     "journey_reviews",
     "journey_suggestions",
+    "time_logs",
 )
 
 # Derived columns rebuilt on import rather than carried over: a journal

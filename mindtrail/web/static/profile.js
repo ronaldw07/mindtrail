@@ -81,6 +81,7 @@
     main.appendChild(areasCard());
     main.appendChild(canvasCard());
     main.appendChild(githubCard());
+    main.appendChild(measureCard());
     main.appendChild(backupsCard());
     main.appendChild(dataCard());
     layout.appendChild(main);

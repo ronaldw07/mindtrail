@@ -15,7 +15,9 @@ import re
 from dataclasses import asdict, dataclass
 from datetime import date
 
-from mindtrail.web import admin_api, jobs_api, journey_api, life_api, recruit_api, review, settings_api
+from mindtrail.web import (
+    admin_api, jobs_api, journey_api, life_api, measure_api, recruit_api, review, settings_api,
+)
 
 ROUTES: list[tuple[str, re.Pattern, object]] = []
 
@@ -538,3 +540,26 @@ def _journey_gemini(deps, args, body, query):
 @route("POST", "/api/journey/import/paste")
 def _journey_paste(deps, args, body, query):
     return journey_api.handle_paste(deps.journey, deps.profile, deps.llm, body)
+
+
+# --- the Measure card ---------------------------------------------------------
+
+
+@route("GET", "/api/measure")
+def _measure(deps, args, body, query):
+    return measure_api.handle_measure(deps.timelog, deps.tasks, deps.state)
+
+
+@route("POST", "/api/measure/log")
+def _measure_log(deps, args, body, query):
+    return measure_api.handle_log(deps.timelog, body)
+
+
+@route("DELETE", f"/api/measure/log/{_ID}")
+def _measure_delete(deps, args, body, query):
+    return measure_api.handle_delete_log(deps.timelog, args[0])
+
+
+@route("POST", "/api/measure/split")
+def _measure_split(deps, args, body, query):
+    return measure_api.handle_set_split(deps.state, body)
