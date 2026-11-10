@@ -74,6 +74,7 @@
     };
 
     main.appendChild(setupCard());
+    main.appendChild(googleCard());
     main.appendChild(appearanceCard());
     main.appendChild(notificationsCard());
     main.appendChild(weatherCard());
@@ -108,14 +109,12 @@
   }
 
   $('open-profile').onclick = () => openProfileView();
-  $('open-jobs').onclick = () => openJobsView();
   $('open-today').onclick = () => openDashboardView();
   $('open-week').onclick = () => openWeekView();
   $('open-people').onclick = () => openPeopleView();
   $('open-tasks').onclick = () => openTasksView();
   $('open-habits').onclick = () => openHabitsView();
   $('open-journal').onclick = () => openJournalView();
-  $('open-practice').onclick = () => openPracticeView();
   $('open-stories').onclick = () => openStoriesView();
   $('open-journey').onclick = () => openJourneyView();
   $('quick-add').onclick = e => showMenuFrom(e.currentTarget, [

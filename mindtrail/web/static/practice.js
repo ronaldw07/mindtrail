@@ -21,7 +21,7 @@
     const data = await api('/api/practice');
     const view = $('practice-view');
     const layout = tEl('div', 'brief-wrap practice-wrap');
-    layout.appendChild(tEl('div', 'proj-title', 'Practice'));
+    layout.appendChild(careerTabs('practice'));
     layout.appendChild(practiceAddForm(data));
 
     const due = data.problems.filter(p => p.due);
@@ -119,7 +119,18 @@
         };
         row.appendChild(b);
       });
+    onRightClick(row, e => showMenu(e, problemMenu(p, row)));
     return row;
+  }
+
+  function problemMenu(p, row) {
+    const link = row.querySelector('a');
+    return [
+      ...(link ? [{label: 'Open problem', run: () => link.click()}] : []),
+      {divider: true},
+      {label: 'Delete', danger: true, run: () => softDelete({key: 'problem:' + p.id, label: p.title,
+        remove: () => api('/api/practice/' + p.id, {method: 'DELETE'}), rerender: renderPracticeView})},
+    ];
   }
 
   function problemRow(p) {
@@ -138,6 +149,7 @@
     del.onclick = () => softDelete({key: 'problem:' + p.id, label: p.title,
       remove: () => api('/api/practice/' + p.id, {method: 'DELETE'}), rerender: renderPracticeView});
     row.appendChild(del);
+    onRightClick(row, e => showMenu(e, problemMenu(p, row)));
     return row;
   }
 

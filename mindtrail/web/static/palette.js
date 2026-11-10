@@ -309,12 +309,12 @@
       run: () => openPalette(),
     },
     {
-      keys: 'Cmd/Ctrl+1–9',
-      label: 'Go to Today, Week, To-dos, Habits, Journal, People, Jobs, Practice, Stories',
+      keys: 'Cmd/Ctrl+1–8',
+      label: 'Go to Today, Journey, Week, To-dos, Habits, Journal, People, Stories',
       allowWhileTyping: true,
-      test: ev => (ev.metaKey || ev.ctrlKey) && !ev.shiftKey && !ev.altKey && /^[1-9]$/.test(ev.key),
-      run: ev => $(['open-today', 'open-week', 'open-tasks', 'open-habits', 'open-journal',
-                    'open-people', 'open-jobs', 'open-practice', 'open-stories'][Number(ev.key) - 1]).click(),
+      test: ev => (ev.metaKey || ev.ctrlKey) && !ev.shiftKey && !ev.altKey && /^[1-8]$/.test(ev.key),
+      run: ev => $(['open-today', 'open-journey', 'open-week', 'open-tasks', 'open-habits',
+                    'open-journal', 'open-people', 'open-stories'][Number(ev.key) - 1]).click(),
     },
     {
       keys: 'Cmd/Ctrl+N',

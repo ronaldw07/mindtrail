@@ -19,6 +19,19 @@
 .jtab.active .jdot { box-shadow: 0 0 0 2px var(--on-accent); }
 .jtab-add { padding-inline: 0.7rem; color: var(--text-muted); }
 .jdot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+/* Path toggles: on = filled dot on a chip; off = hollow dot, no fill. */
+.jtoggle { background: transparent; color: var(--text-muted);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent); }
+.jtoggle .jdot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--c); }
+.jtoggle.on { background: var(--surface-chip); color: var(--text-bright); box-shadow: none; }
+.jtoggle.on .jdot { background: var(--c); box-shadow: none; }
+.jtab-more { margin: 0 -0.35rem 0 -0.1rem; padding: 0 0.3rem; border-radius: var(--r-sm); color: var(--text-muted);
+  opacity: 0; transition: opacity 0.12s ease; }
+.jtoggle:focus-visible .jtab-more { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .jtoggle:hover .jtab-more { opacity: 1; }
+  .jtab-more:hover { background: var(--row-active); color: var(--text-bright); }
+}
 
 .jyear { margin-bottom: 1.4rem; }
 .jyear-head { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.5rem; color: var(--text-heading); }
@@ -62,12 +75,21 @@
 .jmark { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 1.5px solid var(--c);
   display: inline-flex; align-items: center; justify-content: center; font-size: 9px; color: var(--on-accent); }
 .jchip.done .jmark { background: var(--c); }
+/* The circle is its own button-sized target: a bigger hit area than it looks,
+   and it fills on hover to say it's clickable. */
+.jmark { position: relative; cursor: pointer; transition: background-color 0.12s ease, transform 160ms var(--ease-out); }
+.jmark::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; }
+.jmark:active { transform: scale(0.85); }
+@media (hover: hover) and (pointer: fine) {
+  .jchip:not(.done) .jmark:hover { background: color-mix(in srgb, var(--c) 35%, transparent); }
+}
 .jchip.done .jchip-title { color: var(--text-2); }
 .jchip.proposed { background: transparent; box-shadow: inset 3px 0 0 var(--c), inset 0 0 0 1px var(--border); }
 .jchip.proposed .jmark { border-style: dashed; }
 .jchip.rejected { opacity: 0.5; }
 .jchip.rejected .jchip-title { text-decoration: line-through; }
 .jchip.drag-source { opacity: 0.3; }
+.jdrop-line { height: 2px; margin: -1px 0.2rem; border-radius: 1px; background: var(--accent); }
 .jchip-ghost { position: fixed; z-index: 60; pointer-events: none; width: auto; margin: 0;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35); background: var(--surface-raised); }
 .jchip.just-changed { animation: jflash 1.6s var(--ease-out); }
@@ -124,11 +146,6 @@
 .jsource-hint { font-size: var(--fs-xs); color: var(--text-muted); }
 .jsources-note { font-size: var(--fs-xs); color: var(--text-faint); line-height: var(--lh-tight); }
 
-.jchat { display: flex; flex-direction: column; gap: 0.6rem; min-height: 0; flex: 1; }
-.jchat-log { flex: 1; min-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; }
-.jchat-form { display: flex; gap: 0.4rem; }
-.jchat-form input { flex: 1; min-width: 0; }
-
 @media (max-width: 1250px) { .jterms { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 1000px) {
   .journey-layout { flex-direction: column; }
@@ -136,11 +153,155 @@
 }
 
 .journey-rail .seg-opt { padding-inline: 0.45rem; white-space: nowrap; }
-.jchat-form input { background: var(--surface-sunken); color: var(--text); border: 1px solid var(--border);
-  border-radius: 999px; padding: 0.45rem 0.8rem; font: inherit; font-size: var(--fs-base); outline: none; }
-.jchat-form input:focus-visible { border-color: var(--accent); }
 
 .jtile-bar { height: 6px; border-radius: 3px; background: var(--surface-chip); overflow: hidden; margin: 0.2rem 0 0.4rem; }
 .jtile-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s var(--ease-out); }
 
 .jsheet textarea { min-height: 64px; }
+
+@media (hover: hover) and (pointer: fine) {
+  .jhead-more:hover { background: var(--row-hover); color: var(--text-bright); }
+}
+
+.jhead-title { display: flex; align-items: center; gap: 0.35rem; }
+.jhead-more { border: none; background: transparent; color: var(--text-muted); font-size: var(--fs-lg);
+  line-height: 1; padding: 0.15rem 0.35rem; border-radius: var(--r-sm); cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease; }
+.jhead-purpose { color: var(--text-2); font-size: var(--fs-base); margin-top: 0.2rem; max-width: 60ch;
+  line-height: var(--lh-body); }
+
+.journey-hint { color: var(--text-muted); font-size: var(--fs-sm); margin-top: 0.35rem; }
+.journey-purpose { resize: vertical; min-height: 3.2rem; font: inherit; }
+.journey-setup-buttons { display: flex; gap: 0.5rem; }
+/* The filled/ghost button classes only carry color; sizing matches the modal's. */
+.journey-setup-buttons button { padding: 0.5rem 1.05rem; border-radius: var(--r); border: none;
+  font: inherit; font-size: var(--fs-base); font-weight: 500; cursor: pointer; }
+
+/* Career: Jobs and Practice share a title row with the Plan / Jobs / Practice switch. */
+.career-tabs { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+
+/* --- Journeys: one box per journey --- */
+.jhome { max-width: 1080px; margin: 0 auto; }
+.jhome-head { margin-bottom: 1.4rem; }
+.jhome-head .proj-title { margin-bottom: 0.3rem; }
+.jhome-sub { color: var(--text-2); font-size: var(--fs-base); }
+.jhome-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.jbox { position: relative; display: flex; flex-direction: column; gap: 0.45rem; min-height: 190px;
+  padding: 1.05rem 1.1rem 1rem; border-radius: 14px; background: var(--surface-raised); cursor: pointer;
+  box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--hairline); overflow: hidden;
+  transition: background-color 0.12s ease, transform 160ms var(--ease-out); }
+.jbox::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--jbox-color); }
+.jbox:active { transform: scale(0.98); }
+.jbox-kind { font-size: var(--fs-xs); color: var(--jbox-color); font-weight: 600; letter-spacing: 0.02em; }
+.jbox-name { font-size: var(--fs-lg); font-weight: 600; color: var(--text-bright); }
+.jbox-purpose { font-size: var(--fs-sm); color: var(--text-2); line-height: var(--lh-tight);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.jbox-purpose.empty { color: var(--text-faint); }
+.jbox-paths { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.jbox-path { font-size: var(--fs-xs); color: var(--text-3); background: var(--surface-chip);
+  padding: 0.15rem 0.5rem; border-radius: 999px; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.jbox-path.more { color: var(--text-muted); }
+.jbox-foot { margin-top: auto; }
+.jbox-bar { height: 5px; border-radius: 3px; background: var(--surface-chip); overflow: hidden; }
+.jbox-fill { height: 100%; background: var(--jbox-color); border-radius: 3px; }
+.jbox-count { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 0.35rem; }
+.jbox-links { display: flex; gap: 0.35rem; margin-top: 0.15rem; }
+.jbox-link { display: inline-flex; align-items: center; gap: 0.35rem; border: none; cursor: pointer;
+  background: var(--row-hover); color: var(--text-2); font: inherit; font-size: var(--fs-sm);
+  padding: 0.3rem 0.65rem; border-radius: var(--r);
+  transition: background-color 0.12s ease, color 0.12s ease, transform 160ms var(--ease-out); }
+.jbox-link:active { transform: scale(0.97); }
+.jbox-link-count { font-size: var(--fs-xs); color: var(--text-bright); background: var(--jbox-color);
+  border-radius: 999px; padding: 0 0.4rem; line-height: 1.5; }
+@media (hover: hover) and (pointer: fine) { .jbox-link:hover { background: var(--row-active); color: var(--text-bright); } }
+.jbox-new { align-items: center; justify-content: center; text-align: center; background: transparent;
+  box-shadow: none; border: 1px dashed color-mix(in srgb, var(--text) 18%, transparent); }
+.jbox-new::before { display: none; }
+.jbox-plus { font-size: 1.6rem; line-height: 1; color: var(--text-muted); }
+.jbox-new-label { font-weight: 600; color: var(--text); }
+.jbox-new-sub { font-size: var(--fs-sm); color: var(--text-muted); }
+@media (hover: hover) and (pointer: fine) {
+  .jbox:hover { background: color-mix(in srgb, var(--text) 4%, var(--surface-raised)); }
+  .jbox-new:hover { background: var(--row-hover); }
+  .jcrumb-back:hover { background: var(--row-hover); color: var(--text-bright); }
+}
+
+.jcrumb { margin: -0.4rem 0 0.6rem -0.5rem; }
+.jcrumb-back { border: none; background: transparent; color: var(--text-muted); font: inherit;
+  font-size: var(--fs-sm); padding: 0.25rem 0.5rem; border-radius: var(--r); cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease; }
+
+/* --- the assistant dock, pinned bottom right of a journey --- */
+#journey-view .journey-layout { padding-bottom: 4.5rem; }
+.jdock { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 40; }
+.jdock[hidden] { display: none; }
+.jdock-launch { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.6rem 1rem;
+  border: none; border-radius: 999px; cursor: pointer; font: inherit; font-size: var(--fs-base);
+  font-weight: 500; color: #fff; background: var(--accent);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35), 0 0 0 0.5px var(--hairline);
+  transition: transform 160ms var(--ease-out); }
+.jdock-launch:active { transform: scale(0.97); }
+.jdock.open .jdock-launch { display: none; }
+.jdock-panel { display: none; flex-direction: column; width: 380px;
+  height: min(560px, calc(100vh - 7rem)); border-radius: 16px; overflow: hidden;
+  background: var(--surface-raised); transform-origin: bottom right;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5), 0 0 0 0.5px var(--hairline); }
+.jdock.open .jdock-panel { display: flex; }
+.jdock-head { display: flex; align-items: center; gap: 0.2rem; padding: 0.55rem 0.55rem 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--border-subtle); }
+.jdock-pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.35rem; border: none;
+  background: transparent; color: var(--text); font: inherit; font-size: var(--fs-base); font-weight: 600;
+  padding: 0.3rem 0.45rem; border-radius: var(--r); cursor: pointer; text-align: left; }
+.jdock-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jdock-caret { color: var(--text-muted); font-size: var(--fs-xs); }
+.jdock-icon { width: 28px; height: 28px; border: none; background: transparent; color: var(--text-muted);
+  border-radius: var(--r); cursor: pointer; font-size: 1.05rem; line-height: 1; flex-shrink: 0;
+  transition: background-color 0.12s ease, color 0.12s ease, transform 160ms var(--ease-out); }
+.jdock-icon:active { transform: scale(0.94); }
+@media (hover: hover) and (pointer: fine) {
+  .jdock-pick:hover, .jdock-icon:hover { background: var(--row-hover); color: var(--text-bright); }
+  .jdock-example:hover { background: var(--row-active); color: var(--text-bright); }
+}
+.jdock-log { flex: 1; overflow-y: auto; padding: 0.9rem; display: flex; flex-direction: column; gap: 0.55rem; }
+.jdock-empty { margin: auto 0; text-align: center; padding: 0 0.5rem; }
+.jdock-empty-title { font-weight: 600; color: var(--text); margin-bottom: 0.3rem; }
+.jdock-empty-sub { font-size: var(--fs-sm); color: var(--text-muted); line-height: var(--lh-tight); }
+.jdock-examples { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.35rem; margin-top: 0.85rem; }
+.jdock-example { border: none; background: var(--row-hover); color: var(--text-2); font: inherit;
+  font-size: var(--fs-sm); padding: 0.35rem 0.7rem; border-radius: 999px; cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, transform 160ms var(--ease-out); }
+.jdock-example:active { transform: scale(0.97); }
+.jdock-thinking { color: var(--text-muted); }
+.jdock-edit { display: flex; flex-direction: column; gap: 0.4rem; }
+.jdock-edit input, .jdock-edit textarea { width: 100%; background: var(--surface-sunken); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--r-sm); padding: 0.4rem 0.55rem; font: inherit;
+  font-size: var(--fs-sm); outline: none; resize: vertical; }
+.jdock-edit input:focus, .jdock-edit textarea:focus { border-color: var(--accent); }
+.jdock-form { display: flex; align-items: flex-end; gap: 0.45rem; padding: 0.6rem 0.7rem 0.7rem;
+  border-top: 1px solid var(--border-subtle); }
+.jdock-input { flex: 1; min-width: 0; resize: none; background: var(--surface-sunken); color: var(--text);
+  border: 1px solid var(--border); border-radius: 12px; padding: 0.5rem 0.7rem; font: inherit;
+  font-size: var(--fs-base); line-height: 1.4; outline: none; max-height: 140px; }
+.jdock-input:focus { border-color: color-mix(in srgb, var(--text) 25%, transparent); }
+/* Both are <form>s, so undo the chat composer's global form look. */
+.jdock .jdock-form, .jdock .jdock-edit { max-width: none; margin: 0; box-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none; }
+.jdock .jdock-form { border: none; border-top: 1px solid var(--border-subtle); border-radius: 0;
+  background: transparent; padding: 0.6rem 0.7rem 0.7rem; }
+.jdock .jdock-edit { border: 1px solid var(--border); border-radius: var(--r); background: var(--surface);
+  padding: 0.6rem; }
+.jdock .jdock-form:focus-within, .jdock .jdock-edit:focus-within { box-shadow: none; }
+@media (max-width: 700px) { .jdock-panel { width: calc(100vw - 2rem); } }
+
+/* Step sheet: day, time, length and Add block on one row. */
+.jcal-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.jcal-row input, .jcal-row select { background: var(--surface-sunken); color: var(--text); font: inherit;
+  font-size: var(--fs-sm); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 0.35rem 0.5rem; }
+.jcal-row input[type="date"] { flex: 1 1 8.5rem; }
+
+/* Assistant replies are Markdown; keep their paragraphs and lists tight. */
+.jdock-log .rc-msg.assistant > :first-child { margin-top: 0; }
+.jdock-log .rc-msg.assistant > :last-child { margin-bottom: 0; }
+.jdock-log .rc-msg.assistant p, .jdock-log .rc-msg.assistant ul, .jdock-log .rc-msg.assistant ol { margin: 0.4rem 0; }
+.jdock-log .rc-msg.assistant ul, .jdock-log .rc-msg.assistant ol { padding-left: 1.2rem; }

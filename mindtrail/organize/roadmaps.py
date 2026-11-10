@@ -61,6 +61,8 @@ class RoadmapNode:
     marked done."""
     term: str = ""
     """School term like '2026-fall' (organize/terms.py), or '' for none."""
+    position: float = 0
+    """Order within its term on the journey timeline."""
 
 
 def _to_roadmap(row) -> Roadmap:
@@ -93,6 +95,7 @@ def _to_node(row) -> RoadmapNode:
         due_date=row["due_date"] if "due_date" in keys else "",
         linked_entries=tuple(e for e in (raw_linked or "").split(",") if e),
         repeat_days=row["repeat_days"] if "repeat_days" in keys else 0,
+        position=row["position"] if "position" in keys else 0,
         term=row["term"] if "term" in keys else "",
     )
 
@@ -274,6 +277,9 @@ class RoadmapNodeStore:
 
     def set_term(self, node_id: str, term: str) -> None:
         self._update(node_id, "term", clean_term(term))
+
+    def set_position(self, node_id: str, position: float) -> None:
+        self._update(node_id, "position", float(position))
 
     def set_repeat_days(self, node_id: str, repeat_days: int) -> None:
         if repeat_days < 0:

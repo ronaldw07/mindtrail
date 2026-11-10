@@ -1,8 +1,8 @@
 
   // ---------- journey: the 4-year timeline ----------
   // Declarations only, loaded before app.js - see the note atop jobs.js.
-  // One project holds several career tracks; each track's steps sit in school
-  // terms. This file is the timeline itself; the side panel (next up,
+  // You can have several journeys (Career, Health...), one open at a time.
+  // Each holds several tracks (paths); each track's steps sit in terms. This file is the timeline itself; the side panel (next up,
   // suggestions, chat) is in journey_panel.js.
 
   const JOURNEY_COLORS = ['#3987e5', '#d95926', '#199e70', '#9a5bd3', '#c98a14', '#d1478f'];
@@ -14,7 +14,20 @@
   const journeyOpenNotes = new Set(); // terms whose "what I did" box is open
   const journeyOpenReviews = new Set();
 
-  const journeyTab = () => prefs.get('journeyTab', 'all');
+  // Paths are toggled on and off per journey; what's on is drawn together.
+  // journeyTab() names the single path on (new steps go there), or 'all'.
+  const journeyHidden = () => (prefs.get('journeyHidden', {})[journeyData.project_id] || []);
+  function setJourneyHidden(ids) {
+    prefs.set('journeyHidden', {...prefs.get('journeyHidden', {}), [journeyData.project_id]: ids});
+  }
+  const journeyPaths = () => journeyData.tracks.filter(t => !t.shared);
+  const journeyShown = () => journeyPaths().filter(t => !journeyHidden().includes(t.id));
+  function journeyTab() {
+    const shown = journeyShown();
+    return shown.length === 1 && journeyPaths().length > 1 ? shown[0].id : 'all';
+  }
+  // Show just one path, e.g. one the assistant just made.
+  function journeyOnly(id) { setJourneyHidden(journeyPaths().filter(t => t.id !== id).map(t => t.id)); }
 
   function journeyTrackColor(track) {
     if (track.shared) return JOURNEY_SHARED_COLOR;
@@ -24,33 +37,39 @@
 
   // Every step visible on the current tab, tagged with its track.
   function journeyVisibleSteps() {
-    const tab = journeyTab();
+    const hidden = journeyHidden();
     const out = [];
     journeyData.tracks.forEach(t => {
-      if (tab !== 'all' && !t.shared && t.id !== tab) return;
+      if (!t.shared && hidden.includes(t.id)) return;
       t.steps.forEach(s => out.push({...s, track: t.name, shared: t.shared, color: journeyTrackColor(t)}));
     });
     return out;
   }
 
-  async function openJourneyView() {
+  // The sidebar's Journey opens the page of journey boxes; Career's Plan
+  // tab (and a box) go straight into one journey.
+  async function openJourneyView(opts) {
     currentProject = null;
     current = null;
     setActiveView('journey');
     prefs.set('lastView', {type: 'journey'});
     $('breadcrumb').textContent = 'Journey';
-    await renderJourney();
+    if (opts && opts.detail) await renderJourney();
+    else await renderJourneyHome();
   }
 
   async function renderJourney(changed) {
     journeyData = await api('/api/journey');
     journeyChanged = new Set(changed || []);
     const view = $('journey-view');
-    if (!journeyData.setup) { commitView(view, journeySetup(journeyData)); return; }
-    if (journeyTab() !== 'all' && !journeyData.tracks.some(t => t.id === journeyTab())) prefs.set('journeyTab', 'all');
+    if (!journeyData.setup) { hideJourneyDock(); commitView(view, journeySetup(journeyData)); return; }
+    // Forget toggles for paths that no longer exist.
+    const ids = journeyPaths().map(t => t.id);
+    if (journeyHidden().some(id => !ids.includes(id))) setJourneyHidden(journeyHidden().filter(id => ids.includes(id)));
 
     const layout = tEl('div', 'journey-layout');
     const main = tEl('div', 'journey-main');
+    main.appendChild(journeyCrumb());
     main.appendChild(journeyHead());
     main.appendChild(journeyTabs());
     const steps = journeyVisibleSteps();
@@ -60,37 +79,66 @@
     layout.appendChild(main);
     layout.appendChild(journeyRail());
     commitView(view, layout);
+    showJourneyDock();
     const first = layout.querySelector('.jchip.just-changed');
     if (first) first.scrollIntoView({block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth'});
   }
 
-  // ---------- first run ----------
+  // ---------- making a journey ----------
 
+  // The first-run screen, and the "+ New journey" form once there is one.
   function journeySetup(data) {
+    const first = !data.setup;
+    const hasCareer = (data.journeys || []).some(j => j.kind === 'career');
+    let kind = hasCareer ? 'general' : 'career';
+
     const box = tEl('div', 'journey-setup');
-    box.appendChild(tEl('div', 'proj-title', 'Plan your four years'));
+    box.appendChild(tEl('div', 'proj-title', first ? 'Start your first journey' : 'New journey'));
     box.appendChild(tEl('p', 'journey-lede',
-      'A timeline of school terms with a track for each direction you’re considering. ' +
-      'You can add, rename and copy tracks any time, and ask the assistant to reshape them.'));
+      'A journey is a timeline of terms with a path for each direction you’re considering - ' +
+      'a career, your health, anything. Add, rename and copy paths any time, and ask the ' +
+      'assistant to reshape them.'));
+
+    const kindRow = tEl('div', '');
+    const name = tEl('input', 'job-field-input');
+    name.setAttribute('aria-label', 'Journey name');
+    const purpose = tEl('textarea', 'job-field-input journey-purpose');
+    purpose.rows = 2;
+    purpose.setAttribute('aria-label', 'What this journey is for');
+    const syncKind = () => {
+      name.placeholder = kind === 'career' ? 'Career' : 'e.g. Health, Music, Grad school';
+      purpose.placeholder = kind === 'career'
+        ? 'e.g. Land an AI/ML internship by summer 2027, without burning out'
+        : 'e.g. Run a half marathon and sleep 8 hours most nights';
+      picksField.hidden = kind !== 'career' || !data.candidates.length;
+    };
+    kindRow.appendChild(segmented([{value: 'career', label: 'Career (CS)'}, {value: 'general', label: 'Anything else'}],
+      kind, v => { kind = v; syncKind(); }, 'Kind of journey'));
+    box.appendChild(inspectorField('What kind?', kindRow,
+      tEl('div', 'journey-hint', 'Career starts with internship paths and recruiting dates; anything else starts with one empty path.')));
+    box.appendChild(inspectorField('Name', name));
+    box.appendChild(inspectorField('What’s it for? The assistant plans from this.', purpose));
 
     const year = tEl('select', 'job-field-input');
-    year.setAttribute('aria-label', 'First year of school');
-    for (let y = data.start_year - 3; y <= data.start_year + 1; y++) {
+    year.setAttribute('aria-label', 'First year of the timeline');
+    // Most people open this after their first year, so first run defaults to
+    // last fall; a later journey lines up with the open one.
+    const around = first ? data.start_year - 1 : data.start_year;
+    for (let y = around - 2; y <= around + 2; y++) {
       const o = tEl('option', '', 'Fall ' + y + ' – Spring ' + (y + 4));
       o.value = y;
       year.appendChild(o);
     }
-    // Most people open this after their first year, so default to last fall.
-    year.value = data.start_year - 1;
-    box.appendChild(inspectorField('When did you start?', year));
+    year.value = around;
+    box.appendChild(inspectorField('Timeline', year));
 
     const picks = tEl('div', 'journey-picks');
-    data.candidates.forEach(c => {
+    (data.candidates || []).forEach(c => {
       const row = tEl('label', 'journey-pick');
       const cb = tEl('input');
       cb.type = 'checkbox';
       cb.value = c.roadmap_id;
-      cb.checked = /career/i.test(c.project) && c.steps > 0;
+      cb.checked = first && /career/i.test(c.project) && c.steps > 0;
       row.appendChild(cb);
       const text = tEl('span', '');
       text.appendChild(tEl('b', '', c.project));
@@ -98,70 +146,126 @@
       row.appendChild(text);
       picks.appendChild(row);
     });
-    if (data.candidates.length) {
-      const f = inspectorField('Bring in an existing roadmap as its own track (the original stays as it is)', picks);
-      box.appendChild(f);
-    }
+    const picksField = inspectorField('Bring in an existing roadmap as its own path (the original stays as it is)', picks);
+    box.appendChild(picksField);
+    syncKind();
 
-    const go = tEl('button', 'btn-primary', 'Create my journey');
+    const buttons = tEl('div', 'journey-setup-buttons');
+    const go = tEl('button', 'btn-primary', 'Create journey');
     go.onclick = async () => {
       setButtonBusy(go, 'Creating…');
       const res = await jsonSend('/api/journey/setup', {
-        start_year: Number(year.value),
-        copy_roadmap_ids: Array.from(picks.querySelectorAll('input:checked')).map(i => i.value),
+        kind, name: name.value.trim(), purpose: purpose.value.trim(), start_year: Number(year.value),
+        copy_roadmap_ids: kind === 'career'
+          ? Array.from(picks.querySelectorAll('input:checked')).map(i => i.value) : [],
       });
-      if (res.error) { setButtonIdle(go, 'Create my journey'); toast(res.error, {error: true}); return; }
+      if (res.error) { setButtonIdle(go, 'Create journey'); toast(res.error, {error: true}); return; }
       await renderJourney();
     };
-    box.appendChild(go);
+    buttons.appendChild(go);
+    if (!first) {
+      const cancel = tEl('button', 'btn-ghost', 'Cancel');
+      cancel.onclick = () => renderJourneyHome();
+      buttons.appendChild(cancel);
+    }
+    box.appendChild(buttons);
+    setTimeout(() => name.focus());
     return box;
+  }
+
+  // ---------- back to all journeys ----------
+
+  function journeyCrumb() {
+    const bar = tEl('div', 'jcrumb');
+    const back = tEl('button', 'jcrumb-back', '‹ Journeys');
+    back.type = 'button';
+    back.onclick = () => openJourneyView();
+    bar.appendChild(back);
+    return bar;
+  }
+
+  function journeyMenu() {
+    const save = async patch => {
+      const res = await jsonSend('/api/journey', patch, 'PATCH');
+      if (res.error) { toast(res.error, {error: true}); return; }
+      await Promise.all([renderJourney(), loadSidebar()]);
+    };
+    return [
+      {label: 'Rename…', run: async () => {
+        const name = await askText('Rename journey', journeyData.name);
+        if (name) await save({name});
+      }},
+      {label: 'Edit what it’s for…', run: async () => {
+        const purpose = await askText('What is this journey for?', journeyData.purpose,
+                                      'The assistant plans from this');
+        if (purpose !== null && purpose !== undefined) await save({purpose});
+      }},
+    ];
   }
 
   // ---------- header and tabs ----------
 
   function journeyHead() {
     const head = tEl('div', 'jhead');
-    const title = tEl('div', '');
-    title.appendChild(tEl('div', 'proj-title', 'Journey'));
+    const title = tEl('div', 'jhead-text');
+    const row = tEl('div', 'jhead-title');
+    row.appendChild(tEl('div', 'proj-title', journeyData.name));
+    const more = tEl('button', 'jhead-more', '\u22ef');
+    more.type = 'button';
+    more.title = 'Journey options';
+    more.setAttribute('aria-label', 'Journey options');
+    more.onclick = () => showMenuFrom(more, journeyMenu());
+    row.appendChild(more);
+    title.appendChild(row);
+    if (journeyData.purpose) title.appendChild(tEl('div', 'jhead-purpose', journeyData.purpose));
     title.appendChild(tEl('div', 'jhead-sub',
       journeyData.current_label + ' · Year ' + journeyData.current_year + ' of 4'));
     head.appendChild(title);
+    // The career journey is also Career's Plan tab, so it carries the same switch.
+    if (journeyData.kind === 'career') head.appendChild(careerSwitch('plan'));
     return head;
   }
 
+  // "All paths" turns every path on; each path pill toggles itself.
   function journeyTabs() {
     const bar = tEl('div', 'jtabs');
-    bar.setAttribute('role', 'tablist');
-    const tab = journeyTab();
-    const add = (id, label, color) => {
-      const b = tEl('button', 'jtab' + (tab === id ? ' active' : ''));
+    bar.setAttribute('role', 'group');
+    bar.setAttribute('aria-label', 'Paths to show');
+    const hidden = journeyHidden();
+    const all = tEl('button', 'jtab' + (hidden.length ? '' : ' active'), 'All paths');
+    all.type = 'button';
+    all.setAttribute('aria-pressed', String(!hidden.length));
+    all.onclick = () => { setJourneyHidden([]); renderJourney(); };
+    bar.appendChild(all);
+    journeyPaths().forEach(t => {
+      const on = !hidden.includes(t.id);
+      const b = tEl('button', 'jtab jtoggle' + (on ? ' on' : ''));
       b.type = 'button';
-      b.setAttribute('role', 'tab');
-      b.setAttribute('aria-selected', tab === id ? 'true' : 'false');
-      if (color) {
-        const dot = tEl('span', 'jdot');
-        dot.style.background = color;
-        b.appendChild(dot);
-      }
-      b.appendChild(document.createTextNode(label));
+      b.setAttribute('aria-pressed', String(on));
+      b.title = on ? 'Hide ' + t.name : 'Show ' + t.name;
+      const dot = tEl('span', 'jdot');
+      dot.style.setProperty('--c', journeyTrackColor(t));
+      b.append(dot, tEl('span', '', t.name));
+      const more = tEl('span', 'jtab-more', '\u22ef');
+      more.setAttribute('aria-label', t.name + ' options');
+      more.onclick = e => { e.stopPropagation(); showMenuFrom(more, journeyTrackMenu(t.id)); };
+      b.appendChild(more);
+      onRightClick(b, e => showMenu(e, journeyTrackMenu(t.id)));
       b.onclick = () => {
-        if (tab === id && id !== 'all') { showMenuFrom(b, journeyTrackMenu(id)); return; }
-        prefs.set('journeyTab', id);
+        if (on && journeyShown().length === 1) { toast('Keep at least one path on'); return; }
+        setJourneyHidden(on ? [...hidden, t.id] : hidden.filter(id => id !== t.id));
         renderJourney();
       };
       bar.appendChild(b);
-    };
-    add('all', 'All tracks');
-    journeyData.tracks.filter(t => !t.shared).forEach(t => add(t.id, t.name, journeyTrackColor(t)));
+    });
     const plus = tEl('button', 'jtab jtab-add', '+');
     plus.type = 'button';
-    plus.setAttribute('aria-label', 'New track');
+    plus.setAttribute('aria-label', 'New path');
     plus.onclick = async () => {
-      const name = await askText('New track', '', 'e.g. Research, Startup, Grad school');
+      const name = await askText('New path', '', 'e.g. School, Research, Startup');
       if (!name) return;
       const res = await jsonSend('/api/journey/tracks', {name});
       if (res.error) { toast(res.error, {error: true}); return; }
-      prefs.set('journeyTab', res.track_id);
       await renderJourney();
     };
     bar.appendChild(plus);
@@ -171,14 +275,15 @@
   function journeyTrackMenu(id) {
     const track = journeyData.tracks.find(t => t.id === id);
     return [
+      {label: 'Show only this', run: () => { journeyOnly(id); renderJourney(); }},
       {label: 'Rename…', run: async () => {
-        const name = await askText('Rename track', track.name);
+        const name = await askText('Rename path', track.name);
         if (!name) return;
         const res = await jsonSend('/api/journey/tracks/' + id, {name}, 'PATCH');
         if (res.error) toast(res.error, {error: true}); else await renderJourney();
       }},
       {label: 'Edit goal…', run: async () => {
-        const goal = await askText('What is this track aiming at?', track.goal);
+        const goal = await askText('What is this path aiming at?', track.goal);
         if (!goal) return;
         const res = await jsonSend('/api/journey/tracks/' + id, {goal}, 'PATCH');
         if (res.error) toast(res.error, {error: true}); else await renderJourney();
@@ -186,15 +291,13 @@
       {label: 'Duplicate', run: async () => {
         const res = await jsonSend('/api/journey/tracks/' + id + '/duplicate', {});
         if (res.error) { toast(res.error, {error: true}); return; }
-        prefs.set('journeyTab', res.track_id);
         await renderJourney();
       }},
-      {label: 'Delete track…', run: async () => {
+      {label: 'Delete path…', run: async () => {
         if (!await askConfirm('Delete ' + track.name + '?',
             'Its ' + track.steps.length + ' steps go with it.', 'Delete')) return;
         const res = await api('/api/journey/tracks/' + id, {method: 'DELETE'});
         if (res.error) { toast(res.error, {error: true}); return; }
-        prefs.set('journeyTab', 'all');
         await renderJourney();
       }},
     ];
@@ -296,6 +399,10 @@
     plus.setAttribute('aria-label', 'Add a step in ' + t.label);
     plus.onclick = () => journeyAddStep(t.term);
     tools.appendChild(plus);
+    onRightClick(cell, e => showMenu(e, [
+      {label: 'Add a step…', run: () => journeyAddStep(t.term)},
+      ...(t.past || t.current ? [{label: 'Notes…', run: () => { journeyOpenNotes.add(t.term); renderJourney(); }}] : []),
+    ]));
     head.appendChild(tools);
     cell.appendChild(head);
 
@@ -303,7 +410,9 @@
     else if (journeyData.reflections[t.term]) {
       cell.appendChild(tEl('div', 'jterm-note', journeyData.reflections[t.term]));
     }
-    steps.forEach(s => cell.appendChild(journeyChip(s)));
+    // Drag order within the term; equal positions keep their old order.
+    [...steps].sort((a, b) => (a.position || 0) - (b.position || 0))
+      .forEach(s => cell.appendChild(journeyChip(s)));
     if (!steps.length && !journeyOpenNotes.has(t.term) && !journeyData.reflections[t.term]) {
       cell.appendChild(tEl('div', 'jterm-empty', t.past ? 'Nothing recorded' : '—'));
     }
@@ -333,7 +442,9 @@
     sec.appendChild(tEl('div', 'jyear-head', 'No term yet'));
     const cell = tEl('div', 'jterm loose');
     cell.dataset.term = '';
-    steps.forEach(s => cell.appendChild(journeyChip(s)));
+    // Drag order within the term; equal positions keep their old order.
+    [...steps].sort((a, b) => (a.position || 0) - (b.position || 0))
+      .forEach(s => cell.appendChild(journeyChip(s)));
     sec.appendChild(cell);
     return sec;
   }
@@ -346,22 +457,64 @@
     chip.dataset.key = 'step:' + s.id;
     chip.style.setProperty('--c', s.color);
     chip.title = s.track + (s.detail ? ' — ' + s.detail : '');
-    const mark = tEl('span', 'jmark', s.status === 'done' ? '✓' : '');
-    chip.appendChild(mark);
+    chip.appendChild(journeyStatusMark(chip, s));
     chip.appendChild(tEl('span', 'jchip-title', s.title));
     if (s.shared && journeyTab() === 'all') chip.appendChild(tEl('span', 'jchip-tag', 'all'));
     chip.onclick = () => { if (chip._wasDragged) { chip._wasDragged = false; return; } journeyStepSheet(s); };
     journeyEnableDrag(chip, s);
+    onRightClick(chip, e => showMenu(e, journeyStepMenu(s)));
     return chip;
   }
 
+  function journeyStepMenu(s) {
+    const setStatus = async status => {
+      const res = await jsonSend('/api/roadmap-node/' + s.id, {status}, 'PATCH');
+      if (res.error) { toast(res.error, {error: true}); return; }
+      await renderJourney([s.id]);
+    };
+    return [
+      {label: 'Edit…', run: () => journeyStepSheet(s)},
+      ...JOURNEY_STATUSES.filter(([v]) => v !== s.status)
+        .map(([v, word]) => ({label: 'Mark ' + word, run: () => setStatus(v)})),
+      {divider: true},
+      {label: 'Delete', danger: true, run: () => softDelete({key: 'step:' + s.id, label: 'Step',
+        remove: () => api('/api/roadmap-node/' + s.id, {method: 'DELETE'}), rerender: renderJourney})},
+    ];
+  }
+
+  // The circle steps through Suggested → Planned → Done (and back to
+  // Suggested). The chip updates at once; the save and redraw follow.
+  const JOURNEY_CYCLE = {proposed: 'accepted', accepted: 'done', done: 'proposed', rejected: 'proposed'};
+  const JOURNEY_STATUS_WORD = Object.fromEntries(JOURNEY_STATUSES);
+
+  function journeyStatusMark(chip, s) {
+    const mark = tEl('span', 'jmark', s.status === 'done' ? '✓' : '');
+    const next = JOURNEY_CYCLE[s.status] || 'accepted';
+    mark.title = JOURNEY_STATUS_WORD[s.status] + ' · click for ' + JOURNEY_STATUS_WORD[next];
+    mark.onpointerdown = e => e.stopPropagation();   // a click here never starts a drag
+    mark.onclick = async e => {
+      e.stopPropagation();
+      chip.classList.remove(s.status);
+      chip.classList.add(next);
+      mark.textContent = next === 'done' ? '✓' : '';
+      const res = await jsonSend('/api/roadmap-node/' + s.id, {status: next}, 'PATCH');
+      if (res.error) toast(res.error, {error: true});
+      await renderJourney(res.error ? [] : [s.id]);
+    };
+    return mark;
+  }
+
+  // Drag a step to another term, or up and down within one; a line shows
+  // where it will land.
   function journeyEnableDrag(chip, s) {
     chip.addEventListener('pointerdown', e => {
       if (e.button !== 0 || e.pointerType === 'touch') return;
       const sx = e.clientX, sy = e.clientY;
-      let ghost = null, over = null;
+      let ghost = null, over = null, before = null;
+      const line = tEl('div', 'jdrop-line');
       const cellAt = ev => document.elementsFromPoint(ev.clientX, ev.clientY)
         .find(n => n.classList && n.classList.contains('jterm')) || null;
+      const others = cell => [...cell.querySelectorAll('.jchip')].filter(c => c !== chip);
       const move = ev => {
         if (!ghost) {
           if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
@@ -377,21 +530,36 @@
         if (cell !== over) {
           if (over) over.classList.remove('drop-target');
           over = cell;
-          if (over) over.classList.add('drop-target');
+          if (over && over.dataset.term !== s.term) over.classList.add('drop-target');
         }
+        if (!over) { line.remove(); before = null; return; }
+        before = others(over).find(c => {
+          const r = c.getBoundingClientRect();
+          return ev.clientY < r.top + r.height / 2;
+        }) || null;
+        const list = others(over);
+        if (before) over.insertBefore(line, before);
+        else if (list.length) list[list.length - 1].after(line);
+        else over.appendChild(line);
       };
       const end = async ev => {
         document.removeEventListener('pointermove', move);
         document.removeEventListener('pointerup', end);
         document.removeEventListener('pointercancel', end);
+        line.remove();
         if (!ghost) return;
         chip._wasDragged = true;
         setTimeout(() => { chip._wasDragged = false; }, 0);
         ghost.remove();
         chip.classList.remove('drag-source');
         if (over) over.classList.remove('drop-target');
-        if (!over || ev.type === 'pointercancel' || over.dataset.term === s.term) return;
-        const res = await jsonSend('/api/journey/steps/' + s.id + '/move', {term: over.dataset.term});
+        if (!over || ev.type === 'pointercancel') return;
+        const ids = others(over).map(c => c.dataset.key.slice('step:'.length));
+        const at = before ? ids.indexOf(before.dataset.key.slice('step:'.length)) : ids.length;
+        const order = [...ids.slice(0, at), s.id, ...ids.slice(at)];
+        const current = [...over.querySelectorAll('.jchip')].map(c => c.dataset.key.slice('step:'.length));
+        if (over.dataset.term === s.term && order.join() === current.join()) return;
+        const res = await jsonSend('/api/journey/steps/' + s.id + '/move', {term: over.dataset.term, order});
         if (res.error) { toast(res.error, {error: true}); return; }
         await renderJourney([s.id]);
       };
@@ -410,6 +578,41 @@
     const res = await jsonSend('/api/journey/steps', {track_id: track.id, title, term});
     if (res.error) { toast(res.error, {error: true}); return; }
     await renderJourney([res.step.id]);
+  }
+
+  // A day, a start time and a length, then one click makes the block.
+  function journeyCalendarRow(s) {
+    const row = tEl('div', 'jcal-row');
+    const day = tEl('input');
+    day.type = 'date';
+    const tomorrow = new Date(Date.now() + 864e5);
+    day.value = tomorrow.getFullYear() + '-' + String(tomorrow.getMonth() + 1).padStart(2, '0') + '-' +
+      String(tomorrow.getDate()).padStart(2, '0');
+    day.setAttribute('aria-label', 'Day');
+    const time = tEl('input');
+    time.type = 'time';
+    time.value = '09:00';
+    time.setAttribute('aria-label', 'Start time');
+    const length = tEl('select');
+    length.setAttribute('aria-label', 'Length');
+    [[30, '30 min'], [60, '1 hr'], [90, '1.5 hr'], [120, '2 hr'], [180, '3 hr']].forEach(([v, l]) => {
+      const o = tEl('option', '', l);
+      o.value = v;
+      length.appendChild(o);
+    });
+    length.value = '60';
+    const add = tEl('button', 'btn-tinted', 'Add block');
+    add.type = 'button';
+    add.onclick = async () => {
+      setButtonBusy(add, 'Adding…');
+      const res = await jsonSend('/api/journey/steps/' + s.id + '/calendar',
+        {date: day.value, time: time.value, minutes: Number(length.value)});
+      setButtonIdle(add, 'Add block');
+      if (res.error) { toast(res.error, {error: true}); return; }
+      toast('Added to your Google Calendar');
+    };
+    row.append(day, time, length, add);
+    return row;
   }
 
   // The full editor for one step, in a sheet.
@@ -456,6 +659,8 @@
     note.value = s.note;
     note.placeholder = 'Your own notes';
     field('Notes', note);
+
+    field('Put on Google Calendar', journeyCalendarRow(s));
 
     const del = tEl('button', 'btn-tinted btn-danger-tinted', 'Delete step');
     body.appendChild(del);

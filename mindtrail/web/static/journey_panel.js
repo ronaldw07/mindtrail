@@ -1,27 +1,26 @@
 
   // ---------- journey: side panel ----------
   // Declarations only, loaded before app.js - see the note atop jobs.js.
-  // Next up, suggestions (with the places they come from), and the chat
-  // that reshapes the journey. Nothing here changes a track on its own:
-  // suggestions and chat actions wait for Accept.
+  // Next up, and suggestions with the places they come from. Nothing here
+  // changes a track on its own: suggestions wait for Accept.
 
-  const SUGGESTION_SOURCES = {review: 'Review', mindtrail: 'Mind Trail', gmail: 'Gmail', calendar: 'Calendar', gemini: 'Gemini', paste: 'Pasted chat'};
+  const SUGGESTION_SOURCES = {review: 'Review', mindtrail: 'Mind Trail', gmail: 'Gmail', calendar: 'Calendar', gemini: 'Gemini', paste: 'Pasted chat', canvas: 'Canvas', phone: 'Phone'};
   const SUGGESTION_KINDS = {add_done: 'Did', add_step: 'Next', mark_done: 'Finished'};
-  let journeyChatLog = [];
 
   function journeyRail() {
     const rail = tEl('aside', 'journey-rail');
     const pending = journeyData.suggestions.length;
     const pane = tEl('div', 'jpane');
-    const which = prefs.get('journeyRail', 'next');
+    // The assistant moved to the dock in the corner; an old saved 'chat'
+    // choice falls back to Next up.
+    const saved = prefs.get('journeyRail', 'next');
+    const which = saved === 'suggestions' ? 'suggestions' : 'next';
     const show = key => {
-      pane.replaceChildren(key === 'suggestions' ? journeySuggestionsPane()
-        : key === 'chat' ? journeyChatPane() : journeyNextPane());
+      pane.replaceChildren(key === 'suggestions' ? journeySuggestionsPane() : journeyNextPane());
     };
     rail.appendChild(segmented([
       {value: 'next', label: 'Next up'},
       {value: 'suggestions', label: 'Suggestions' + (pending ? ' · ' + pending : '')},
-      {value: 'chat', label: 'Assistant'},
     ], which, key => { prefs.set('journeyRail', key); show(key); }, 'Side panel'));
     rail.appendChild(pane);
     show(which);
@@ -102,6 +101,10 @@
       if (res.error) { accept.disabled = false; toast(res.error, {error: true}); return; }
       await renderJourney([res.node_id]);
     };
+    onRightClick(card, e => showMenu(e, [
+      {label: accept.textContent, run: () => accept.click()},
+      {label: 'Dismiss', run: () => dismiss.click()},
+    ]));
     const dismiss = tEl('button', 'btn-plain', 'Dismiss');
     dismiss.onclick = async () => {
       await jsonSend('/api/journey/suggestions/' + s.id + '/dismiss', {});
@@ -167,82 +170,6 @@
       await journeyScan(btn, 'Read', '/api/journey/import/gemini', {text: await file.text()});
     };
     input.click();
-  }
-
-  // ---------- chat ----------
-
-  function journeyChatPane() {
-    const box = tEl('div', 'jchat');
-    const log = tEl('div', 'jchat-log');
-    const draw = () => {
-      log.replaceChildren();
-      if (!journeyChatLog.length) {
-        log.appendChild(tEl('div', 'jsugg-empty',
-          'Tell it what to change: “make a research track”, “copy SWE as a backup plan”, ' +
-          '“move LeetCode prep to winter”, or ask it to compare two tracks.'));
-      }
-      journeyChatLog.forEach(m => {
-        log.appendChild(tEl('div', 'rc-msg ' + m.role, m.content));
-        (m.actions || []).forEach(a => log.appendChild(journeyActionCard(a, draw)));
-      });
-      log.scrollTop = log.scrollHeight;
-    };
-    draw();
-    box.appendChild(log);
-
-    const form = tEl('form', 'jchat-form');
-    const input = tEl('input');
-    input.placeholder = 'Ask or change something…';
-    input.setAttribute('aria-label', 'Message the assistant');
-    const send = tEl('button', 'send', 'Send');
-    send.type = 'submit';
-    form.appendChild(input);
-    form.appendChild(send);
-    form.onsubmit = async e => {
-      e.preventDefault();
-      const message = input.value.trim();
-      if (!message) return;
-      input.value = '';
-      send.disabled = input.disabled = true;
-      const history = journeyChatLog.map(m => ({role: m.role, content: m.content}));
-      journeyChatLog.push({role: 'user', content: message});
-      draw();
-      const res = await jsonSend('/api/journey/chat', {message, history});
-      send.disabled = input.disabled = false;
-      input.focus();
-      journeyChatLog.push(res.error
-        ? {role: 'assistant', content: 'Error: ' + res.error, actions: []}
-        : {role: 'assistant', content: res.reply, actions: res.actions || []});
-      draw();
-    };
-    box.appendChild(form);
-    return box;
-  }
-
-  function journeyActionCard(action, redraw) {
-    const card = tEl('div', 'rc-action' + (action.resolved ? ' resolved' : ''));
-    card.appendChild(tEl('div', 'rc-action-label', action.label));
-    if (action.resolved) {
-      card.appendChild(tEl('div', 'rc-action-resolved-note',
-        action.resolved === 'accepted' ? '✓ Applied' : '✗ Dismissed'));
-      return card;
-    }
-    const buttons = tEl('div', 'rc-action-buttons');
-    const accept = tEl('button', 'rc-accept', 'Accept');
-    accept.onclick = async () => {
-      accept.disabled = true;
-      const res = await jsonSend('/api/journey/apply', {action});
-      if (res.error) { accept.disabled = false; toast(res.error, {error: true}); return; }
-      action.resolved = 'accepted';
-      if (['create_track', 'duplicate_track'].includes(action.type)) prefs.set('journeyTab', res.track_id);
-      await renderJourney(res.changed);
-    };
-    const dismiss = tEl('button', 'rc-reject', 'Dismiss');
-    dismiss.onclick = () => { action.resolved = 'rejected'; redraw(); };
-    buttons.appendChild(accept);
-    buttons.appendChild(dismiss);
-    card.appendChild(buttons);
-    return card;
   }
 
   // Today's widget: how this term is going and the first thing next. Stays

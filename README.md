@@ -611,7 +611,7 @@ mood, week, jobs, interviews, practice, weather, focus, sleep) can be
 shown, hidden and reordered with Edit widgets.
 
 Keyboard: Cmd+K command palette (finds to-dos, jobs and people too),
-Cmd+1-9 jump between views, Cmd+N new to-do, Cmd+, settings, Cmd+[ and ]
+Cmd+1-8 jump between views, Cmd+N new to-do, Cmd+, settings, Cmd+[ and ]
 back and forward. Browsers reserve some of these (Cmd+N especially); they
 work once the page is installed as an app (below).
 

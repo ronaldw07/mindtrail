@@ -78,7 +78,7 @@
 
   function jobsHeader(data) {
     const head = el('div', 'jobs-head');
-    head.appendChild(el('div', 'proj-title', 'Jobs'));
+    head.appendChild(careerTabs('jobs'));
     const c = data.counts;
     const stats = el('div', 'jobs-stats');
     [
@@ -248,6 +248,11 @@
       jobsSelectedId = jobsSelectedId === a.id ? null : a.id;
       renderJobs();
     });
+    onRightClick(c, e => showMenu(e, [
+      {label: 'Edit…', run: () => { jobsSelectedId = a.id; renderJobs(); }},
+      {divider: true},
+      {label: 'Delete', danger: true, run: () => deleteJob(a)},
+    ]));
     return c;
   }
 
@@ -378,7 +383,25 @@
     body.appendChild(el('div', 'task-title', t.title));
     if (t.due_date) body.appendChild(el('div', 'task-due', fmtShortDate(t.due_date)));
     row.appendChild(body);
+    onRightClick(row, e => showMenu(e, taskMenu(t, box, afterChange)));
     return row;
+  }
+
+  // Edit opens the to-do's details on To-dos, wherever the row was clicked.
+  function taskMenu(t, box, afterChange) {
+    const id = t.task_id || t.id;
+    return [
+      {label: 'Edit…', run: async () => {
+        if (activeView !== 'tasks') await openTasksView();
+        tasksSelectedId = id;
+        await renderTasksView();
+      }},
+      {label: box.getAttribute('aria-pressed') === 'true' ? 'Mark not done' : 'Mark done', run: () => box.click()},
+      {divider: true},
+      {label: 'Delete', danger: true, run: () => softDelete({key: 'task:' + id, label: 'To-do',
+        remove: () => api('/api/tasks/' + id, {method: 'DELETE'}),
+        rerender: afterChange || renderTasksView})},
+    ];
   }
 
   function addTaskForm(applicationId, afterChange) {

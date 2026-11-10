@@ -45,11 +45,13 @@ class JourneyContext:
 
 
 def build_context(start_year: int, current_term: str, shared, tracks: list,
-                  steps_by_track: dict[str, list], profile: str = "") -> JourneyContext:
-    lines = [
-        f"JOURNEY: a 4-year CS degree, Year 1 starting fall {start_year}.",
-        f"CURRENT TERM: {current_term} ({term_label(current_term)}).",
-    ]
+                  steps_by_track: dict[str, list], profile: str = "",
+                  purpose: str = "", kind: str = "career") -> JourneyContext:
+    what = "a 4-year CS degree and the career it leads to" if kind == "career" else "a personal journey"
+    lines = [f"JOURNEY: {what}, laid out in terms from fall {start_year} for 4 years."]
+    if purpose.strip():
+        lines.append(f"WHAT IT'S FOR: {purpose.strip()[:500]}")
+    lines.append(f"CURRENT TERM: {current_term} ({term_label(current_term)}).")
     if profile.strip():
         lines.append(f"USER PROFILE:\n{profile.strip()[:1500]}")
     track_ids, node_titles = {}, {}
@@ -84,13 +86,16 @@ def _text(value, limit: int) -> str:
 # --- chat ---------------------------------------------------------------------
 
 CHAT_SYSTEM = (
-    "You help a CS student shape their 4-year journey: several career tracks, each "
-    "a list of steps placed in school terms, plus a shared track for steps every "
-    "track has in common. You see every track and step with its id, status and term.\n\n"
+    "You help someone shape one of their journeys - a CS degree and career, their "
+    "health, or whatever it's for (stated below). A journey has several tracks "
+    "(paths), each a list of steps placed in terms, plus a shared track for steps "
+    "every track has in common. You see every track and step with its id, status "
+    "and term. Keep advice true to what the journey is for.\n\n"
     "Talk with them: answer, compare tracks honestly when asked, ask a question when "
     "the request is unclear. You can't change anything yourself. When a change would "
     "help, propose it as an action; they accept or dismiss each one. Say 'I've "
-    "proposed...' never 'I've done...'.\n\n"
+    "proposed...' never 'I've done...' or 'I've added...' - nothing changes until "
+    "they accept.\n\n"
     + TERM_RULES + "\n\n"
     "Actions:\n"
     '- {"type": "add_step", "track_id": "...", "title": "...", "detail": "...", "term": "2027-winter"}\n'
@@ -184,6 +189,11 @@ def _clean_action(item, ctx: JourneyContext) -> JourneyAction | None:
     if kind == "create_track" and not a["goal"]:
         a["goal"] = a["name"]
     return JourneyAction(label=_label(a, ctx), **a)
+
+
+def revise_action(action: dict, ctx: JourneyContext) -> JourneyAction | None:
+    """Re-check and re-label a proposal after the user edited it."""
+    return _clean_action(action, ctx)
 
 
 def parse_chat(text: str, ctx: JourneyContext) -> tuple[str, list[JourneyAction]]:
