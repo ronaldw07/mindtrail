@@ -49,8 +49,41 @@
     page.appendChild(section('Mood & energy', moodSummary(w.mood)));
     page.appendChild(section('Job search', jobsSummary(w.jobs)));
     page.appendChild(section('Where your focus went', focusByArea(w.focus)));
-    if (w.is_current) page.appendChild(section('Next week’s top three', priorityForm(w)));
+    if (w.is_current) {
+      const form = priorityForm(w);
+      const fromJourneys = await weekJourneyNext(form);
+      if (fromJourneys) page.appendChild(section('Next from your journeys', fromJourneys));
+      page.appendChild(section('Next week’s top three', form));
+    }
     view.appendChild(page);
+  }
+
+  // What each journey says is next. Clicking one drops it into the first
+  // empty top-three box below, so planning the week starts from the plans.
+  async function weekJourneyNext(form) {
+    const data = await api('/api/journey');
+    const journeys = (data.journeys || []).filter(j => j.next && j.next.length);
+    if (!journeys.length) return null;
+    const box = tEl('div', 'week-journeys');
+    journeys.forEach(j => {
+      const group = tEl('div', 'week-journey');
+      group.appendChild(tEl('div', 'week-journey-name', j.name));
+      j.next.forEach(title => {
+        const b = tEl('button', 'week-journey-step', title);
+        b.type = 'button';
+        b.title = 'Make this a priority';
+        b.onclick = () => {
+          const empty = Array.from(form.querySelectorAll('input')).find(i => !i.value.trim());
+          if (!empty) { toast('Your top three are full'); return; }
+          empty.value = title;
+          empty.dispatchEvent(new Event('input', {bubbles: true}));
+          empty.focus();
+        };
+        group.appendChild(b);
+      });
+      box.appendChild(group);
+    });
+    return box;
   }
 
   function weekSummary(w) {

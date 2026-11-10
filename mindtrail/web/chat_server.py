@@ -21,6 +21,7 @@ from mindtrail.advice.job_scan import JobScanner, ScanTimer
 from mindtrail.ingest.researcher import Researcher
 from mindtrail.integrations.artwork import ArtworkClient
 from mindtrail.integrations.canvas import CanvasFeed
+from mindtrail.integrations.google_connect import GoogleConnector
 from mindtrail.integrations.github import GitHubUpdates
 from mindtrail.integrations.weather import WeatherClient
 from mindtrail.integrations.calendar_events import CalendarEvents
@@ -39,6 +40,7 @@ from mindtrail.organize.habits import HabitStore
 from mindtrail.organize.health import HealthStore
 from mindtrail.organize.interviews import InterviewStore
 from mindtrail.organize.journey import JourneyStore
+from mindtrail.organize.journey_chats import JourneyChatStore
 from mindtrail.organize.offers import OfferStore
 from mindtrail.organize.practice import PracticeStore
 from mindtrail.organize.stories import StoryStore
@@ -53,6 +55,7 @@ from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.organize.trash import NodeTrash, Trash
 from mindtrail.web import api, auth, life_routes
 from mindtrail.web.auth import AuthState
+from mindtrail.web.journey_daily import DailyJourneyScan
 from mindtrail.web.chat_ui import CHAT_HTML
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -88,6 +91,10 @@ STATIC_FILES = {
     "/static/stories.js": ("stories.js", "application/javascript; charset=utf-8"),
     "/static/practice.js": ("practice.js", "application/javascript; charset=utf-8"),
     "/static/journey.js": ("journey.js", "application/javascript; charset=utf-8"),
+    "/static/career.js": ("career.js", "application/javascript; charset=utf-8"),
+    "/static/project_parts.js": ("project_parts.js", "application/javascript; charset=utf-8"),
+    "/static/journey_home.js": ("journey_home.js", "application/javascript; charset=utf-8"),
+    "/static/journey_dock.js": ("journey_dock.js", "application/javascript; charset=utf-8"),
     "/static/journey_panel.js": ("journey_panel.js", "application/javascript; charset=utf-8"),
     "/static/focus.js": ("focus.js", "application/javascript; charset=utf-8"),
     "/static/review.js": ("review.js", "application/javascript; charset=utf-8"),
@@ -161,6 +168,9 @@ class Deps:
         self.offers = OfferStore(db_path)
         self.backups = BackupStore(db_path, self.state)
         self.journey = JourneyStore(db_path, self.state, self.roadmaps, self.roadmap_nodes)
+        self.journey_chats = JourneyChatStore(db_path)
+        self.google = GoogleConnector()
+        self.journey.add_school_paths()
         self.timelog = TimeLogStore(db_path)
         self.calendar_events = CalendarEvents()
         self.sheets = SheetsClient()
@@ -304,7 +314,7 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
         def do_GET(self):
             path = urlparse(self.path).path
             if auth_state.config.required and not self._is_authenticated():
-                if path == "/":
+                if path in ("/", "/capture"):
                     self._login_page()
                 else:
                     self._unauthorized()
@@ -321,6 +331,9 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
             elif path in STATIC_FILES:
                 filename, content_type = STATIC_FILES[path]
                 self._static(filename, content_type)
+            elif path == "/capture":
+                # A one-box page for your phone - see static/capture.html.
+                self._static("capture.html", "text/html; charset=utf-8")
             elif path == "/api/sidebar":
                 self._json(api.handle_sidebar(deps.projects, deps.chats))
             elif path == "/api/palette-index":
@@ -493,6 +506,13 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
                     api.handle_profile_chat(
                         deps.profile, deps.llm,
                         str(body.get("message", "")), body.get("history") or [],
+                    )
+                )
+            elif path.startswith("/api/projects/") and path.endswith("/memory"):
+                project_id = path[len("/api/projects/") : -len("/memory")]
+                self._json(
+                    api.handle_refresh_project_memory(
+                        deps.store, deps.chats, deps.projects, deps.llm, project_id
                     )
                 )
             elif path.startswith("/api/projects/") and path.endswith("/chat"):
@@ -679,6 +699,9 @@ def run_chat_server(
     timer.start()
     backup_timer = BackupTimer(deps.backups)
     backup_timer.start()
+    # Gmail, Calendar and Canvas into each journey's suggestions, daily.
+    journey_daily = DailyJourneyScan(deps)
+    journey_daily.start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -686,4 +709,5 @@ def run_chat_server(
     finally:
         timer.stop()
         backup_timer.stop()
+        journey_daily.stop()
         server.server_close()

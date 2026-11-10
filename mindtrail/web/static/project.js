@@ -142,16 +142,23 @@
 
   // Which sidebar button lights up for each view.
   const VIEW_NAV = {dashboard: 'open-today', week: 'open-week', tasks: 'open-tasks', habits: 'open-habits',
-                    journal: 'open-journal', jobs: 'open-jobs', people: 'open-people',
-                    practice: 'open-practice', stories: 'open-stories', journey: 'open-journey',
+                    journal: 'open-journal', jobs: 'open-journey', people: 'open-people',
+                    practice: 'open-journey', stories: 'open-stories', journey: 'open-journey',
                     profile: 'open-profile'};
 
+  let activeView = null;
+
   function setActiveView(name) {
+    activeView = name;
+    // The journey assistant floats over the page; only a journey shows it.
+    if (name !== 'journey') hideJourneyDock();
     VIEW_NAMES.forEach(v => $(v + '-view').classList.toggle('open', name === v));
-    Object.entries(VIEW_NAV).forEach(([view, id]) => {
+    // Per button, not per view: Jobs and Practice share the Career button.
+    new Set(Object.values(VIEW_NAV)).forEach(id => {
       const btn = $(id);
-      btn.classList.toggle('active', view === name);
-      if (view === name) btn.setAttribute('aria-current', 'page');
+      const on = VIEW_NAV[name] === id;
+      btn.classList.toggle('active', on);
+      if (on) btn.setAttribute('aria-current', 'page');
       else btn.removeAttribute('aria-current');
     });
     // Views with their own big title show it in the toolbar only once it
@@ -161,6 +168,7 @@
     loadBadges();
     log.style.display = name === 'chat' ? '' : 'none';
     $('composer').style.display = name === 'chat' ? '' : 'none';
+    syncTreeActive();
   }
 
   function showChatView() { setActiveView('chat'); }
@@ -171,14 +179,19 @@
 
   async function openProject(id, opts) {
     opts = opts || {};
+    const view = $('project-view');
+    // Clicking the project that's already on screen refreshes it in place
+    // rather than blanking it to a placeholder and back.
+    if (currentProject === id && view.classList.contains('open')) opts = {...opts, background: true};
     currentProject = id;
     current = null;
     showProjectView();
 
-    const view = $('project-view');
+    // The placeholder only appears if the load is slow enough to notice;
+    // a fast load swaps straight from the old screen to the new one.
+    let skeletonTimer = null;
     if (!opts.background) {
-      view.innerHTML = '';
-      view.appendChild(skeletonBlock(6));
+      skeletonTimer = setTimeout(() => view.replaceChildren(skeletonBlock(6)), SKELETON_DELAY_MS);
       $('breadcrumb').textContent = 'Projects';
       // A background refresh (e.g. after the chat assistant renames the
       // project) must not wipe the chat history it's about to redraw.
@@ -198,7 +211,10 @@
     const dataPromise = api('/api/projects/' + id +
                             (params.length ? '?' + params.join('&') : ''));
     const rmDataPromise = api('/api/roadmap/' + id);
-    const data = await dataPromise;
+    const [data, rmData] = await Promise.all([dataPromise, rmDataPromise]);
+    clearTimeout(skeletonTimer);
+    // A later click won the race; drawing this one would show the wrong project.
+    if (currentProject !== id) return;
     if (data.error) { view.innerHTML = ''; setStatus(data.error); return; }
     // Only a real navigation (not a background refresh after a rename or
     // move elsewhere) should overwrite what reload restores to.
@@ -210,62 +226,21 @@
     b.textContent = data.name;
     $('breadcrumb').appendChild(b);
 
-    view.innerHTML = '';
     const layout = document.createElement('div');
     layout.className = 'proj-layout';
 
-    // --- left: title, new chat, conversations ---
+    // --- left: title, a composer that starts a chat here, the chats ---
     const main = document.createElement('div');
     main.className = 'proj-main';
-    const title = document.createElement('div');
-    title.className = 'proj-title';
-    title.textContent = data.name;
-    main.appendChild(title);
-
-    const startCard = card('Start a chat in this project', null, null);
-    const startBtn = document.createElement('button');
-    startBtn.className = 'send';
-    startBtn.textContent = '+ New chat here';
-    startBtn.onclick = () => newChatInProject(id, data.name);
-    startCard.appendChild(startBtn);
-    main.appendChild(startCard);
-
-    const chatsCard = card('Chats', null, null);
-    if (!data.conversations.length) {
-      const p = document.createElement('div');
-      p.className = 'muted';
-      p.textContent = 'No chats yet. Start one above, or move an existing chat here.';
-      chatsCard.appendChild(p);
-    }
-    data.conversations.forEach(c => {
-      const row = document.createElement('div');
-      row.className = 'proj-chat';
-      const t = document.createElement('span');
-      t.style.flex = '1';
-      if (c.pinned) {
-        const pin = document.createElement('span');
-        pin.className = 'pin';
-        pin.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" ' +
-          'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-          'stroke-linejoin="round"><path d="M12 17v5"/>' +
-          '<path d="M9 3h6l1 5 3 2-1 3H6l-1-3 3-2 1-5Z"/></svg>';
-        t.appendChild(pin);
-      }
-      t.appendChild(document.createTextNode(c.title));
-      row.appendChild(t);
-      const w = document.createElement('span');
-      w.className = 'when';
-      w.textContent = relTime(c.updated_at);
-      row.appendChild(w);
-      makeClickable(row, () => { showChatView(); openConversation(c.id); });
-      chatsCard.appendChild(row);
-    });
-    main.appendChild(chatsCard);
+    main.appendChild(tEl('div', 'proj-title', data.name));
+    main.appendChild(projectComposer(id, data.name));
+    main.appendChild(projectChatList(data.conversations));
     layout.appendChild(main);
 
-    // --- right rail: highlights, instructions, files ---
+    // --- right rail: instructions, context, memory, then the cards ---
     const rail = document.createElement('div');
     rail.className = 'proj-rail';
+    rail.appendChild(projectProps(id, data));
 
     // Refresh replaces only this panel's contents, so the rest of the
     // project screen does not flash while one card reloads.
@@ -286,7 +261,6 @@
     rail.appendChild(hlCard);
 
     const roadmapCard = card('Roadmap', null, null);
-    const rmData = await rmDataPromise;
     if (!rmData.roadmap) {
       const goalInput = document.createElement('input');
       goalInput.placeholder = 'What are you working toward?';
@@ -321,62 +295,6 @@
     }
     rail.appendChild(roadmapCard);
 
-    const instrCard = card('Instructions', null, null);
-    const box = document.createElement('textarea');
-    box.className = 'instructions-box';
-    box.value = data.instructions || '';
-    box.placeholder = 'Guidance applied to every answer in this project.';
-    instrCard.appendChild(box);
-
-    const saveRow = document.createElement('div');
-    saveRow.style.cssText = 'display:flex;align-items:center;gap:0.6rem;margin-top:0.6rem;';
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'send';
-    saveBtn.textContent = 'Save instructions';
-    saveBtn.disabled = true;
-    const dirtyNote = document.createElement('span');
-    dirtyNote.className = 'muted';
-    saveRow.appendChild(saveBtn);
-    saveRow.appendChild(dirtyNote);
-    instrCard.appendChild(saveRow);
-
-    // The button only lights up when there is something to save, so it
-    // is obvious whether the current text is applied or not.
-    const original = box.value;
-    box.oninput = () => {
-      const changed = box.value !== original;
-      saveBtn.disabled = !changed;
-      dirtyNote.textContent = changed ? 'Unsaved changes' : '';
-    };
-    saveBtn.onclick = async () => {
-      const res = await jsonSend('/api/projects/' + id, {instructions: box.value}, 'PATCH');
-      if (res.error) { toast(res.error, {error: true}); return; }
-      saveBtn.disabled = true;
-      dirtyNote.textContent = '';
-      toast('Instructions saved', {undo: async () => {
-        await jsonSend('/api/projects/' + id, {instructions: original}, 'PATCH');
-        box.value = original;
-        toast('Instructions reverted');
-      }});
-    };
-    rail.appendChild(instrCard);
-
-    const filesCard = card('Files', '+ Upload', () => uploadInto(id));
-    if (!data.files.length) {
-      const p = document.createElement('div');
-      p.className = 'muted';
-      p.textContent = 'No documents yet.';
-      filesCard.appendChild(p);
-    }
-    data.files.forEach(f => {
-      const chip = document.createElement('span');
-      chip.className = 'file-chip';
-      chip.textContent = f.name;
-      makeClickable(chip, () => { showChatView(); openConversation(f.conversation_id); });
-      filesCard.appendChild(chip);
-    });
-    rail.appendChild(filesCard);
-
     const assistantCard = buildAssistantCard(
       'Project Assistant',
       'Ask about this project, or tell it what to change \u2014 it can ' +
@@ -396,7 +314,7 @@
     rail.appendChild(assistantCard);
 
     layout.appendChild(rail);
-    view.appendChild(layout);
+    view.replaceChildren(layout);
   }
 
   // Rebuilds only the body of the What's next card, leaving its header

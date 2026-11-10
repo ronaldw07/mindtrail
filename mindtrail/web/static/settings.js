@@ -102,6 +102,53 @@
     return c;
   }
 
+  // Google: what's connected, and a button that opens Google's consent
+  // screen in this browser. The page polls until that finishes.
+  const GOOGLE_ACCESS = [['calendar', 'Calendar', 'Events on Today, Week and journey suggestions'],
+                         ['gmail', 'Gmail', 'Job emails update Jobs; other mail becomes journey suggestions'],
+                         ['sheets', 'Sheets', 'Import a job tracker spreadsheet'],
+                         ['calendar_write', 'Calendar blocks', 'Put a journey step on your calendar']];
+
+  function googleCard() {
+    const c = card('Google', null, null);
+    const body = tEl('div', 'google-body');
+    c.appendChild(body);
+    const paint = st => {
+      body.replaceChildren();
+      if (!st.configured) {
+        body.appendChild(tEl('div', 'setting-hint',
+          'Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env (a Google Cloud OAuth client of type ' +
+          '“Desktop app”), restart Mind Trail, then come back here to connect.'));
+        return;
+      }
+      const btn = tEl('button', 'btn-tinted', st.connecting ? 'Waiting for Google…'
+        : st.connected ? 'Reconnect' : 'Connect Google');
+      btn.disabled = st.connecting;
+      btn.onclick = async () => {
+        const res = await jsonSend('/api/google/connect', {});
+        if (res.error) { toast(res.error, {error: true}); return; }
+        poll();
+      };
+      body.appendChild(settingRow(st.connected ? 'Connected' : 'Not connected', btn,
+        st.connecting ? 'Finish signing in on the Google tab that opened.'
+          : 'Read-only, except putting a step on your calendar when you click to.'));
+      if (st.error) body.appendChild(tEl('div', 'setting-hint google-error', st.error));
+      if (!st.connected) return;
+      GOOGLE_ACCESS.forEach(([key, label, hint]) => {
+        body.appendChild(settingRow(label, tEl('span', 'google-access' + (st.access[key] ? ' on' : ''),
+          st.access[key] ? 'Allowed' : 'Reconnect to allow'), hint));
+      });
+    };
+    const poll = async () => {
+      const st = await api('/api/google/status');
+      paint(st);
+      if (st.connecting && document.body.contains(c)) setTimeout(poll, 2000);
+      else if (st.connected && !st.error) loadBadges();
+    };
+    poll();
+    return c;
+  }
+
   function dataCard() {
     const c = card('Data', null, null);
     const btn = tEl('button', 'btn-tinted', 'Export everything…');

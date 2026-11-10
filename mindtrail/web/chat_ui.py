@@ -22,7 +22,9 @@ SIDE_GROUPS = (
              'M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>', ""),
             ("open-journey", "Journey", "#5e5ce6",
              '<circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/>'
-             '<path d="M8.5 18H14a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h5.5"/>', ""),
+             # Career (jobs and practice) lives inside its journey, so its
+             # count shows here.
+             '<path d="M8.5 18H14a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h5.5"/>', "career"),
         ),
     ),
     (
@@ -39,11 +41,6 @@ SIDE_GROUPS = (
             ("open-people", "People", "#0e7c86",
              '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/>'
              '<path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14c2.2.6 3.5 2.8 3.5 6"/>', "people"),
-            ("open-jobs", "Jobs", "#a0560a",
-             '<rect x="3" y="7" width="18" height="13" rx="2"/>'
-             '<path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>', "jobs"),
-            ("open-practice", "Practice", "#1d6f5f",
-             '<path d="M8 6l-5 6 5 6"/><path d="M16 6l5 6-5 6"/><path d="M14 4l-4 16"/>', "practice"),
             ("open-stories", "Stories", "#6e3fb5",
              '<path d="M12 6c-2-2-5-2.5-8-2v14c3-.5 6 0 8 2 2-2 5-2.5 8-2V4c-3-.5-6 0-8 2z"/>'
              '<path d="M12 6v14"/>', ""),
@@ -201,8 +198,12 @@ CHAT_HTML = """<!doctype html>
   <script src="/static/recruit.js"></script>
   <script src="/static/stories.js"></script>
   <script src="/static/practice.js"></script>
+  <script src="/static/career.js"></script>
+  <script src="/static/project_parts.js"></script>
   <script src="/static/journey.js"></script>
   <script src="/static/journey_panel.js"></script>
+  <script src="/static/journey_home.js"></script>
+  <script src="/static/journey_dock.js"></script>
   <script src="/static/focus.js"></script>
   <script src="/static/review.js"></script>
   <script src="/static/admin.js"></script>

@@ -33,7 +33,10 @@ from mindtrail import config
 CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
 GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
-SCOPES = [CALENDAR_SCOPE, GMAIL_SCOPE, SHEETS_SCOPE]
+# Lets a journey step be put on the calendar as a time block. Events only -
+# not calendar settings or sharing.
+CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events"
+SCOPES = [CALENDAR_SCOPE, GMAIL_SCOPE, SHEETS_SCOPE, CALENDAR_EVENTS_SCOPE]
 
 # google-auth-oauthlib's InstalledAppFlow.run_local_server implements the
 # RFC 8252 "loopback interface redirect" for installed apps: it starts a
