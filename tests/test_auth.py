@@ -27,7 +27,7 @@ from mindtrail.web.chat_server import Deps, make_handler, run_chat_server
 
 
 class StubResearcher:
-    def research_and_store(self, query, conversation_id="", instructions="", profile=""):
+    def research_and_store(self, query, conversation_id="", instructions="", profile="", memory=""):
         return Research(
             query=query, summary="ok", sources=("http://a.com",), recalled=(), tokens=1
         )

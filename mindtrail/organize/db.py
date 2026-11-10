@@ -300,6 +300,17 @@ CREATE TABLE IF NOT EXISTS journey_reviews (
     created_at TEXT NOT NULL
 );
 
+-- The journey assistant's saved chats, one journey (project) each.
+-- messages is a JSON list of {role, content, actions}.
+CREATE TABLE IF NOT EXISTS journey_chats (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title      TEXT NOT NULL DEFAULT '',
+    messages   TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS journey_suggestions (
     id         TEXT PRIMARY KEY,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -398,6 +409,14 @@ ADDED_COLUMNS = [
     ("roadmaps", "kind", "TEXT NOT NULL DEFAULT ''"),
     # School term like "2026-fall" - see organize/terms.py.
     ("roadmap_nodes", "term", "TEXT NOT NULL DEFAULT ''"),
+    # A project's memory: a short model-written summary of what its chats
+    # and files cover, editable, with the entry count it was built from.
+    ("projects", "memory", "TEXT NOT NULL DEFAULT ''"),
+    ("projects", "memory_generated_at", "TEXT NOT NULL DEFAULT ''"),
+    ("projects", "memory_basis_count", "INTEGER NOT NULL DEFAULT 0"),
+    # Order of a step within its journey term (drag to reorder); ties fall
+    # back to creation order.
+    ("roadmap_nodes", "position", "REAL NOT NULL DEFAULT 0"),
 ]
 
 

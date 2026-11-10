@@ -161,6 +161,7 @@ class Researcher:
         conversation_id: str = "",
         instructions: str = "",
         profile: str = "",
+        memory: str = "",
     ) -> Research:
         history = self._store.by_conversation(conversation_id)
         # Deep recall takes a couple of model calls, so it runs alongside
@@ -177,6 +178,8 @@ class Researcher:
             preamble += f"ABOUT THE USER:\n{profile}\n\n"
         if instructions.strip():
             preamble += f"INSTRUCTIONS FOR THIS PROJECT (follow these):\n{instructions}\n\n"
+        if memory.strip():
+            preamble += f"WHAT YOU KNOW FROM EARLIER CHATS IN THIS PROJECT:\n{memory}\n\n"
         prompt = (
             f"{preamble}"
             f"{_format_conversation(history)}"
@@ -201,12 +204,14 @@ class Researcher:
         conversation_id: str = "",
         instructions: str = "",
         profile: str = "",
+        memory: str = "",
     ) -> Research:
         result = self.research(
             query,
             conversation_id=conversation_id,
             instructions=instructions,
             profile=profile,
+            memory=memory,
         )
         topic, key_facts = self._assign_topic(result)
         self._store.add(
