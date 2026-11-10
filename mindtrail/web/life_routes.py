@@ -462,6 +462,16 @@ def _journey_setup(deps, args, body, query):
     return journey_api.handle_setup(deps.journey, deps.projects, body)
 
 
+@route("POST", "/api/journey/select")
+def _journey_select(deps, args, body, query):
+    return journey_api.handle_select(deps.journey, deps.projects, body)
+
+
+@route("PATCH", "/api/journey")
+def _journey_update(deps, args, body, query):
+    return journey_api.handle_update(deps.journey, deps.projects, body)
+
+
 @route("POST", "/api/journey/tracks")
 def _journey_create_track(deps, args, body, query):
     return journey_api.handle_create_track(deps.journey, body)
@@ -487,6 +497,26 @@ def _journey_add_step(deps, args, body, query):
     return journey_api.handle_add_step(deps.journey, body)
 
 
+@route("POST", f"/api/journey/steps/{_ID}/calendar")
+def _journey_step_calendar(deps, args, body, query):
+    return journey_api.handle_step_to_calendar(deps.journey, args[0], body)
+
+
+@route("POST", "/api/capture")
+def _capture(deps, args, body, query):
+    return journey_api.handle_capture(deps.journey, body)
+
+
+@route("GET", "/api/google/status")
+def _google_status(deps, args, body, query):
+    return deps.google.status()
+
+
+@route("POST", "/api/google/connect")
+def _google_connect(deps, args, body, query):
+    return deps.google.start()
+
+
 @route("POST", f"/api/journey/steps/{_ID}/move")
 def _journey_move_step(deps, args, body, query):
     return journey_api.handle_move_step(deps.journey, args[0], body)
@@ -504,7 +534,28 @@ def _journey_review(deps, args, body, query):
 
 @route("POST", "/api/journey/chat")
 def _journey_chat(deps, args, body, query):
-    return journey_api.handle_chat(deps.journey, deps.llm, deps.profile, body)
+    return journey_api.handle_chat(deps.journey, deps.journey_chats, deps.llm, deps.profile, body)
+
+
+@route("GET", "/api/journey/chats")
+def _journey_chats(deps, args, body, query):
+    return journey_api.handle_chats(deps.journey, deps.journey_chats)
+
+
+@route("GET", f"/api/journey/chats/{_ID}")
+def _journey_get_chat(deps, args, body, query):
+    return journey_api.handle_get_chat(deps.journey, deps.journey_chats, args[0])
+
+
+@route("DELETE", f"/api/journey/chats/{_ID}")
+def _journey_delete_chat(deps, args, body, query):
+    return journey_api.handle_delete_chat(deps.journey, deps.journey_chats, args[0])
+
+
+@route("POST", f"/api/journey/chats/{_ID}/action")
+def _journey_chat_action(deps, args, body, query):
+    return journey_api.handle_chat_action(deps.journey, deps.journey_chats, deps.profile,
+                                          args[0], body)
 
 
 @route("POST", "/api/journey/apply")

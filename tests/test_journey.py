@@ -55,11 +55,64 @@ def test_setup_builds_tracks_and_copies_the_career_roadmap_once(env):
 
     shared, others = journey.tracks(saved["project_id"])
     assert shared is not None and shared.kind == "shared"
-    assert [r.name for r in others] == ["AI/ML", "SWE", "Product Eng", "From career"]
+    assert [r.name for r in others] == ["School", "AI/ML", "SWE", "Product Eng", "From career"]
     assert len(roadmaps.list_for_project(career.id)) == 1  # original untouched
     assert [n.title for n in nodes.for_roadmap(src.id)] == ["Step one"]
+
+
+def test_a_second_journey_opens_and_the_first_stays_selectable(env):
+    journey, projects, *_ = env
+    career = journey.setup(projects, 2025)
+    health = journey.setup(projects, 2025, name="Health", purpose="Run a half marathon", kind="general")
+
+    assert journey.settings()["project_id"] == health["project_id"]
+    _, paths = journey.tracks(health["project_id"])
+    assert [(r.name, r.goal) for r in paths] == [("Main path", "Run a half marathon")]
+    assert [j["project_id"] for j in journey.all()] == [career["project_id"], health["project_id"]]
+
+    journey.select(career["project_id"])
+    assert journey.settings()["kind"] == "career"
     with pytest.raises(ValueError):
-        journey.setup(projects, 2025)
+        journey.select("nope")
+    with pytest.raises(ValueError):
+        journey.setup(projects, 2025, kind="general")  # a non-career journey needs a name
+
+
+def test_a_database_with_one_journey_reads_it_as_the_career_journey(env):
+    journey, projects, *_ = env
+    p = projects.create("CS journey 2025–2029")
+    journey._state.set("journey", {"project_id": p.id, "start_year": 2025})
+
+    assert journey.all() == [{"kind": "career", "purpose": "", "project_id": p.id, "start_year": 2025}]
+    added = journey.setup(projects, 2026, name="Health", kind="general")
+    assert [j["project_id"] for j in journey.all()] == [p.id, added["project_id"]]
+
+
+def test_deleting_the_open_journey_falls_back_to_another(env):
+    journey, projects, *_ = env
+    first = journey.setup(projects, 2025)
+    second = journey.setup(projects, 2025, name="Health", kind="general")
+    projects.delete(second["project_id"])
+    assert journey.settings()["project_id"] == first["project_id"]
+
+
+def test_update_renames_and_changes_purpose(env):
+    journey, projects, *_ = env
+    pid = journey.setup(projects, 2025, name="Health", purpose="old", kind="general")["project_id"]
+    journey.update(projects, pid, name="Fitness", purpose="Bench 225")
+    assert projects.get(pid).name == "Fitness"
+    assert journey.settings()["purpose"] == "Bench 225"
+    with pytest.raises(ValueError):
+        journey.update(projects, pid, name="  ")
+
+
+def test_the_model_sees_what_the_journey_is_for(env):
+    journey, projects, *_ = env
+    saved = journey.setup(projects, 2025, name="Health", purpose="Run a half marathon", kind="general")
+    shared, paths = journey.tracks(saved["project_id"])
+    ctx = journey_ai.build_context(2025, "2026-fall", shared, paths, {}, purpose=saved["purpose"],
+                                   kind="general")
+    assert "Run a half marathon" in ctx.text and "CS degree" not in ctx.text
 
 
 def test_dismissed_suggestions_do_not_come_back_and_accept_applies(env):
@@ -317,3 +370,149 @@ def test_calendar_between_asks_for_the_window_and_drops_cancelled(monkeypatch):
     assert [e.title for e in got] == ["Hackathon"]
     assert seen["params"]["singleEvents"] == "true" and seen["params"]["timeMin"].startswith("2026-10-25")
     assert seen["params"]["timeMax"].startswith("2026-12-24")
+
+
+def test_the_api_lists_journeys_and_switches_between_them(env):
+    journey, projects, *_ = env
+    journey_api.handle_setup(journey, projects, {"start_year": 2025})
+    data = journey_api.handle_setup(journey, projects, {"start_year": 2025, "name": "Health",
+                                                        "purpose": "Sleep 8 hours", "kind": "general"})
+    assert [j["name"] for j in data["journeys"]] == ["CS journey 2025–2029", "Health"]
+    assert data["name"] == "Health" and data["kind"] == "general" and data["purpose"] == "Sleep 8 hours"
+
+    switched = journey_api.handle_select(journey, projects, {"project_id": data["journeys"][0]["project_id"]})
+    assert switched["kind"] == "career"
+    assert "error" in journey_api.handle_select(journey, projects, {"project_id": "nope"})
+    renamed = journey_api.handle_update(journey, projects, {"name": "Career"})
+    assert renamed["name"] == "Career"
+
+
+# --- the assistant's saved chats ------------------------------------------------
+
+
+class ChatLLM:
+    """Proposes adding a step to whichever track id it's told to use."""
+
+    def __init__(self, track_id=""):
+        self.track_id = track_id
+        self.prompts = []
+
+    def complete(self, system, user, max_tokens=800):
+        import json as _json
+
+        from mindtrail.llm import Completion
+
+        self.prompts.append(user)
+        actions = ([{"type": "add_step", "track_id": self.track_id, "title": "Run 5k", "term": ""}]
+                   if self.track_id else [])
+        return Completion(text=_json.dumps({"reply": "Sure.", "actions": actions}), tokens=1, model="stub")
+
+
+def _chat_env(env):
+    from mindtrail.organize.journey_chats import JourneyChatStore
+
+    journey, projects, *_ = env
+    return journey, projects, JourneyChatStore(journey._path)
+
+
+def test_a_first_message_starts_a_named_chat_and_later_ones_see_its_history(env):
+    journey, projects, chats = _chat_env(env)
+    journey.setup(projects, 2025, name="Health", kind="general")
+    llm = ChatLLM()
+
+    first = journey_api.handle_chat(journey, chats, llm, None, {"message": "plan my running"})["chat"]
+    journey_api.handle_chat(journey, chats, llm, None, {"message": "and sleep?", "chat_id": first["id"]})
+
+    saved = chats.get(first["id"])
+    assert saved["title"] == "plan my running"
+    assert [m["role"] for m in saved["messages"]] == ["user", "assistant", "user", "assistant"]
+    assert "plan my running" in llm.prompts[1]
+
+
+def test_each_journey_keeps_its_own_chats(env):
+    journey, projects, chats = _chat_env(env)
+    career = journey.setup(projects, 2025)["project_id"]
+    chat = journey_api.handle_chat(journey, chats, ChatLLM(), None, {"message": "hi"})["chat"]
+    journey.setup(projects, 2025, name="Health", kind="general")
+
+    assert journey_api.handle_chats(journey, chats)["chats"] == []
+    assert "error" in journey_api.handle_get_chat(journey, chats, chat["id"])
+    journey.select(career)
+    assert [c["id"] for c in journey_api.handle_chats(journey, chats)["chats"]] == [chat["id"]]
+
+
+def test_editing_a_proposal_relabels_it_and_a_bad_edit_is_refused(env):
+    journey, projects, chats = _chat_env(env)
+    pid = journey.setup(projects, 2025, name="Health", kind="general")["project_id"]
+    _, paths = journey.tracks(pid)
+    chat = journey_api.handle_chat(journey, chats, ChatLLM(paths[0].id), None, {"message": "add one"})["chat"]
+
+    edited = journey_api.handle_chat_action(journey, chats, None, chat["id"],
+                                            {"message": 1, "action": 0, "fields": {"title": "Run 10k"}})
+    bad = journey_api.handle_chat_action(journey, chats, None, chat["id"],
+                                         {"message": 1, "action": 0, "fields": {"title": ""}})
+    accepted = journey_api.handle_chat_action(journey, chats, None, chat["id"],
+                                              {"message": 1, "action": 0, "resolved": "accepted"})
+
+    action = edited["chat"]["messages"][1]["actions"][0]
+    assert action["title"] == "Run 10k" and "Run 10k" in action["label"]
+    assert "error" in bad
+    assert accepted["chat"]["messages"][1]["actions"][0]["resolved"] == "accepted"
+
+
+def test_the_journey_list_carries_what_its_boxes_show(env):
+    journey, projects, roadmaps, nodes = env
+    pid = journey.setup(projects, 2025, name="Health", purpose="Run a half", kind="general")["project_id"]
+    _, paths = journey.tracks(pid)
+    nodes.add(paths[0].id, "Run 5k", status="done")
+    nodes.add(paths[0].id, "Run 10k", status="accepted")
+    nodes.add(paths[0].id, "Skip", status="rejected")
+
+    box = journey_api.handle_get(journey, projects, TODAY)["journeys"][0]
+
+    assert box["paths"] == ["Main path"] and box["purpose"] == "Run a half"
+    assert (box["steps"], box["done"]) == (2, 1)
+
+
+def test_older_career_journeys_get_a_school_path_once(env):
+    journey, projects, roadmaps, _ = env
+    pid = journey.setup(projects, 2025)["project_id"]
+    school = journey.school_track(pid)
+    roadmaps.delete(school.id)  # as if made before School was a default
+    journey._state.set("journeySchoolAdded", [])
+
+    journey.add_school_paths()
+    added = journey.school_track(pid)
+    roadmaps.delete(added.id)   # the user deletes it
+    journey.add_school_paths()
+
+    assert added is not None
+    assert journey.school_track(pid) is None, "a deleted School path must stay deleted"
+
+
+def test_dropping_a_step_saves_the_terms_new_order(env):
+    journey, projects, roadmaps, nodes = env
+    pid = journey.setup(projects, 2025)["project_id"]
+    track = journey.school_track(pid)
+    a = nodes.add(track.id, "A", term="2026-fall")
+    b = nodes.add(track.id, "B", term="2026-fall")
+    c = nodes.add(track.id, "C", term="2027-winter")
+
+    res = journey_api.handle_move_step(journey, c.id, {"term": "2026-fall", "order": [b.id, c.id, a.id]})
+
+    ordered = sorted((n for n in nodes.for_roadmap(track.id) if n.term == "2026-fall"), key=lambda n: n.position)
+    assert res == {"ok": True}
+    assert [n.title for n in ordered] == ["B", "C", "A"]
+
+
+def test_an_order_naming_another_journeys_step_is_refused(env):
+    journey, projects, roadmaps, nodes = env
+    first = journey.setup(projects, 2025)["project_id"]
+    stranger = nodes.add(journey.school_track(first).id, "Not yours")
+    pid = journey.setup(projects, 2025, name="Health", kind="general")["project_id"]
+    _, paths = journey.tracks(pid)
+    mine = nodes.add(paths[0].id, "Mine")
+
+    res = journey_api.handle_move_step(journey, mine.id, {"term": "2026-fall", "order": [stranger.id, mine.id]})
+
+    assert "error" in res and nodes.get(stranger.id).position == 0

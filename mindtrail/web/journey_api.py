@@ -1,6 +1,7 @@
-"""Handlers for the 4-year journey (organize/journey.py).
+"""Handlers for journeys (organize/journey.py).
 
-`handle_get` returns the whole journey in one response - tracks, steps,
+Every handler works on the open journey. `handle_get` returns the whole
+of it in one response - plus the list of all journeys for the switcher - tracks, steps,
 the year/term grid, reflections, reviews, pending suggestions and what's
 next - so the Timeline re-renders from a single fetch after any change.
 """
@@ -8,10 +9,11 @@ next - so the Timeline re-renders from a single fetch after any change.
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from mindtrail.advice import journey_ai
 from mindtrail.integrations.calendar_events import CalendarEvents
+from mindtrail.integrations.calendar_write import create_event
 from mindtrail.integrations.gemini_takeout import parse_takeout
 from mindtrail.integrations.google_api import GoogleAuthError, GoogleFetchError
 from mindtrail.llm import LLMError
@@ -45,7 +47,8 @@ def _try(fn):
 
 def _step_json(n, track_id: str) -> dict:
     return {"id": n.id, "track_id": track_id, "title": n.title, "detail": n.detail,
-            "status": n.status, "note": n.note, "term": n.term, "due_date": n.due_date}
+            "status": n.status, "note": n.note, "term": n.term, "due_date": n.due_date,
+            "position": n.position}
 
 
 def _track_json(r, steps: list) -> dict:
@@ -108,10 +111,32 @@ def _candidates(projects, roadmaps, nodes) -> list[dict]:
     return out
 
 
+NEXT_PER_BOX = 3
+
+
+def _journeys_json(journey, projects) -> list[dict]:
+    """Every journey with enough to draw its box: paths, and steps done."""
+    out = []
+    for j in journey.all():
+        project = projects.get(j["project_id"])
+        shared, others = journey.tracks(j["project_id"])
+        tracks = [_track_json(r, journey.nodes.for_roadmap(r.id))
+                  for r in ([shared] if shared else []) + others]
+        steps = [n for r in ([shared] if shared else []) + others
+                 for n in journey.nodes.for_roadmap(r.id) if n.status != "rejected"]
+        out.append({"project_id": j["project_id"], "name": project.name if project else "Journey",
+                    "kind": j.get("kind", "career"), "purpose": j.get("purpose", ""),
+                    "start_year": j.get("start_year"),
+                    "paths": [r.name or r.goal for r in others],
+                    "steps": len(steps), "done": sum(n.status == "done" for n in steps),
+                    "next": [n["title"] for n in next_up(tracks, term_of(date.today()))[:NEXT_PER_BOX]]})
+    return out
+
+
 def handle_get(journey, projects, today: date | None = None) -> dict:
     settings = journey.settings()
     if settings is None:
-        return {"setup": False, "start_year": _guess_start_year(today),
+        return {"setup": False, "start_year": _guess_start_year(today), "journeys": [],
                 "candidates": _candidates(projects, journey.roadmaps, journey.nodes)}
     pid, start = settings["project_id"], settings["start_year"]
     now = term_of(today or date.today())
@@ -122,6 +147,9 @@ def handle_get(journey, projects, today: date | None = None) -> dict:
     project = projects.get(pid)
     return {
         "setup": True, "project_id": pid, "name": project.name if project else "Journey",
+        "kind": settings.get("kind", "career"), "purpose": settings.get("purpose", ""),
+        "journeys": _journeys_json(journey, projects),
+        "candidates": _candidates(projects, journey.roadmaps, journey.nodes),
         "start_year": start, "current_term": now, "current_label": term_label(now),
         "current_year": year_of(now, start), "years": _grid(start, now), "tracks": tracks,
         "reflections": journey.reflections(pid),
@@ -136,8 +164,12 @@ def _guess_start_year(today: date | None) -> int:
     return today.year - 1 if today.month < 9 else today.year
 
 
-def _settings(journey) -> dict:
-    settings = journey.settings()
+def _settings(journey, project_id: str = "") -> dict:
+    """The open journey, or a named one (the daily scan works on each)."""
+    if project_id:
+        settings = next((j for j in journey.all() if j["project_id"] == project_id), None)
+    else:
+        settings = journey.settings()
     if settings is None:
         raise ValueError("set up the journey first")
     return settings
@@ -167,7 +199,27 @@ def handle_setup(journey, projects, body: dict) -> dict:
         if not isinstance(ids, list):
             raise ValueError("copy_roadmap_ids must be a list")
         journey.setup(projects, int(body.get("start_year") or _guess_start_year(None)),
-                      [str(i) for i in ids])
+                      [str(i) for i in ids], name=str(body.get("name") or ""),
+                      purpose=str(body.get("purpose") or ""), kind=str(body.get("kind") or "career"))
+        return handle_get(journey, projects)
+    return _try(run)
+
+
+def handle_select(journey, projects, body: dict) -> dict:
+    def run():
+        journey.select(str(body.get("project_id") or ""))
+        return handle_get(journey, projects)
+    return _try(run)
+
+
+def handle_update(journey, projects, body: dict) -> dict:
+    """Rename the open journey or change what it's for."""
+    def run():
+        pid = _settings(journey)["project_id"]
+        name = body.get("name")
+        purpose = body.get("purpose")
+        journey.update(projects, pid, name=None if name is None else str(name),
+                       purpose=None if purpose is None else str(purpose))
         return handle_get(journey, projects)
     return _try(run)
 
@@ -222,10 +274,16 @@ def handle_add_step(journey, body: dict) -> dict:
 
 
 def handle_move_step(journey, node_id: str, body: dict) -> dict:
-    """Change a step's term and, optionally, its track."""
+    """Change a step's term and, optionally, its track. `order`, if given,
+    is the term's step ids top to bottom after the drop."""
     def run():
         node = _own_step(journey, node_id)
+        order = [str(i) for i in body.get("order") or []]
+        for nid in order:
+            _own_step(journey, nid)
         journey.nodes.set_term(node_id, str(body.get("term", "")))
+        for index, nid in enumerate(order):
+            journey.nodes.set_position(nid, index)
         target = str(body.get("track_id") or node.roadmap_id)
         if target != node.roadmap_id:
             _own_track(journey, target)
@@ -254,12 +312,14 @@ def handle_set_reflection(journey, body: dict) -> dict:
     return _try(run)
 
 
-def _context(journey, profile, today: date | None = None):
-    settings = _settings(journey)
+def _context(journey, profile, today: date | None = None, project_id: str = ""):
+    settings = _settings(journey, project_id)
     shared, others = journey.tracks(settings["project_id"])
     steps = {r.id: journey.nodes.for_roadmap(r.id) for r in ([shared] if shared else []) + others}
     return journey_ai.build_context(settings["start_year"], term_of(today or date.today()),
-                                    shared, others, steps, profile.get().content if profile else "")
+                                    shared, others, steps, profile.get().content if profile else "",
+                                    purpose=settings.get("purpose", ""),
+                                    kind=settings.get("kind", "career"))
 
 
 def handle_review(journey, projects, llm, profile, body: dict, today: date | None = None) -> dict:
@@ -291,12 +351,69 @@ def handle_review(journey, projects, llm, profile, body: dict, today: date | Non
 # --- chat ---------------------------------------------------------------------
 
 
-def handle_chat(journey, llm, profile, body: dict) -> dict:
+def _own_chat(journey, chats, chat_id: str) -> dict:
+    """A chat that belongs to the open journey."""
+    chat = chats.get(chat_id)
+    if chat is None or chat["project_id"] != _settings(journey)["project_id"]:
+        raise ValueError("no such chat")
+    return chat
+
+
+def handle_chats(journey, chats) -> dict:
+    return _try(lambda: {"chats": chats.list(_settings(journey)["project_id"])})
+
+
+def handle_get_chat(journey, chats, chat_id: str) -> dict:
+    return _try(lambda: {"chat": _own_chat(journey, chats, chat_id)})
+
+
+def handle_delete_chat(journey, chats, chat_id: str) -> dict:
     def run():
-        ctx = _context(journey, profile)
-        history = body.get("history") if isinstance(body.get("history"), list) else []
-        reply, actions = journey_ai.journey_chat(llm, ctx, history, str(body.get("message", "")))
-        return {"reply": reply, "actions": [asdict(a) for a in actions]}
+        _own_chat(journey, chats, chat_id)
+        chats.delete(chat_id)
+        return {"ok": True}
+    return _try(run)
+
+
+def handle_chat(journey, chats, llm, profile, body: dict) -> dict:
+    """One turn with the journey assistant, saved to a chat. With no
+    chat_id a new chat is started; the history always comes from the
+    saved chat, never the client."""
+    def run():
+        message = str(body.get("message", "")).strip()
+        if not message:
+            raise ValueError("message was empty")
+        pid = _settings(journey)["project_id"]
+        chat_id = str(body.get("chat_id", ""))
+        chat = _own_chat(journey, chats, chat_id) if chat_id else chats.create(pid)
+        history = [{"role": m["role"], "content": m["content"]} for m in chat["messages"]]
+        reply, actions = journey_ai.journey_chat(llm, _context(journey, profile), history, message)
+        saved = chats.append_turn(chat["id"], message, reply, [asdict(a) for a in actions])
+        return {"chat": saved}
+    return _try(run)
+
+
+EDITABLE_FIELDS = ("title", "detail", "note", "name")
+
+
+def handle_chat_action(journey, chats, profile, chat_id: str, body: dict) -> dict:
+    """Resolve a proposal (accepted/rejected) or save an edit to it. An
+    edit is re-checked and re-labelled the same way the model's own
+    proposals are."""
+    def run():
+        chat = _own_chat(journey, chats, chat_id)
+        mi, ai = int(body.get("message", -1)), int(body.get("action", -1))
+        fields = {k: str(v) for k, v in (body.get("fields") or {}).items() if k in EDITABLE_FIELDS}
+        if fields:
+            try:
+                current = chat["messages"][mi]["actions"][ai]
+            except (IndexError, KeyError, TypeError):
+                raise ValueError("no such proposal") from None
+            revised = journey_ai.revise_action({**current, **fields}, _context(journey, profile))
+            if revised is None:
+                raise ValueError("that edit doesn't make a valid change")
+            fields = asdict(revised)
+        return {"chat": chats.update_action(chat_id, mi, ai, str(body.get("resolved", "")), fields)}
     return _try(run)
 
 
@@ -360,11 +477,11 @@ def handle_dismiss(journey, suggestion_id: str) -> dict:
     return _try(lambda: journey.dismiss_suggestion(suggestion_id) or {"ok": True})
 
 
-def _queue(journey, profile, llm, source: str, items: list[str]) -> dict:
-    pid = _settings(journey)["project_id"]
+def _queue(journey, profile, llm, source: str, items: list[str], project_id: str = "") -> dict:
+    pid = _settings(journey, project_id)["project_id"]
     if not items:
         return {"added": 0, "looked_at": 0}
-    found = journey_ai.find_evidence(llm, _context(journey, profile), source, items)
+    found = journey_ai.find_evidence(llm, _context(journey, profile, project_id=pid), source, items)
     added = 0
     for s in found:
         if journey.add_suggestion(pid, source, s["kind"], s["title"], s["detail"], s["term"],
@@ -407,9 +524,9 @@ def handle_scan_mindtrail(journey, profile, llm, deps_like) -> dict:
     return _try(run)
 
 
-def handle_scan_gmail(journey, profile, llm, gmail) -> dict:
+def handle_scan_gmail(journey, profile, llm, gmail, project_id: str = "") -> dict:
     def run():
-        _settings(journey)
+        _settings(journey, project_id)
         since = (date.today() - timedelta(days=GMAIL_DAYS)).strftime("%Y/%m/%d")
         try:
             ids = gmail.search_ids(f"{GMAIL_QUERY} after:{since}", limit=GMAIL_LIMIT)
@@ -420,14 +537,15 @@ def handle_scan_gmail(journey, profile, llm, gmail) -> dict:
             return {"error": f"couldn't reach Gmail: {exc}"}
         items = [f"{m.received_at[:10]}: email from {m.sender}: {m.subject} - {m.body[:300]}"
                  for m in messages]
-        return _queue(journey, profile, llm, "gmail", items)
+        return _queue(journey, profile, llm, "gmail", items, project_id)
     return _try(run)
 
 
-def handle_scan_calendar(journey, profile, llm, events: CalendarEvents, today: date | None = None) -> dict:
+def handle_scan_calendar(journey, profile, llm, events: CalendarEvents, today: date | None = None,
+                         project_id: str = "") -> dict:
     """Upcoming events become suggested steps; nothing is marked done."""
     def run():
-        _settings(journey)
+        _settings(journey, project_id)
         start = today or date.today()
         try:
             found = events.between(start, start + timedelta(days=CALENDAR_DAYS))
@@ -436,7 +554,45 @@ def handle_scan_calendar(journey, profile, llm, events: CalendarEvents, today: d
         except GoogleFetchError as exc:
             return {"error": f"couldn't reach Calendar: {exc}"}
         items = [f"{e.date}: {e.title}" + (" (all day)" if e.all_day else "") for e in found]
-        return _queue(journey, profile, llm, "calendar", items)
+        return _queue(journey, profile, llm, "calendar", items, project_id)
+    return _try(run)
+
+
+CANVAS_DAYS = 30
+
+
+def canvas_to_school(journey, canvas, project_id: str, today: date | None = None) -> dict:
+    """Upcoming Canvas assignments become suggested steps on a journey's
+    School path, in the term they're due. No model call - a deadline is
+    a fact; the suggestion is there so you choose what goes on the plan."""
+    school = journey.school_track(project_id)
+    if school is None:
+        return {"added": 0}
+    added = 0
+    for e in canvas.upcoming(today or date.today(), CANVAS_DAYS):
+        due = date.fromisoformat(e["due"])
+        if journey.add_suggestion(project_id, "canvas", "add_step", e["title"], e.get("url", ""),
+                                  term_of(due), school.id, reason=f"Due {due:%b} {due.day}"):
+            added += 1
+    return {"added": added}
+
+
+def handle_step_to_calendar(journey, node_id: str, body: dict, create=create_event) -> dict:
+    """Put one step on Google Calendar as a time block."""
+    def run():
+        node = _own_step(journey, node_id)
+        try:
+            start = datetime.fromisoformat(f"{body.get('date', '')}T{body.get('time', '')}").astimezone()
+        except ValueError:
+            raise ValueError("pick a day and a start time") from None
+        try:
+            link = create(node.title, node.detail or "", start,
+                                            int(body.get("minutes") or 60))
+        except GoogleAuthError as exc:
+            return {"error": str(exc)}
+        except GoogleFetchError as exc:
+            return {"error": f"couldn't reach Calendar: {exc}"}
+        return {"ok": True, "link": link}
     return _try(run)
 
 
@@ -477,3 +633,21 @@ def handle_today(journey, projects, today: date | None = None) -> dict:
     return {"setup": True, "label": data["current_label"], "year": data["current_year"],
             "done": sum(1 for s in in_term if s["status"] == "done"), "total": len(in_term),
             "next": data["next_up"][:1], "pending": len(data["suggestions"])}
+
+
+CAPTURE_MAX = 2000
+
+
+def handle_capture(journey, body: dict) -> dict:
+    """A note or link sent from your phone, queued as a suggestion on the
+    journey you picked. The first line is the step; the rest its detail."""
+    def run():
+        text = str(body.get("text", "")).strip()[:CAPTURE_MAX]
+        if not text:
+            raise ValueError("write something first")
+        pid = _settings(journey, str(body.get("project_id", "")))["project_id"]
+        title, _, rest = text.partition("\n")
+        s = journey.add_suggestion(pid, "phone", "add_step", title.strip(), rest.strip(),
+                                   reason="Sent from your phone")
+        return {"ok": True, "duplicate": s is None}
+    return _try(run)
