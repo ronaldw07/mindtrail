@@ -53,7 +53,8 @@
   // fit) its own viewport.
   let roadmapView = {zoom: 1, panX: 0, panY: 0};
   const MIN_ZOOM = 0.2, MAX_ZOOM = 2;
-  const openProjects = new Set(prefs.get('openProjects', []));
+  // Projects whose chats are folded away in the sidebar; the rest show them.
+  const closedProjects = new Set(prefs.get('closedProjects', []));
 
   // A small fixed set rather than a free-form number input - "every 9
   // days" isn't a habit anyone actually wants, and a short list is
@@ -444,6 +445,8 @@
   // A handful of varying widths so a stack of skeleton bars reads as
   // text of different lengths rather than a uniform, obviously-fake block.
   const SKELETON_WIDTHS = ['92%', '68%', '85%', '55%', '78%'];
+  // Loads faster than this swap straight in; a placeholder would only flash.
+  const SKELETON_DELAY_MS = 150;
 
   function skeletonBlock(lines) {
     const wrap = document.createElement('div');

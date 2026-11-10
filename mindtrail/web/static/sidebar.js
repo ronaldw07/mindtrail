@@ -21,29 +21,62 @@
     ]);
   }
 
-  function sectionRow(label, opts) {
+  const CHEVRON_SVG = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  const FOLDER_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+  // Chats listed under each project; the rest sit behind "View all".
+  const PROJECT_PREVIEW_CHATS = 3;
+
+  // A titled section of the tree: a header that folds its body, with an
+  // optional + button. Folding toggles a class in place rather than
+  // rebuilding the tree, so the chevron can turn instead of jumping.
+  function treeSection(label, open, onToggle, opts) {
+    const sec = document.createElement('div');
+    sec.className = 'tree-sec' + (open ? '' : ' collapsed');
     const row = document.createElement('div');
-    row.className = 'section' + (opts.onClick ? ' clickable' : '');
-    if (opts.caret) {
-      const c = document.createElement('span');
-      c.className = 'sec-caret';
-      c.textContent = opts.open ? '\u25be' : '\u25b8';
-      row.appendChild(c);
-    }
+    row.className = 'section clickable';
     const l = document.createElement('span');
     l.className = 'label';
     l.textContent = label;
     row.appendChild(l);
+    const chev = document.createElement('span');
+    chev.className = 'sec-chevron';
+    chev.innerHTML = CHEVRON_SVG;
+    row.appendChild(chev);
     if (opts.onAdd) {
       const b = document.createElement('button');
       b.className = 'add';
       b.textContent = '+';
       b.title = opts.addTitle || 'Add';
+      b.setAttribute('aria-label', opts.addTitle || 'Add');
       b.onclick = e => { e.stopPropagation(); opts.onAdd(); };
       row.appendChild(b);
     }
-    if (opts.onClick) makeClickable(row, opts.onClick);
-    return row;
+    makeClickable(row, () => {
+      const nowOpen = sec.classList.toggle('collapsed') === false;
+      row.setAttribute('aria-expanded', String(nowOpen));
+      onToggle(nowOpen);
+    });
+    row.setAttribute('aria-expanded', String(open));
+    const body = document.createElement('div');
+    body.className = 'tree-body';
+    sec.appendChild(row);
+    sec.appendChild(body);
+    return {sec, body};
+  }
+
+  // Lights up the row for whatever is on screen. Called on every view
+  // change rather than rebuilding the tree, which would reset hover.
+  function syncTreeActive() {
+    const tree = $('tree');
+    if (!tree) return;
+    const onProject = ['project', 'roadmap'].includes(activeView);
+    tree.querySelectorAll('[data-project]').forEach(el =>
+      el.classList.toggle('active', onProject && el.dataset.project === currentProject));
+    tree.querySelectorAll('[data-chat]').forEach(el =>
+      el.classList.toggle('active', activeView === 'chat' && !!current && el.dataset.chat === current.id));
   }
 
   // Every clickable row in the app is a plain div with an onclick and no
@@ -63,8 +96,8 @@
 
   function chatRow(c) {
     const row = document.createElement('div');
-    row.className = 'chat' + (c.unread ? ' unread' : '') +
-                    (current && current.id === c.id ? ' active' : '');
+    row.className = 'chat' + (c.unread ? ' unread' : '');
+    row.dataset.chat = c.id;
     if (c.unread) {
       const d = document.createElement('div'); d.className = 'dot';
       row.appendChild(d);
@@ -90,96 +123,96 @@
     btn.onclick = e => { e.stopPropagation(); openChatMenu(e, c); };
     row.appendChild(btn);
     makeClickable(row, () => openConversation(c.id));
+    onRightClick(row, e => openChatMenu(e, c));
     return row;
   }
 
   function renderTree() {
-    // Every toggle of these three (section open/closed, which projects
-    // are expanded) re-renders the tree, so persisting here in one place
-    // catches every mutation path instead of threading a prefs.set into
-    // each individual click handler.
-    prefs.set('projectsOpen', projectsOpen);
-    prefs.set('chatsOpen', chatsOpen);
-    prefs.set('openProjects', Array.from(openProjects));
     const tree = $('tree');
-    tree.innerHTML = '';
+    tree.replaceChildren();
 
-    // Projects: click the header to open the section, then + to add one.
-    tree.appendChild(sectionRow('Projects', {
-      caret: true,
-      open: projectsOpen,
-      onAdd: projectsOpen ? createProject : null,
-      addTitle: 'New project',
-      onClick: () => { projectsOpen = !projectsOpen; renderTree(); }
-    }));
-
-    if (projectsOpen) {
-      if (!sidebar.projects.length) {
-        const hint = document.createElement('div');
-        hint.className = 'empty-hint';
-        hint.textContent = 'No projects yet \u2014 use + to add one.';
-        tree.appendChild(hint);
-      }
-      sidebar.projects.forEach(p => {
-        const wrap = document.createElement('div');
-        wrap.className = 'project';
-        const expanded = openProjects.has(p.id);
-
-        const head = document.createElement('div');
-        head.className = 'project-head';
-        const caret = document.createElement('span');
-        caret.className = 'caret';
-        caret.textContent = expanded ? '\u25be' : '\u25b8';
-        head.appendChild(caret);
-        const dot = areaDot(p.area_id);
-        if (dot) head.appendChild(dot);
-        const name = document.createElement('span');
-        name.style.flex = '1';
-        name.textContent = p.name;
-        // Clicking the name opens the project screen; the caret to its
-        // left is what expands the chat list inline.
-        makeClickable(name, e => { e.stopPropagation(); openProject(p.id); });
-        head.appendChild(name);
-        const btn = document.createElement('button');
-        btn.className = 'menu-btn';
-        btn.textContent = '\u22ef';
-        btn.title = 'Project options';
-        btn.setAttribute('aria-label', 'Project options');
-        btn.onclick = e => { e.stopPropagation(); openProjectMenu(e, p); };
-        head.appendChild(btn);
-        makeClickable(head, () => {
-          expanded ? openProjects.delete(p.id) : openProjects.add(p.id);
-          renderTree();
-        });
-        wrap.appendChild(head);
-
-        if (expanded) {
-          const kids = document.createElement('div');
-          kids.className = 'nested';
-          if (!p.conversations.length) {
-            const empty = document.createElement('div');
-            empty.className = 'empty-hint';
-            empty.textContent = 'Empty \u2014 move a chat here.';
-            kids.appendChild(empty);
-          }
-          p.conversations.forEach(c => kids.appendChild(chatRow(c)));
-          wrap.appendChild(kids);
-        }
-        tree.appendChild(wrap);
-      });
+    const projects = treeSection('Projects', projectsOpen, open => {
+      projectsOpen = open;
+      prefs.set('projectsOpen', open);
+    }, {onAdd: createProject, addTitle: 'New project'});
+    if (!sidebar.projects.length) {
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = 'No projects yet \u2014 use + to add one.';
+      projects.body.appendChild(hint);
     }
+    sidebar.projects.forEach(p => projects.body.appendChild(projectRow(p)));
+    tree.appendChild(projects.sec);
 
-    // Chats: click the header to minimize the list, + starts a new one.
-    tree.appendChild(sectionRow('Chats', {
-      caret: true,
-      open: chatsOpen,
-      onAdd: newChat,
-      addTitle: 'New chat',
-      onClick: () => { chatsOpen = !chatsOpen; renderTree(); }
-    }));
-    if (chatsOpen) {
-      sidebar.unfiled.forEach(c => tree.appendChild(chatRow(c)));
+    const chats = treeSection('Chats', chatsOpen, open => {
+      chatsOpen = open;
+      prefs.set('chatsOpen', open);
+    }, {onAdd: newChat, addTitle: 'New chat'});
+    sidebar.unfiled.forEach(c => chats.body.appendChild(chatRow(c)));
+    tree.appendChild(chats.sec);
+    syncTreeActive();
+  }
+
+  // A project with its newest chats under it. The folder icon turns into
+  // a chevron on hover and folds the chats; the name opens the project.
+  function projectRow(p) {
+    const wrap = document.createElement('div');
+    wrap.className = 'project' + (closedProjects.has(p.id) ? ' collapsed' : '');
+
+    const head = document.createElement('div');
+    head.className = 'project-head';
+    head.dataset.project = p.id;
+    const toggle = document.createElement('button');
+    toggle.className = 'project-toggle';
+    toggle.innerHTML = '<span class="pt-folder">' + FOLDER_SVG + '</span>' +
+                       '<span class="pt-chevron">' + CHEVRON_SVG + '</span>';
+    const area = areaById(p.area_id);
+    if (area) toggle.style.color = area.color;
+    const syncToggle = () => {
+      const open = !closedProjects.has(p.id);
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-label', (open ? 'Hide' : 'Show') + ' chats in ' + p.name);
+    };
+    syncToggle();
+    toggle.onclick = e => {
+      e.stopPropagation();
+      closedProjects.has(p.id) ? closedProjects.delete(p.id) : closedProjects.add(p.id);
+      prefs.set('closedProjects', Array.from(closedProjects));
+      wrap.classList.toggle('collapsed', closedProjects.has(p.id));
+      syncToggle();
+    };
+    head.appendChild(toggle);
+    const name = document.createElement('span');
+    name.className = 'project-name';
+    name.textContent = p.name;
+    head.appendChild(name);
+    const btn = document.createElement('button');
+    btn.className = 'menu-btn';
+    btn.textContent = '\u22ef';
+    btn.title = 'Project options';
+    btn.setAttribute('aria-label', 'Project options');
+    btn.onclick = e => { e.stopPropagation(); openProjectMenu(e, p); };
+    head.appendChild(btn);
+    makeClickable(head, () => openProject(p.id));
+    onRightClick(head, e => openProjectMenu(e, p));
+    wrap.appendChild(head);
+
+    const kids = document.createElement('div');
+    kids.className = 'nested';
+    const shown = p.conversations.slice(0, PROJECT_PREVIEW_CHATS);
+    // The chat you're in stays visible even when it's older than the preview.
+    const open = current && p.conversations.find(c => c.id === current.id);
+    if (open && !shown.includes(open)) shown.push(open);
+    shown.forEach(c => kids.appendChild(chatRow(c)));
+    if (p.conversations.length > shown.length) {
+      const all = document.createElement('div');
+      all.className = 'view-all';
+      all.textContent = 'View all';
+      makeClickable(all, () => openProject(p.id));
+      kids.appendChild(all);
     }
+    wrap.appendChild(kids);
+    return wrap;
   }
 
   async function createProject() {
@@ -188,7 +221,8 @@
     const res = await jsonSend('/api/projects', {name});
     if (res.error) { toast(res.error, {error: true}); return; }
     projectsOpen = true;
-    openProjects.add(res.id);
+    prefs.set('projectsOpen', true);
+    closedProjects.delete(res.id);
     await loadSidebar();
     toast('Created project "' + res.name + '"');
   }
@@ -258,7 +292,7 @@
       items.push({label: 'Move to ' + p.name, run: async () => {
         const previous = c.project_id;
         await jsonSend('/api/conversations/' + c.id, {project_id: p.id}, 'PATCH');
-        projectsOpen = true; openProjects.add(p.id);
+        projectsOpen = true; prefs.set('projectsOpen', true); closedProjects.delete(p.id);
         if (current && current.id === c.id) { current.project_id = p.id; }
         await refreshViews();
         setBreadcrumb();
@@ -334,7 +368,7 @@
           'Delete project');
         if (!ok) return;
         await api('/api/projects/' + p.id, {method: 'DELETE'});
-        openProjects.delete(p.id);
+        closedProjects.delete(p.id);
         if (currentProject === p.id) newChat();
         await loadSidebar();
         setBreadcrumb();

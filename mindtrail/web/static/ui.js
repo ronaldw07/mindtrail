@@ -202,6 +202,7 @@
   async function loadBadges() {
     const counts = await api('/api/badges');
     if (!counts || counts.error) return;
+    counts.career = (counts.jobs || 0) + (counts.practice || 0);
     document.querySelectorAll('.side-badge').forEach(b => {
       const n = counts[b.dataset.badge] || 0;
       b.hidden = n === 0;
@@ -210,6 +211,19 @@
   }
 
   // A menu that grows out of the button that opened it.
+  // Right-clicking an object opens its own menu (edit, delete...) instead
+  // of the browser's. Text fields keep the browser menu for copy and paste,
+  // and the innermost object wins when they nest (a step inside a term).
+  function onRightClick(el, open) {
+    el.addEventListener('contextmenu', e => {
+      if (e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      open(e);
+    });
+    return el;
+  }
+
   function showMenuFrom(button, items) {
     const r = button.getBoundingClientRect();
     showMenu({clientX: r.right - 190, clientY: r.bottom + 6}, items);

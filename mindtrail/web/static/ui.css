@@ -22,15 +22,10 @@ main { background: var(--bg); border-radius: 14px; overflow: hidden;
 .side-btn { display: flex; align-items: center; gap: 0.55rem; width: calc(100% - 1rem);
             margin: 0 0.5rem 1px; padding: 0.32rem 0.5rem; border-radius: var(--r);
             font-size: var(--fs-md); font-weight: 450; color: var(--text); }
-.side-btn:hover { background: var(--surface-hover); color: var(--text); }
-.side-btn.active { background: var(--accent); color: var(--on-accent); }
-.side-btn.active .side-badge { background: color-mix(in srgb, var(--on-accent) 28%, transparent);
-                               color: var(--on-accent); }
 .side-icon { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
              background: var(--tile, var(--text-muted)); color: #fff; flex-shrink: 0;
              box-shadow: 0 0.5px 1px rgba(0,0,0,0.25); }
 .side-icon.plain { background: transparent; color: var(--text-2); box-shadow: none; }
-.side-btn.active .side-icon.plain { color: var(--on-accent); }
 .side-icon svg { display: block; }
 .side-label { flex: 1; text-align: left; }
 .side-badge { min-width: 1.35rem; padding: 0 0.4rem; height: 1.25rem; line-height: 1.25rem;
@@ -38,6 +33,53 @@ main { background: var(--bg); border-radius: 14px; overflow: hidden;
               font-size: var(--fs-xs); font-weight: 600; text-align: center;
               font-variant-numeric: tabular-nums; }
 .side-badge[hidden] { display: none; }
+/* Every sidebar row shares one highlight scale, like a native source list:
+   a soft fill on hover, a brighter one for the page you're on, and
+   brighter still when hovering that page. Mixed from the text color so
+   the same three steps read right in both themes (tokens in app.css). */
+.side-btn.active, .project-head.active, .chat.active { background: var(--row-active); color: var(--text-bright); }
+
+/* Section headers: sentence case like the rest of the sidebar, with a
+   chevron that shows on hover and stays visible while folded. */
+#tree .section { text-transform: none; letter-spacing: 0.01em; font-weight: 600; color: var(--text-muted);
+                 padding: 0.7rem 0.35rem 0.25rem 0.35rem; }
+.sec-chevron { display: inline-flex; opacity: 0; color: var(--text-muted);
+               transition: opacity 0.12s ease, transform 150ms var(--ease-out); }
+.tree-sec.collapsed .sec-chevron { opacity: 1; transform: rotate(-90deg); }
+.tree-sec.collapsed .tree-body { display: none; }
+#tree .section .label { flex: 0 1 auto; }
+#tree .section .add { margin-left: auto; }
+
+/* A project's folder icon swaps for a down chevron on hover; clicking it folds or unfolds its chats. */
+.project-toggle { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; flex-shrink: 0;
+                  border: none; background: transparent; color: var(--text-2); cursor: pointer;
+                  border-radius: var(--r-sm); }
+.project-toggle > span { grid-area: 1 / 1; display: inline-flex; transition: opacity 0.12s ease; }
+.pt-chevron { opacity: 0; color: var(--text-muted); }
+.project.collapsed .nested { display: none; }
+.project-head { gap: 0.5rem; }
+.project-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A hairline from under the folder icon down the project's chats, so it
+   reads which chats belong to it. Centred on the 18px icon. */
+#tree .nested { margin-left: calc(0.6rem + 9px); padding-left: calc(0.35rem - 1px);
+                border-left: 1px solid color-mix(in srgb, var(--text) 14%, transparent); }
+.view-all { padding: 0.3rem 0.6rem; border-radius: var(--r); font-size: var(--fs-sm); color: var(--text-muted);
+            cursor: pointer; transition: background-color 0.12s ease, color 0.12s ease; }
+
+@media (hover: hover) and (pointer: fine) {
+  .side-btn:hover, .project-head:hover, .chat:hover, .view-all:hover { background: var(--row-hover); color: var(--text-bright); }
+  .side-btn.active:hover, .project-head.active:hover, .chat.active:hover { background: var(--row-active-hover); }
+  #tree .section:hover .sec-chevron { opacity: 1; }
+  .project-head:hover .pt-folder { opacity: 0; }
+  .project-head:hover .pt-chevron { opacity: 1; }
+  #tree .section .add { opacity: 0; transition: opacity 0.12s ease, background-color 0.12s ease; }
+  #tree .section:hover .add, #tree .section .add:focus-visible { opacity: 1; }
+}
+/* Folding from the keyboard lands instantly; reduced motion keeps the fade, drops the turn. */
+:root[data-input="keyboard"] .sec-chevron { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sec-chevron { transition: opacity 0.12s ease; }
+}
 #side-foot { padding: 0.35rem 0 0.45rem; border-top: 0.5px solid var(--border-subtle); }
 #side-foot .side-btn { margin-bottom: 0; }
 #search-input { background: var(--surface-active); border-color: transparent; border-radius: 9px; }

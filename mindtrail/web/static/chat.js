@@ -126,6 +126,7 @@
     currentProject = null;
     pendingProject = null;
     current = data.conversation;
+    syncTreeActive();
     log.innerHTML = '';
     data.entries.forEach(e => {
       const t = turn();
