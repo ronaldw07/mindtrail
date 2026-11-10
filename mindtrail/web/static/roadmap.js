@@ -949,6 +949,7 @@
       more.setAttribute('aria-label', 'More actions for this step');
       more.onclick = ev => { ev.stopPropagation(); showMenu(ev, nodeMenuItems(n)); };
       el.appendChild(more);
+      onRightClick(el, ev => showMenu(ev, nodeMenuItems(n)));
 
       // Drag from here to draw a dependency onto another node - anchored
       // at the same point edgeAnchor(n, 'out') already draws edges from,

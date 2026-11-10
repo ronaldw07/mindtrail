@@ -88,6 +88,7 @@
             paint(await api('/api/measure'));
           };
           row.appendChild(del);
+          onRightClick(row, e => showMenu(e, [{label: 'Remove', danger: true, run: () => del.click()}]));
           list.appendChild(row);
         });
         body.appendChild(list);

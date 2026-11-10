@@ -91,6 +91,15 @@
       storiesSelectedId = storiesSelectedId === s.id ? null : s.id;
       renderStoriesView();
     });
+    onRightClick(row, e => showMenu(e, [
+      {label: 'Edit…', run: () => { storiesSelectedId = s.id; renderStoriesView(); }},
+      {divider: true},
+      {label: 'Delete', danger: true, run: () => {
+        storiesSelectedId = null;
+        renderStoriesView().then(() => softDelete({key: 'story:' + s.id, label: 'Story',
+          remove: () => api('/api/stories/' + s.id, {method: 'DELETE'}), rerender: renderStoriesView}));
+      }},
+    ]));
     return row;
   }
 

@@ -86,6 +86,12 @@
       row.appendChild(color);
       row.appendChild(name);
       row.appendChild(del);
+      onRightClick(row, e => showMenu(e, [
+        {label: 'Rename', run: () => { name.focus(); name.select(); }},
+        {label: 'Change color', run: () => color.click()},
+        {divider: true},
+        {label: 'Delete area…', danger: true, run: () => del.click()},
+      ]));
       c.appendChild(row);
     });
     return c;
@@ -232,6 +238,7 @@
     c.appendChild(head);
     c.appendChild(habitWeekStrip(h, data));
     c.appendChild(habitHeatmap(h, data));
+    onRightClick(c, e => openHabitMenu(e, h));
     return c;
   }
 

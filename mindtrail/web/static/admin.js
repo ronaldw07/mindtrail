@@ -108,6 +108,7 @@
     more.setAttribute('aria-label', 'Options for ' + p.name);
     more.onclick = e => openPersonMenu(e, p, applications);
     row.appendChild(more);
+    onRightClick(row, e => openPersonMenu(e, p, applications));
     return row;
   }
 

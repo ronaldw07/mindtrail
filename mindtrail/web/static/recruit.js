@@ -44,6 +44,7 @@
       top.appendChild(date);
       top.appendChild(del);
       card.appendChild(top);
+      onRightClick(card, e => showMenu(e, [{label: 'Delete round', danger: true, run: () => del.click()}]));
       const who = el('input', 'job-field-input');
       who.value = r.interviewer;
       who.placeholder = 'Interviewer';
