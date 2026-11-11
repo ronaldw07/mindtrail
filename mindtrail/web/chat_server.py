@@ -52,6 +52,7 @@ from mindtrail.organize.profile import ProfileStore
 from mindtrail.organize.tasks import TaskStore
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
+from mindtrail.organize.today_marks import TodayMarks
 from mindtrail.organize.trash import NodeTrash, Trash
 from mindtrail.web import api, auth, life_routes
 from mindtrail.web.auth import AuthState
@@ -95,6 +96,8 @@ STATIC_FILES = {
     "/static/project_parts.js": ("project_parts.js", "application/javascript; charset=utf-8"),
     "/static/journey_home.js": ("journey_home.js", "application/javascript; charset=utf-8"),
     "/static/journey_dock.js": ("journey_dock.js", "application/javascript; charset=utf-8"),
+    "/static/journey_step.js": ("journey_step.js", "application/javascript; charset=utf-8"),
+    "/static/journey_map.js": ("journey_map.js", "application/javascript; charset=utf-8"),
     "/static/journey_panel.js": ("journey_panel.js", "application/javascript; charset=utf-8"),
     "/static/focus.js": ("focus.js", "application/javascript; charset=utf-8"),
     "/static/review.js": ("review.js", "application/javascript; charset=utf-8"),
@@ -169,15 +172,18 @@ class Deps:
         self.backups = BackupStore(db_path, self.state)
         self.journey = JourneyStore(db_path, self.state, self.roadmaps, self.roadmap_nodes)
         self.journey_chats = JourneyChatStore(db_path)
+        self.home_chats = JourneyChatStore(db_path, table="home_chats")
         self.google = GoogleConnector()
         self.journey.add_school_paths()
         self.timelog = TimeLogStore(db_path)
         self.calendar_events = CalendarEvents()
         self.sheets = SheetsClient()
         self.email_log = EmailLog(db_path)
+        self.today_marks = TodayMarks(db_path)
         self.job_emails = self.email_log.for_application
+        self.gmail = GmailClient()
         self.scanner = JobScanner(
-            self.jobs, self.tasks, self.email_log, self.state, llm, GmailClient()
+            self.jobs, self.tasks, self.email_log, self.state, llm, self.gmail
         )
 
 
@@ -676,6 +682,13 @@ def make_handler(deps: Deps, auth_state: AuthState) -> type[BaseHTTPRequestHandl
     return ChatHandler
 
 
+class _Server(ThreadingHTTPServer):
+    # The default backlog of 5 drops connections when a page load fires its
+    # ~40 script and API requests at once, which shows up as "Failed to fetch".
+    request_queue_size = 128
+    daemon_threads = True
+
+
 def run_chat_server(
     deps: Deps,
     port: int = 8765,
@@ -688,7 +701,7 @@ def run_chat_server(
     if auth_state.config.required:
         print("mindtrail chat: MINDTRAIL_TOKEN set, auth required")
 
-    server = ThreadingHTTPServer((host, port), make_handler(deps, auth_state))
+    server = _Server((host, port), make_handler(deps, auth_state))
     url = f"http://{'127.0.0.1' if host == '0.0.0.0' else host}:{port}"
     print(f"mindtrail chat running at {url}  (Ctrl+C to stop)")
     if open_browser:

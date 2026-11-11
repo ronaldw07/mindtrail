@@ -68,10 +68,11 @@ HEATMAP_WEEKS = 52
 STREAK_LOOKBACK_DAYS = 730
 
 
-def habit_json(h: Habit, done: set[date], today: date) -> dict:
+def habit_json(h: Habit, done: set[date], today: date, step: dict | None = None) -> dict:
     heat_from = week_start(today) - timedelta(weeks=HEATMAP_WEEKS - 1)
     return {
         **asdict(h),
+        "step": step,
         "streak": streak(done, h.target_per_week, today),
         "unit": "day" if h.target_per_week >= DAILY else "week",
         "this_week": this_week_count(done, today),
@@ -84,10 +85,11 @@ def handle_list_habits(habits: HabitStore, include_archived: bool = False,
                        today: date | None = None) -> dict:
     today = today or date.today()
     logs = habits.logs_since(today - timedelta(days=STREAK_LOOKBACK_DAYS))
+    steps = habits.steps()
     return {
         "today": today.isoformat(),
         "heatmap_weeks": HEATMAP_WEEKS,
-        "habits": [habit_json(h, logs.get(h.id, set()), today)
+        "habits": [habit_json(h, logs.get(h.id, set()), today, steps.get(h.id))
                    for h in habits.all(include_archived)],
     }
 

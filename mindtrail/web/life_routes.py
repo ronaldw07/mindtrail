@@ -16,7 +16,9 @@ from dataclasses import asdict, dataclass
 from datetime import date
 
 from mindtrail.web import (
-    admin_api, jobs_api, journey_api, life_api, measure_api, recruit_api, review, settings_api,
+    assistant_files_api,
+    admin_api, email_api, jobs_api, journey_api, life_api, measure_api, recruit_api, review, settings_api,
+    step_tasks_api,
 )
 
 ROUTES: list[tuple[str, re.Pattern, object]] = []
@@ -52,6 +54,44 @@ def find(method: str, path: str):
 _ID = r"([A-Za-z0-9-]+)"
 
 
+# --- today's to-dos: crossed off and archived ----------------------------------
+
+
+def _local_day() -> str:
+    return date.today().isoformat()
+
+
+@route("GET", "/api/today/marks")
+def _today_marks(deps, args, body, query):
+    return deps.today_marks.for_today(_local_day())
+
+
+@route("GET", "/api/today/archive")
+def _today_archive(deps, args, body, query):
+    return {"items": deps.today_marks.archived()}
+
+
+@route("POST", "/api/today/marks")
+def _today_mark(deps, args, body, query):
+    """action cross | uncross | pin | unpin | archive (done: whether it
+    was crossed off) | forget (put back from the archive)."""
+    action = body.get("action")
+    try:
+        if action == "cross":
+            deps.today_marks.cross(body, _local_day())
+        elif action == "archive":
+            deps.today_marks.archive(body, _local_day(), done=bool(body.get("done")))
+        elif action == "pin":
+            deps.today_marks.pin(body, _local_day())
+        elif action in ("forget", "uncross", "unpin"):
+            getattr(deps.today_marks, action)(str(body.get("kind", "")), str(body.get("ref", "")))
+        else:
+            return {"error": "unknown action"}
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"ok": True}
+
+
 # --- sidebar badges -----------------------------------------------------------
 
 
@@ -65,7 +105,9 @@ def _badges(deps, args, body, query):
 
 @route("GET", "/api/jobs")
 def _list_jobs(deps, args, body, query):
-    data = jobs_api.handle_list_jobs(deps.jobs, deps.tasks, deps.job_emails, deps.state)
+    data = jobs_api.handle_list_jobs(deps.jobs, deps.tasks,
+                                     lambda app_id: email_api.with_links(deps.job_emails(app_id), deps.state),
+                                     deps.state)
     for a in data["applications"]:
         a["rounds"] = [asdict(r) for r in deps.rounds.for_application(a["id"])]
     return data
@@ -300,7 +342,13 @@ def _artwork_image(deps, args, body, query):
 
 @route("GET", "/api/tasks")
 def _list_tasks(deps, args, body, query):
-    return jobs_api.handle_list_tasks(deps.tasks, query.get("all", [""])[0] == "1")
+    return email_api.with_sources(jobs_api.handle_list_tasks(deps.tasks, query.get("all", [""])[0] == "1"),
+                                  deps.jobs, deps.email_log, deps.state)
+
+
+@route("GET", f"/api/email/{_ID}")
+def _email(deps, args, body, query):
+    return email_api.handle_email(deps.gmail, deps.email_log, deps.state, args[0])
 
 
 @route("POST", "/api/tasks")
@@ -454,12 +502,27 @@ def _journey(deps, args, body, query):
 
 @route("GET", "/api/journey/today")
 def _journey_today(deps, args, body, query):
-    return journey_api.handle_today(deps.journey, deps.projects)
+    return journey_api.handle_today(deps.journey, deps.projects, habits=deps.habits)
 
 
 @route("POST", "/api/journey/setup")
 def _journey_setup(deps, args, body, query):
     return journey_api.handle_setup(deps.journey, deps.projects, body)
+
+
+@route("POST", "/api/journey/folder")
+def _journey_folder(deps, args, body, query):
+    return journey_api.handle_set_folder(deps.journey, body)
+
+
+@route("POST", "/api/journey/layout")
+def _journey_layout(deps, args, body, query):
+    return journey_api.handle_set_layout(deps.journey, body)
+
+
+@route("POST", "/api/journey/folders/rename")
+def _journey_rename_folder(deps, args, body, query):
+    return journey_api.handle_rename_folder(deps.journey, body)
 
 
 @route("POST", "/api/journey/select")
@@ -517,6 +580,61 @@ def _google_connect(deps, args, body, query):
     return deps.google.start()
 
 
+@route("GET", f"/api/journey/steps/{_ID}/tasks")
+def _step_tasks(deps, args, body, query):
+    return step_tasks_api.handle_list(deps.journey, deps.habits, args[0])
+
+
+@route("POST", f"/api/journey/steps/{_ID}/tasks")
+def _step_add_task(deps, args, body, query):
+    return step_tasks_api.handle_add(deps.journey, args[0], body, deps.llm)
+
+
+@route("POST", f"/api/journey/steps/{_ID}/goals")
+def _step_add_goal(deps, args, body, query):
+    return step_tasks_api.handle_add_goal(deps.journey, deps.habits, args[0], body, deps.llm)
+
+
+@route("POST", f"/api/journey/steps/{_ID}/tasks/clear")
+def _step_clear_tasks(deps, args, body, query):
+    return step_tasks_api.handle_clear(deps.journey, args[0])
+
+
+@route("GET", "/api/journey/goals")
+def _journey_goals(deps, args, body, query):
+    return step_tasks_api.handle_journey_goals(deps.journey, deps.habits)
+
+
+@route("POST", "/api/journey/goals")
+def _journey_add_goal(deps, args, body, query):
+    return step_tasks_api.handle_add_journey_goal(deps.journey, deps.habits, body)
+
+
+@route("POST", f"/api/journey/goals/{_ID}/scope")
+def _journey_goal_scope(deps, args, body, query):
+    return step_tasks_api.handle_goal_scope(deps.journey, deps.habits, args[0], body)
+
+
+@route("GET", "/api/journey/due")
+def _journey_due(deps, args, body, query):
+    return step_tasks_api.handle_due(deps.journey)
+
+
+@route("POST", f"/api/journey/steps/{_ID}/tasks/order")
+def _step_order_tasks(deps, args, body, query):
+    return step_tasks_api.handle_reorder(deps.journey, args[0], body)
+
+
+@route("PATCH", f"/api/journey/tasks/{_ID}")
+def _step_update_task(deps, args, body, query):
+    return step_tasks_api.handle_update(deps.journey, args[0], body)
+
+
+@route("DELETE", f"/api/journey/tasks/{_ID}")
+def _step_delete_task(deps, args, body, query):
+    return step_tasks_api.handle_delete(deps.journey, args[0])
+
+
 @route("POST", f"/api/journey/steps/{_ID}/move")
 def _journey_move_step(deps, args, body, query):
     return journey_api.handle_move_step(deps.journey, args[0], body)
@@ -527,40 +645,59 @@ def _journey_reflection(deps, args, body, query):
     return journey_api.handle_set_reflection(deps.journey, body)
 
 
+@route("POST", "/api/journey/review/delete")
+def _journey_delete_review(deps, args, body, query):
+    return journey_api.handle_delete_review(deps.journey, body)
+
+
 @route("POST", "/api/journey/review")
 def _journey_review(deps, args, body, query):
     return journey_api.handle_review(deps.journey, deps.projects, deps.llm, deps.profile, body)
 
 
+def _chats(deps, scope):
+    """The Journeys page keeps its own chats, about every journey at once."""
+    return deps.home_chats if scope == journey_api.HOME else deps.journey_chats
+
+
 @route("POST", "/api/journey/chat")
 def _journey_chat(deps, args, body, query):
-    return journey_api.handle_chat(deps.journey, deps.journey_chats, deps.llm, deps.profile, body)
+    return journey_api.handle_chat(deps.journey, _chats(deps, body.get("scope")), deps.llm, deps.profile,
+                                   body, deps.habits, deps.store)
+
+
+@route("POST", "/api/journey/attach")
+def _journey_attach(deps, args, body, query):
+    return assistant_files_api.handle_attach(deps.store, deps.llm, body)
 
 
 @route("GET", "/api/journey/chats")
 def _journey_chats(deps, args, body, query):
-    return journey_api.handle_chats(deps.journey, deps.journey_chats)
+    scope = query.get("scope", [""])[0]
+    return journey_api.handle_chats(deps.journey, _chats(deps, scope), scope)
 
 
 @route("GET", f"/api/journey/chats/{_ID}")
 def _journey_get_chat(deps, args, body, query):
-    return journey_api.handle_get_chat(deps.journey, deps.journey_chats, args[0])
+    scope = query.get("scope", [""])[0]
+    return journey_api.handle_get_chat(deps.journey, _chats(deps, scope), args[0], scope)
 
 
 @route("DELETE", f"/api/journey/chats/{_ID}")
 def _journey_delete_chat(deps, args, body, query):
-    return journey_api.handle_delete_chat(deps.journey, deps.journey_chats, args[0])
+    scope = query.get("scope", [""])[0]
+    return journey_api.handle_delete_chat(deps.journey, _chats(deps, scope), args[0], scope)
 
 
 @route("POST", f"/api/journey/chats/{_ID}/action")
 def _journey_chat_action(deps, args, body, query):
-    return journey_api.handle_chat_action(deps.journey, deps.journey_chats, deps.profile,
-                                          args[0], body)
+    return journey_api.handle_chat_action(deps.journey, _chats(deps, body.get("scope")), deps.profile,
+                                          args[0], body, deps.habits)
 
 
 @route("POST", "/api/journey/apply")
 def _journey_apply(deps, args, body, query):
-    return journey_api.handle_apply(deps.journey, body)
+    return journey_api.handle_apply(deps.journey, body, deps.projects, deps.habits, deps.profile)
 
 
 @route("POST", f"/api/journey/suggestions/{_ID}/accept")

@@ -311,6 +311,46 @@ CREATE TABLE IF NOT EXISTS journey_chats (
     updated_at TEXT NOT NULL
 );
 
+-- The assistant's chats on the Journeys page, about every journey at once.
+CREATE TABLE IF NOT EXISTS home_chats (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL DEFAULT 'home',
+    title      TEXT NOT NULL DEFAULT '',
+    messages   TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+-- The concrete things to do inside one journey step, in order: a step's
+-- own little roadmap. due is a YYYY-MM-DD day or ''.
+CREATE TABLE IF NOT EXISTS step_tasks (
+    id         TEXT PRIMARY KEY,
+    node_id    TEXT NOT NULL REFERENCES roadmap_nodes(id) ON DELETE CASCADE,
+    title      TEXT NOT NULL,
+    detail     TEXT NOT NULL DEFAULT '',
+    done       INTEGER NOT NULL DEFAULT 0,
+    due        TEXT NOT NULL DEFAULT '',
+    position   REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_step_tasks_node ON step_tasks(node_id);
+
+-- Today's to-dos as you've handled them, keyed by where each comes from
+-- (kind: task | assignment | step_task | step) and its id there.
+-- done_on: the day it was crossed off ('' if not); archived_at: when it
+-- was removed from Today ('' while still shown).
+CREATE TABLE IF NOT EXISTS today_marks (
+    kind        TEXT NOT NULL,
+    ref         TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    sub         TEXT NOT NULL DEFAULT '',
+    grp         TEXT NOT NULL DEFAULT '',
+    done_on     TEXT NOT NULL DEFAULT '',
+    archived_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (kind, ref)
+);
+
 CREATE TABLE IF NOT EXISTS journey_suggestions (
     id         TEXT PRIMARY KEY,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -417,6 +457,19 @@ ADDED_COLUMNS = [
     # Order of a step within its journey term (drag to reorder); ties fall
     # back to creation order.
     ("roadmap_nodes", "position", "REAL NOT NULL DEFAULT 0"),
+    # A habit can be a journey step's daily goal; '' for a standalone habit.
+    ("habits", "node_id", "TEXT NOT NULL DEFAULT ''"),
+    # A daily goal can serve one step (node_id), a whole path (track_id),
+    # or a whole journey (journey_id); at most one is set.
+    ("habits", "track_id", "TEXT NOT NULL DEFAULT ''"),
+    ("habits", "journey_id", "TEXT NOT NULL DEFAULT ''"),
+    # A sub-step can ask for a result ("Vertical jump", in inches) that has
+    # to be entered before it counts as done.
+    ("step_tasks", "needs", "TEXT NOT NULL DEFAULT ''"),
+    ("step_tasks", "unit", "TEXT NOT NULL DEFAULT ''"),
+    ("step_tasks", "result", "TEXT NOT NULL DEFAULT ''"),
+    # The day a Today to-do was starred as one of that day's 3 ('' if not).
+    ("today_marks", "pinned_on", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 
