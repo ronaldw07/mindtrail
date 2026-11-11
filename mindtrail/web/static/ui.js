@@ -117,7 +117,10 @@
   }
 
   // Enough to find "the same control" in the rebuilt tree.
+  // data-focus names a control by what it is, so focus survives a redraw
+  // that changes its label (a tick turns "Mark done" into "Mark not done").
   function focusSignature(node) {
+    if (node.dataset.focus) return 'focus|' + node.dataset.focus;
     return [node.tagName, node.id, node.getAttribute('aria-label') || '', node.dataset.key || '',
             node.getAttribute('placeholder') || '', node.className].join('|');
   }
@@ -221,14 +224,42 @@
       e.stopPropagation();
       open(e);
     });
+    // Shift+F10 or the menu key opens the same menu from the keyboard.
+    el.addEventListener('keydown', e => {
+      if (!(e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey))) return;
+      if (e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const r = e.target.getBoundingClientRect();
+      open({clientX: r.left + 8, clientY: r.bottom + 4, target: e.target, preventDefault() {}, stopPropagation() {}});
+      const menu = $('menu');
+      menu._opener = e.target;   // Esc hands focus back here
+      setTimeout(() => { const first = menu.querySelector('div[tabindex]'); if (first) first.focus(); });
+    });
     return el;
   }
 
   function showMenuFrom(button, items) {
+    const menu = $('menu');
+    // Clicking the button again closes its menu.
+    if (menu.style.display === 'block' && menu._opener === button) { menu.style.display = 'none'; return; }
     const r = button.getBoundingClientRect();
     showMenu({clientX: r.right - 190, clientY: r.bottom + 6}, items);
-    $('menu').style.transformOrigin = 'top right';
+    menu._opener = button;
+    menu.style.transformOrigin = 'top right';
+    // After this key or click finishes, so it doesn't land on the item too.
+    setTimeout(() => { const first = menu.querySelector('div[tabindex]'); if (first) first.focus({preventScroll: true}); });
   }
+
+  // Esc closes whichever menu is open and goes back to the button that opened it.
+  document.addEventListener('keydown', e => {
+    const menu = $('menu');
+    if (e.key !== 'Escape' || menu.style.display !== 'block') return;
+    e.preventDefault();
+    e.stopPropagation();
+    menu.style.display = 'none';
+    if (menu._opener) menu._opener.focus();
+  }, true);
 
   // ---------- components ----------
 

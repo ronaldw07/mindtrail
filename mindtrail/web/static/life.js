@@ -216,6 +216,13 @@
     if (dot) name.appendChild(dot);
     name.appendChild(document.createTextNode(h.name));
     body.appendChild(name);
+    if (h.step) {
+      const link = tEl('button', 'habit-step', '↳ ' + h.step.title);
+      link.type = 'button';
+      link.title = 'Open this journey step';
+      link.onclick = () => openStepAnywhere(h.step.project_id, h.step.id);
+      body.appendChild(link);
+    }
     const meta = document.createElement('div');
     meta.className = 'habit-meta';
     meta.textContent = targetLabel(h.target_per_week) + ' · ' + habitMeta(h);

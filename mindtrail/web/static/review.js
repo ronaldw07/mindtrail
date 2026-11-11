@@ -105,7 +105,7 @@
 
   function plainList(items) {
     const list = tEl('div', 't-list');
-    items.forEach(p => list.appendChild(todoItem({title: p, sub: ''})));
+    items.forEach(p => list.appendChild(todoRow({title: p, sub: ''})));
     return list;
   }
 
@@ -113,7 +113,7 @@
     const list = tEl('div', 't-list');
     if (!w.done.length) list.appendChild(tEl('div', 't-empty', 'No to-dos checked off this week.'));
     w.done.forEach(d => {
-      const row = todoItem({title: d.title, sub: 'Done'});
+      const row = todoRow({title: d.title, sub: 'Done'});
       row.classList.add('finished');
       list.appendChild(row);
     });
@@ -122,7 +122,7 @@
 
   function slippedList(w) {
     const list = tEl('div', 't-list');
-    w.slipped.forEach(s => list.appendChild(todoItem({title: s.title, overdue: true,
+    w.slipped.forEach(s => list.appendChild(todoRow({title: s.title, overdue: true,
       sub: 'Was due ' + fmtShortDate(s.due_date)})));
     if (w.is_current) {
       const btn = tEl('button', 'btn-primary jobs-btn t-carry', 'Move all to Monday');

@@ -17,6 +17,7 @@
       --row-active: color-mix(in srgb, var(--text) 10%, transparent);
       --row-active-hover: color-mix(in srgb, var(--text) 14%, transparent);
       --jbox-color: var(--accent);   /* a journey box's color, set per box in journey_home.js */
+      --p: 0%;                      /* a step's sub-step progress, set per step in journey_step.js */
       --surface-chip: #262626;      /* chips, toasts, context menu */
 
       /* borders */

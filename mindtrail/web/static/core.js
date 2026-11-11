@@ -181,7 +181,16 @@
     return visit(nodeId);
   }
 
-  const api = async (path, opts) => (await fetch(path, opts)).json();
+  // A dropped connection or a non-JSON reply comes back as {error}, like
+  // any other failure, so a caller waiting on it (e.g. a chat marked busy)
+  // always gets to finish instead of hanging.
+  const api = async (path, opts) => {
+    try {
+      return await (await fetch(path, opts)).json();
+    } catch (err) {
+      return {error: 'Couldn’t reach Mindtrail. Try again.'};
+    }
+  };
   const jsonSend = (path, body, method) => api(path, {
     method: method || 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -432,6 +441,14 @@
           if (opts.onExpire) opts.onExpire();
         } else label();
       }, 1000);
+    } else if (opts.action) {
+      // A next step to offer, e.g. "Update route": stays a little longer.
+      const btn = document.createElement('button');
+      btn.className = 'undo';
+      btn.textContent = opts.action.label;
+      btn.onclick = () => { dismiss(); opts.action.run(); };
+      el.appendChild(btn);
+      timer = setTimeout(dismiss, (opts.seconds || TOAST_SECONDS) * 1000);
     } else {
       timer = setTimeout(dismiss, (opts.seconds || 3) * 1000);
     }

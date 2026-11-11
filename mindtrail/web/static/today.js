@@ -20,7 +20,8 @@
     {id: 'focus', label: 'Focus time'},
     {id: 'health', label: 'Sleep & workouts'},
   ];
-  const DEFAULT_LAYOUT = {order: TODAY_WIDGETS.map(w => w.id), hidden: [], art: true};
+  // Habit rings start hidden: the Habits section lists the same habits.
+  const DEFAULT_LAYOUT = {order: TODAY_WIDGETS.map(w => w.id), hidden: ['habits'], art: true, v: 2};
 
   function todayLayout() {
     const saved = prefs.get('todayLayout', null) || {};
@@ -28,8 +29,10 @@
     // Keep the saved order, drop ids that no longer exist, append new ones.
     const order = (saved.order || []).filter(id => known.includes(id));
     known.forEach(id => { if (!order.includes(id)) order.push(id); });
-    return {order, hidden: (saved.hidden || []).filter(id => known.includes(id)),
-            art: saved.art !== false};
+    const hidden = (saved.hidden || []).filter(id => known.includes(id));
+    // Layouts saved before v2 pick up the new default of hiding habit rings once.
+    if ((saved.v || 1) < 2 && !hidden.includes('habits')) hidden.push('habits');
+    return {order, hidden, art: saved.art !== false, v: 2};
   }
 
   function tEl(tag, className, text) {
@@ -118,8 +121,11 @@
     }
     el.classList.remove('pending');
     el.innerHTML = '';
-    el.appendChild(document.createTextNode(res.text ? res.text + ' '
-      : greetingWord() + '. (Couldn’t write a brief: ' + (res.error || 'nothing to say') + '.) '));
+    const text = res.text ? res.text + ' '
+      : greetingWord() + '. (Couldn’t write a brief: ' + (res.error || 'nothing to say') + '.) ';
+    // The model sometimes marks names **like this**: show them bold.
+    text.split(/\*\*(.+?)\*\*/g).forEach((part, i) =>
+      el.appendChild(i % 2 ? tEl('strong', '', part) : document.createTextNode(part)));
     const again = tEl('button', 't-link', 'Rewrite');
     again.onclick = () => loadBrief(el, true);
     el.appendChild(again);
@@ -550,56 +556,91 @@
     return s;
   }
 
-  // The one thing to do next, as its own card: label and a "Let's do it"
-  // sticker on the left, the item on the right.
-  function pushSection(item) {
-    if (!item) return null;
-    const s = section('Push your work forward', null);
-    s.classList.add('t-push');
-    const sticker = tEl('button', 't-sticker');
-    const label = tEl('span', 't-sticker-text', 'Let’s do it →');
-    sticker.appendChild(label);
-    s.querySelector('.t-label').after(sticker);
-    const body = s.querySelector('.t-body');
-    body.appendChild(tEl('div', 't-push-title', item.title));
-    const due = item.due_date ? ' · due ' + fmtShortDate(item.due_date) : '';
-    let sub;
-    if (item.kind === 'task') {
-      sub = (item.company || 'To-do') + due;
-      label.textContent = 'Done ✓';
-      sticker.onclick = async () => {
-        await jsonSend('/api/tasks/' + item.task_id, {done: true}, 'PATCH');
-        openDashboardView();
-      };
-    } else if (item.kind === 'deadline') {
-      sub = 'Application deadline' + due;
-      sticker.onclick = () => openJobsView(item.application_id);
-    } else if (item.kind === 'assignment') {
-      sub = 'Assignment' + due;
-      label.textContent = 'Done ✓';
-      sticker.onclick = async () => {
-        await jsonSend('/api/canvas/done', {uid: item.uid});
-        openDashboardView();
-      };
-    } else {
-      sub = item.project_name + due;
-      sticker.onclick = () => openRoadmapView(item.project_id, item.project_name);
-    }
-    body.appendChild(tEl('div', 't-push-sub', sub));
-    return s;
+  const BUCKET_TAGS = {overdue: 'Overdue', today: 'Due today'};
+  const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
+  const AUTO_REMOVE_MS = 700;   // how long a checked row stays struck before it goes
+  const SMALL_WORDS = new Set(['a', 'an', 'and', 'of', 'the', 'to', 'in', 'for', 'on']);
+
+  // Marking a to-do done (or not) where it comes from.
+  const TODO_DONE = {
+    task: (ref, done) => jsonSend('/api/tasks/' + ref, {done}, 'PATCH'),
+    assignment: (ref, done) => jsonSend('/api/canvas/done', {uid: ref, done}),
+    step_task: (ref, done) => jsonSend('/api/journey/tasks/' + ref, {done}, 'PATCH'),
+  };
+  const markTodo = (action, mark, extra) => jsonSend('/api/today/marks', {action, ...mark, ...extra});
+  const removeWhenDone = () => prefs.get('todayRemoveWhenDone', false);
+
+  function titleCase(text) {
+    return text.toLowerCase().split(/\s+/)
+      .map((w, i) => i && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   }
 
-  const BUCKET_TAGS = {overdue: 'Overdue', today: 'Due today'};
+  // "W7M13: Design and Tech: Lighting [D10: INTRO TO THEATRE F26]" ->
+  // {title: "Design and Tech: Lighting", course: "Intro to Theatre"}.
+  function splitCourse(raw) {
+    const m = raw.match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
+    if (!m) return {title: raw, course: ''};
+    const title = m[1].replace(/^[A-Z]\d+[A-Z]\d+:\s*/, '').replace(/^[^\p{L}\p{N}]+/u, '') || m[1];
+    const [code, name = ''] = m[2].split(/:\s*/);
+    const cut = /(\.\.\.|…)$/.test(name);
+    const course = name && !cut ? name.replace(/\s+[FWSU]\d{2}$/, '') : code.split(/\s+/).slice(0, 2).join(' ');
+    return {title, course: titleCase(course)};
+  }
 
-  function todoItem(opts) {
-    const row = tEl('div', 't-item' + (opts.overdue ? ' overdue' : ''));
-    if (opts.onCheck) {
+  // Fades a row out and closes the gap it leaves; drops its group label
+  // once the group is empty.
+  function removeRow(row) {
+    const list = row.parentElement;
+    const done = () => {
+      row.remove();
+      list.querySelectorAll('.t-group').forEach(g => {
+        const next = g.nextElementSibling;
+        if (!next || !next.classList.contains('t-item')) g.remove();
+      });
+    };
+    if (reducedMotion()) { done(); return; }
+    row.style.overflow = 'hidden';
+    row.animate([{opacity: 1, height: row.offsetHeight + 'px'},
+                 {opacity: 0, height: '0px', paddingTop: '0px', paddingBottom: '0px'}],
+                {duration: 220, easing: EASE_OUT}).onfinish = done;
+  }
+
+  // mark: {kind, ref, title, sub, group} for anything Today can cross off
+  // or archive. Checking crosses it off in place (no reload); with
+  // "Remove when done" on it then slides out to the archive.
+  function todoRow(opts) {
+    const row = tEl('div', 't-item' + (opts.overdue ? ' overdue' : '') + (opts.crossed ? ' done' : '')
+      + (opts.pinned ? ' pinned' : ''));
+    const mark = opts.mark;
+    const canCheck = mark && TODO_DONE[mark.kind];
+    if (canCheck || opts.onCheck) {
       const check = tEl('button', 'task-check');
-      check.setAttribute('aria-label', 'Mark done: ' + opts.title);
+      const label = () => check.setAttribute('aria-label',
+        (row.classList.contains('done') ? 'Not done: ' : 'Mark done: ') + opts.title);
+      label();
       check.onclick = async e => {
         e.stopPropagation();
-        row.classList.add('done');
-        await opts.onCheck();
+        const nowDone = !row.classList.contains('done');
+        row.classList.toggle('done', nowDone);
+        label();
+        if (opts.onToggled) opts.onToggled();
+        if (!canCheck) { await opts.onCheck(); return; }
+        const res = await TODO_DONE[mark.kind](mark.ref, nowDone);
+        if (res.error) {
+          row.classList.toggle('done', !nowDone);
+          label();
+          if (opts.onToggled) opts.onToggled();
+          toast(res.error, {error: true});
+          return;
+        }
+        await markTodo(nowDone ? 'cross' : 'uncross', mark);
+        if (nowDone && removeWhenDone()) {
+          setTimeout(async () => {
+            if (!row.classList.contains('done')) return;   // unchecked meanwhile
+            await markTodo('archive', mark, {done: true});
+            removeRow(row);
+          }, AUTO_REMOVE_MS);
+        }
       };
       row.appendChild(check);
     } else {
@@ -609,62 +650,188 @@
     body.appendChild(tEl('div', 't-item-title', opts.title));
     body.appendChild(tEl('div', 't-item-sub', opts.sub));
     row.appendChild(body);
+    if (mark && opts.onPin) {
+      const star = tEl('button', 't-star' + (opts.pinned ? ' on' : ''), opts.pinned ? '★' : '☆');
+      star.title = opts.pinned ? 'Unstar' : 'Star as one of today’s 3';
+      star.setAttribute('aria-label', (opts.pinned ? 'Unstar: ' : 'Star for today: ') + opts.title);
+      star.setAttribute('aria-pressed', opts.pinned ? 'true' : 'false');
+      star.onclick = e => { e.stopPropagation(); opts.onPin(!opts.pinned); };
+      row.appendChild(star);
+    }
+    if (mark) {
+      const trash = tEl('button', 't-trash');
+      trash.innerHTML = TRASH_SVG;
+      trash.title = 'Remove (goes to the archive)';
+      trash.setAttribute('aria-label', 'Remove: ' + opts.title);
+      trash.onclick = async e => {
+        e.stopPropagation();
+        const res = await markTodo('archive', mark, {done: row.classList.contains('done')});
+        if (res.error) { toast(res.error, {error: true}); return; }
+        removeRow(row);
+        toast('Moved to the archive', {undo: async () => { await markTodo('forget', mark); openDashboardView(); }});
+      };
+      row.appendChild(trash);
+    }
     if (opts.onOpen) makeClickable(row, opts.onOpen);
     return row;
   }
 
+  const TRASH_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/>' +
+    '<path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>';
+
   function todoList(summary) {
     const list = tEl('div', 't-list');
     const tag = n => BUCKET_TAGS[n.bucket] || ('Due ' + fmtShortDate(n.due_date));
-    const rows = [
-      ...(summary.tasks || []).map(t => todoItem({
-        title: t.title, overdue: t.bucket === 'overdue',
-        sub: (t.company ? t.company + ' · ' : '') + tag(t),
-        onCheck: async () => {
-          await jsonSend('/api/tasks/' + t.task_id, {done: true}, 'PATCH');
-          openDashboardView();
-        },
-        onOpen: t.application_id ? () => openJobsView(t.application_id) : null,
-      })),
+    const today = localISO(new Date());
+    const marks = summary.today_marks || {crossed: [], pinned: [], hidden: []};
+    const keyOf = m => m.kind + ':' + m.ref;
+    const picked = new Set(marks.pinned.map(keyOf));
+    // Starring redraws just this list, in place.
+    const repin = async (mark, on) => {
+      const res = await markTodo(on ? 'pin' : 'unpin', mark);
+      if (res.error) { toast(res.error, {error: true}); return; }
+      const fresh = await api('/api/today/marks');
+      if (!fresh.error) summary.today_marks = fresh;
+      list.replaceWith(todoList(summary));
+    };
+    const topLabel = tEl('h3', 't-group t-group-top');
+    let topRows = [];
+    const countTop = () => {
+      const done = topRows.filter(r => r.classList.contains('done')).length;
+      topLabel.textContent = 'Today’s ' + topRows.length + ' · ' + done + ' of ' + topRows.length + ' done';
+    };
+    const todoItem = opts => {
+      if (!opts.mark) return todoRow(opts);
+      const row = todoRow({...opts, pinned: picked.has(keyOf(opts.mark)), onPin: on => repin(opts.mark, on),
+                           onToggled: () => countTop()});
+      row.dataset.key = keyOf(opts.mark);
+      return row;
+    };
+    const skip = new Set([...marks.hidden, ...marks.crossed.map(c => c.kind + ':' + c.ref)]);
+    const shown = (kind, ref) => !skip.has(kind + ':' + ref);
+    // A journey's steps open their own page; other roadmaps open the canvas.
+    const openNode = n => (summary.journey_ids || []).includes(n.project_id)
+      ? openStepAnywhere(n.project_id, n.node_id) : openRoadmapView(n.project_id, n.project_name);
+    // A step whose own sub-step is already listed isn't named again, and
+    // each journey shows only its next step.
+    const covered = new Set((summary.step_tasks || []).map(t => t.node_id));
+    const seenProject = new Set();
+    const nextStep = n => {
+      if (covered.has(n.node_id) || !shown('step', n.node_id) || seenProject.has(n.project_id)) return false;
+      seenProject.add(n.project_id);
+      return true;
+    };
+    const stepItem = (n, sub, overdue) => todoItem({
+      title: n.title, overdue, sub: n.project_name + ' · ' + sub, onOpen: () => openNode(n),
+      mark: {kind: 'step', ref: n.node_id, title: n.title, sub: n.project_name + ' · ' + sub, group: 'journeys'},
+    });
+    const groups = {classes: [], journeys: [], other: []};
+    groups.other.push(
+      ...(summary.tasks || []).filter(t => shown('task', t.task_id)).map(t => {
+        const sub = (t.company ? t.company + ' · ' : '') + tag(t);
+        return todoItem({
+          title: t.title, overdue: t.bucket === 'overdue', sub,
+          mark: {kind: 'task', ref: t.task_id, title: t.title, sub, group: 'other'},
+          onOpen: t.application_id ? () => openJobsView(t.application_id) : null,
+        });
+      }),
       ...(summary.nudges || []).map(n => todoItem({
         title: 'Reach out to ' + n.name,
         sub: (n.context ? n.context + ' · ' : '') + sinceLabel(n.days_since),
-        onCheck: async () => { await talkedToday(n.person_id); openDashboardView(); },
+        onCheck: () => talkedToday(n.person_id),
         onOpen: () => openPeopleView(),
-      })),
-      ...(summary.assignments || []).map(a => todoItem({
-        title: a.title,
-        sub: 'Assignment · ' + (a.due === localISO(new Date()) ? 'Due today' : 'Due ' + fmtShortDate(a.due))
-          + (a.time ? ' ' + fmtClock(a.time) : ''),
-        onCheck: async () => {
-          await jsonSend('/api/canvas/done', {uid: a.uid});
-          openDashboardView();
-        },
-        onOpen: a.url ? () => window.open(a.url, '_blank', 'noopener') : null,
       })),
       ...(summary.deadlines || []).map(d => todoItem({
         title: d.title, sub: 'Application deadline · ' + tag(d),
         onOpen: () => openJobsView(d.application_id),
-      })),
-      ...(summary.due || []).map(n => todoItem({
-        title: n.title, overdue: n.bucket === 'overdue', sub: n.project_name + ' · ' + tag(n),
-        onOpen: () => openRoadmapView(n.project_id, n.project_name),
-      })),
-      ...(summary.unblocked || []).map(n => todoItem({
-        title: n.title, sub: n.project_name + ' · Ready to start',
-        onOpen: () => openRoadmapView(n.project_id, n.project_name),
-      })),
-      ...(summary.recurring || []).map(n => todoItem({
-        title: n.title, sub: n.project_name + ' · Coming up ' + fmtShortDate(n.due_date),
-        onOpen: () => openRoadmapView(n.project_id, n.project_name),
-      })),
-    ];
-    rows.forEach(r => list.appendChild(r));
-    if (!rows.length) list.appendChild(tEl('div', 't-empty', 'Nothing due. Enjoy it.'));
+      })));
+    groups.classes.push(...(summary.assignments || []).filter(a => shown('assignment', a.uid)).map(a => {
+      const {title, course} = splitCourse(a.title);
+      const sub = (course || 'Assignment') + ' · ' + (a.due === today ? 'Due today' : 'Due ' + fmtShortDate(a.due))
+        + (a.time ? ' ' + fmtClock(a.time) : '');
+      return todoItem({
+        title, sub, mark: {kind: 'assignment', ref: a.uid, title, sub, group: 'classes'},
+        onOpen: a.url ? () => window.open(a.url, '_blank', 'noopener') : null,
+      });
+    }));
+    groups.journeys.push(
+      ...(summary.step_tasks || []).filter(t => shown('step_task', t.id)).map(t => {
+        const sub = t.step_title + ' · ' + (t.due < today ? 'Overdue' : t.due === today ? 'Due today' : 'Due ' + fmtShortDate(t.due));
+        return todoItem({
+          title: t.title, overdue: t.due < today, sub,
+          mark: {kind: 'step_task', ref: t.id, title: t.title, sub, group: 'journeys'},
+          onOpen: () => openStepAnywhere(t.project_id, t.node_id),
+        });
+      }),
+      ...(summary.due || []).filter(nextStep).map(n => stepItem(n, tag(n), n.bucket === 'overdue')),
+      ...(summary.unblocked || []).filter(nextStep).map(n => stepItem(n, 'Ready to start', false)),
+      ...(summary.recurring || []).filter(nextStep).map(n => stepItem(n, 'Coming up ' + fmtShortDate(n.due_date), false)));
+    // What you've crossed off today stays, struck through, at the end of its group.
+    marks.crossed.forEach(c => (groups[c.grp] || groups.other).push(todoItem({
+      title: c.title, sub: c.sub, crossed: true, mark: {kind: c.kind, ref: c.ref, title: c.title, sub: c.sub, group: c.grp},
+    })));
+    // Today's 3 (starred) lead, in the order they were starred.
+    const all = [...groups.classes, ...groups.journeys, ...groups.other];
+    topRows = marks.pinned.map(p => all.find(r => r.dataset.key === keyOf(p))).filter(Boolean);
+    const top = topRows;
+    Object.keys(groups).forEach(k => { groups[k] = groups[k].filter(r => !top.includes(r)); });
+    if (top.length) {
+      list.appendChild(topLabel);
+      countTop();
+      top.forEach(r => list.appendChild(r));
+    } else {
+      list.appendChild(tEl('div', 't-pick-hint', 'Star up to 3 to make them today’s focus.'));
+    }
+    [['Classes', 'classes'], ['Journeys', 'journeys'], ['Other', 'other']].forEach(([label, key]) => {
+      if (!groups[key].length) return;
+      list.appendChild(tEl('h3', 't-group', label));
+      groups[key].forEach(r => list.appendChild(r));
+    });
+    if (!top.length && !Object.values(groups).some(g => g.length)) list.appendChild(tEl('div', 't-empty', 'Nothing due. Enjoy it.'));
+    const links = tEl('div', 't-list-links');
     const add = tEl('button', 't-link', '+ Add a to-do');
     add.onclick = () => quickAddTask();
-    list.appendChild(add);
+    const archive = tEl('button', 't-link t-link-quiet', 'Archive');
+    archive.onclick = () => openTodoArchive();
+    links.append(add, archive);
+    list.appendChild(links);
     return list;
+  }
+
+  // "Remove when done", beside the Top to-dos title.
+  function removeWhenDoneSwitch() {
+    const wrap = tEl('label', 't-auto-remove');
+    wrap.appendChild(tEl('span', '', 'Remove when done'));
+    wrap.appendChild(switchEl(removeWhenDone(), on => prefs.set('todayRemoveWhenDone', on), 'Remove when done'));
+    return wrap;
+  }
+
+  // Everything removed from Today, newest first, each with Put back.
+  async function openTodoArchive() {
+    const res = await api('/api/today/archive');
+    if (res.error) { toast(res.error, {error: true}); return; }
+    const body = tEl('div', 't-archive');
+    if (!res.items.length) body.appendChild(tEl('div', 't-empty', 'Nothing archived yet.'));
+    res.items.forEach(item => {
+      const row = tEl('div', 't-archive-row');
+      const text = tEl('div', 't-item-body');
+      text.appendChild(tEl('div', 't-item-title', item.title));
+      text.appendChild(tEl('div', 't-item-sub', (item.done_on ? 'Done ' + fmtShortDate(item.done_on) : 'Removed')
+        + (item.sub ? ' · ' + item.sub : '')));
+      const back = tEl('button', 'btn-plain', 'Put back');
+      back.onclick = async () => {
+        back.disabled = true;
+        const undo = item.done_on && TODO_DONE[item.kind] ? await TODO_DONE[item.kind](item.ref, false) : {};
+        if (undo.error) { toast(undo.error, {error: true}); back.disabled = false; return; }
+        await markTodo('forget', item);
+        removeRow(row);
+      };
+      row.append(text, back);
+      body.appendChild(row);
+    });
+    await modal({title: 'Archive', body, confirmLabel: 'Done', hideCancel: true});
+    openDashboardView();
   }
 
   function habitList(habits) {
@@ -688,7 +855,14 @@
         row.classList.toggle('done', res.logged);
       };
       row.appendChild(check);
-      row.appendChild(tEl('span', 't-habit-name', h.name));
+      const name = tEl('span', 't-habit-name', h.name);
+      if (h.step) {
+        const link = tEl('button', 'habit-step t-habit-step', '↳ ' + h.step.title);
+        link.type = 'button';
+        link.onclick = () => openStepAnywhere(h.step.project_id, h.step.id);
+        name.appendChild(link);
+      }
+      row.appendChild(name);
       if (h.streak) row.appendChild(tEl('span', 't-habit-streak',
         h.streak + (h.unit === 'day' ? '-day' : '-week') + ' streak'));
       list.appendChild(row);
@@ -701,9 +875,12 @@
     const cal = calendar || {connected: false};
     const box = tEl('div', 't-day');
     if (!cal.connected) {
-      box.appendChild(tEl('div', 't-empty', cal.needs_reconnect
-        ? 'Google Calendar needs reconnecting — run: mindtrail google connect'
-        : 'Connect Google Calendar to see your day here — run: mindtrail google connect'));
+      const link = tEl('button', 't-link', cal.needs_reconnect
+        ? 'Google Calendar needs reconnecting. Open Settings →'
+        : 'Connect Google Calendar to see your day here. Open Settings →');
+      link.type = 'button';
+      link.onclick = () => openProfileView();
+      box.appendChild(link);
       return box;
     }
     const events = cal.events || [];
@@ -789,14 +966,23 @@
       makeClickable(row, () => openProject(h.project_id));
       list.appendChild(row);
     });
+    // The first few; the rest behind a link.
+    const rows = [...list.querySelectorAll('.t-update')];
+    if (rows.length > UPDATES_SHOWN) {
+      rows.slice(UPDATES_SHOWN).forEach(r => { r.hidden = true; });
+      const more = tEl('button', 't-link t-link-quiet', 'Show ' + (rows.length - UPDATES_SHOWN) + ' more');
+      more.onclick = () => { rows.forEach(r => { r.hidden = false; }); more.remove(); };
+      list.appendChild(more);
+    }
     return list;
   }
+  const UPDATES_SHOWN = 3;
 
   // One saved link a day, oldest unread first.
   function readThis(reading) {
     const box = tEl('div', 't-list');
     const pick = reading.pick;
-    box.appendChild(todoItem({title: pick.title, sub: new URL(pick.url).hostname + ' · saved '
+    box.appendChild(todoRow({title: pick.title, sub: new URL(pick.url).hostname + ' · saved '
       + relTime(pick.saved_at) + (reading.unread > 1 ? ' · ' + (reading.unread - 1) + ' more unread' : ''),
       onOpen: () => window.open(pick.url, '_blank', 'noopener')}));
     const done = tEl('button', 't-link', 'Mark as read');
@@ -826,9 +1012,9 @@
   function finishedList(summary) {
     const list = tEl('div', 't-list');
     const habits = (summary.habits || []).filter(h => h.done_today);
-    (summary.finished_today || []).forEach(t => list.appendChild(todoItem({
+    (summary.finished_today || []).forEach(t => list.appendChild(todoRow({
       title: t.title, sub: t.company ? t.company + ' · Done' : 'Done'})));
-    habits.forEach(h => list.appendChild(todoItem({title: h.name, sub: 'Habit · Done'})));
+    habits.forEach(h => list.appendChild(todoRow({title: h.name, sub: 'Habit · Done'})));
     list.querySelectorAll('.t-item').forEach(r => r.classList.add('finished'));
     if (!list.childNodes.length) {
       list.appendChild(tEl('div', 't-empty', 'Nothing checked off yet — that’s fine. Rest counts.'));
@@ -840,7 +1026,7 @@
     const open = (summary.tasks || []).filter(t => t.bucket === 'overdue' || t.bucket === 'today');
     if (!open.length) return null;
     const box = tEl('div', 't-list');
-    open.forEach(t => box.appendChild(todoItem({title: t.title, overdue: t.bucket === 'overdue',
+    open.forEach(t => box.appendChild(todoRow({title: t.title, overdue: t.bucket === 'overdue',
       sub: (t.company ? t.company + ' · ' : '') + (BUCKET_TAGS[t.bucket] || '')})));
     const btn = tEl('button', 'btn-primary jobs-btn t-carry', 'Move all to tomorrow');
     btn.onclick = async () => {
@@ -857,11 +1043,11 @@
     const list = tEl('div', 't-list');
     const agenda = data.agenda || {};
     const items = (agenda.this_week || []).concat(agenda.later || []).slice(0, 8);
-    items.forEach(n => list.appendChild(todoItem({
+    items.forEach(n => list.appendChild(todoRow({
       title: n.title, sub: n.project_name + ' · Due ' + fmtShortDate(n.due_date),
       onOpen: () => openRoadmapView(n.project_id, n.project_name),
     })));
-    (data.recent || []).slice(0, 5).forEach(c => list.appendChild(todoItem({
+    (data.recent || []).slice(0, 5).forEach(c => list.appendChild(todoRow({
       title: c.title, sub: 'Chat · ' + relTime(c.updated_at),
       onOpen: () => { showChatView(); openConversation(c.id); },
     })));
@@ -889,27 +1075,32 @@
       view.innerHTML = '';
       view.appendChild(skeletonBlock(6));
     }
-    const [data, summary, focus, reading, github] = await Promise.all([
+    const [data, summary, focus, reading, github, steps, marks] = await Promise.all([
       api('/api/dashboard'), api('/api/daily-summary'), api('/api/focus/week'),
-      api('/api/reading'), api('/api/github'),
+      api('/api/reading'), api('/api/github'), api('/api/journey/due'), api('/api/today/marks'),
     ]);
+    summary.today_marks = marks.error ? null : marks;
     data.focus = focus;
+    summary.step_tasks = steps.tasks || [];
+    summary.journey_ids = steps.journey_ids || [];
     const layout = todayLayout();
     const page = tEl('div', 't-page');
     page.appendChild(masthead(layout));
     page.appendChild(underline(summary));
-    page.appendChild(glanceRow(summary, data, layout));
-
+    // The to-dos come first: they're what Today is for. The glance widgets follow.
+    const todos = section(isEvening() ? 'Coming up' : 'Top to-dos', todoList(summary));
+    todos.querySelector('.t-head').appendChild(removeWhenDoneSwitch());
     if (isEvening()) {
       page.appendChild(section('What you finished', finishedList(summary)));
       const carry = carryOver(summary);
       if (carry) page.appendChild(section('Carry over', carry));
+      page.appendChild(todos);
+      page.appendChild(glanceRow(summary, data, layout));
       page.appendChild(section('Journal', journalPrompt(summary.journal)));
     } else {
-      const push = pushSection(summary.top_priority);
-      if (push) page.appendChild(push);
+      page.appendChild(todos);
+      page.appendChild(glanceRow(summary, data, layout));
     }
-    page.appendChild(section(isEvening() ? 'Coming up' : 'Top to-dos', todoList(summary)));
     page.appendChild(section('Habits', habitList(summary.habits || [])));
     page.appendChild(section('Your day', dayTimeline(summary.calendar, summary.free_time)));
     page.appendChild(section('New updates', updatesList(data.highlights || [], github)));
