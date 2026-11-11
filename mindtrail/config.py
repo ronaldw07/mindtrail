@@ -19,6 +19,16 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 # removed from Groq's catalog, so do not reintroduce llama-3.3-* here.
 SYNTHESIS_MODEL = "openai/gpt-oss-120b"
 FALLBACK_MODEL = "openai/gpt-oss-20b"
+
+# Backups for when Groq's free daily allowance runs out (see llm.py). Each
+# is used only if its key is set, in this order. Both speak the OpenAI
+# chat format. Model names can be overridden in .env if a provider renames.
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "")
+CEREBRAS_MODEL = os.getenv("CEREBRAS_MODEL", "gpt-oss-120b")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+# 3.5-flash: the newer Flash models were turning requests away as
+# overloaded when this was set up (2026-11-10); 3.5 answered every time.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 # No vision model exists on this account, but Whisper does, so dictation
 # is server-side rather than depending on browser speech APIs.
 TRANSCRIPTION_MODEL = "whisper-large-v3-turbo"
