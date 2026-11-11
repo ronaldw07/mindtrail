@@ -37,6 +37,9 @@ FIRST_RUN_DAYS = 60
 OVERLAP_SECONDS = 24 * 3600
 MAX_PER_RUN = 50
 TASK_DUE_MAX_DAYS = 180
+# Room for the reply plus the model's thinking: at 200 a reasoning model
+# was cut off mid-JSON and the email failed every run.
+CLASSIFY_MAX_TOKENS = 800
 
 EVENTS = ("applied", "oa", "interview", "offer", "rejected", "other")
 
@@ -109,7 +112,7 @@ def classify(llm, message: Message, today: date) -> Classification:
         f"TODAY: {today.isoformat()}\nRECEIVED: {message.received_at}\n"
         f"FROM: {message.sender}\nSUBJECT: {message.subject}\n\nBODY:\n{message.body}"
     )
-    return parse_classification(llm.complete(SYSTEM_PROMPT, prompt, max_tokens=200).text, today)
+    return parse_classification(llm.complete(SYSTEM_PROMPT, prompt, max_tokens=CLASSIFY_MAX_TOKENS).text, today)
 
 
 @dataclass

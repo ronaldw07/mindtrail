@@ -330,6 +330,13 @@
         row.appendChild(el('div', 'job-email-subject', m.subject || '(no subject)'));
         row.appendChild(el('div', 'job-email-meta',
           fmtShortDate((m.received_at || '').slice(0, 10)) + ' · ' + m.label));
+        if (m.url) {
+          const open = el('a', 'job-email-open', 'Open original ↗');
+          open.href = m.url;
+          open.target = '_blank';
+          open.rel = 'noopener';
+          row.appendChild(open);
+        }
         panel.appendChild(row);
       });
     }

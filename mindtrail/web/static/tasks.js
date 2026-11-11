@@ -47,6 +47,7 @@
   }
 
   async function renderTasksView(focusAdd) {
+    closeTaskCard();
     const data = await api('/api/tasks?all=1');
     const view = $('tasks-view');
     const today = localISO(new Date());
@@ -146,10 +147,16 @@
     const dot = areaDot(t.area_id);
     if (dot) body.appendChild(dot);
     if (t.application_id) {
-      const chip = tEl('span', 'job-chip task-job-chip', 'Job');
+      // The company, and that the job is closed if it is, so a stale to-do stands out.
+      const job = t.job || {};
+      const chip = tEl('span', 'job-chip task-job-chip' + (job.closed ? ' closed' : ''),
+        (job.company || 'Job') + (job.closed ? ' · ' + capitalize(job.stage) : ''));
       chip.onclick = e => { e.stopPropagation(); openJobsView(t.application_id); };
       body.appendChild(chip);
     }
+    body.classList.add('task-body-open');
+    body.title = 'Show details';
+    body.onclick = e => { e.stopPropagation(); openTaskCard(t, row); };
     const info = tEl('button', 'task-info');
     info.type = 'button';
     info.setAttribute('aria-label', 'Details for ' + t.title);
@@ -163,6 +170,88 @@
     };
     row.appendChild(info);
     return row;
+  }
+
+  const capitalize = w => (w || '').charAt(0).toUpperCase() + (w || '').slice(1);
+
+  // A small box under a to-do: what it's for, the job and the email it
+  // came from, with the email's start loaded on demand.
+  let taskCard = null;
+  function closeTaskCard() {
+    if (!taskCard) return;
+    taskCard.remove();
+    taskCard = null;
+    document.removeEventListener('pointerdown', taskCardOutside, true);
+    document.removeEventListener('keydown', taskCardKey, true);
+  }
+  const taskCardOutside = e => { if (taskCard && !taskCard.contains(e.target)) closeTaskCard(); };
+  const taskCardKey = e => { if (e.key === 'Escape') closeTaskCard(); };
+
+  function openTaskCard(t, row) {
+    const reopen = taskCard && taskCard.dataset.id === String(t.id);
+    closeTaskCard();
+    if (reopen) return;   // a second click on the same to-do closes it
+    const card = tEl('div', 'task-card');
+    card.dataset.id = t.id;
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-label', 'About ' + t.title);
+    card.appendChild(tEl('div', 'task-card-title', t.title));
+    const facts = tEl('div', 'task-card-facts');
+    facts.appendChild(tEl('span', '', t.due_date ? 'Due ' + fmtShortDate(t.due_date) : 'No date'));
+    if (t.repeat_label) facts.appendChild(tEl('span', '', '↻ ' + t.repeat_label));
+    card.appendChild(facts);
+    if (t.job) {
+      const job = tEl('div', 'task-card-job');
+      job.appendChild(tEl('div', 'task-card-company', t.job.company + (t.job.role ? ' — ' + t.job.role : '')));
+      job.appendChild(tEl('span', 'task-card-stage' + (t.job.closed ? ' closed' : ''), capitalize(t.job.stage)));
+      if (t.job.closed) job.appendChild(tEl('div', 'task-card-note', 'This job is closed, so this to-do may be stale.'));
+      card.appendChild(job);
+    }
+    if (t.email) {
+      const mail = tEl('div', 'task-card-email');
+      mail.appendChild(tEl('div', 'task-card-label', 'From an email · ' + fmtShortDate((t.email.received_at || '').slice(0, 10))));
+      mail.appendChild(tEl('div', 'task-card-subject', t.email.subject || '(no subject)'));
+      const preview = tEl('div', 'task-card-preview', 'Loading the email…');
+      mail.appendChild(preview);
+      card.appendChild(mail);
+      api('/api/email/' + t.email.id).then(res => {
+        if (!card.isConnected) return;
+        preview.textContent = res.error ? res.error
+          : (res.sender ? res.sender.replace(/\s*<.*>$/, '') + ': ' : '') + res.preview;
+        if (res.url) openMail.href = res.url;
+      });
+    }
+    const actions = tEl('div', 'task-card-actions');
+    if (t.application_id) {
+      const job = tEl('button', 'btn-tinted', 'Open job');
+      job.onclick = () => { closeTaskCard(); openJobsView(t.application_id); };
+      actions.appendChild(job);
+    }
+    const openMail = tEl('a', 'btn-tinted', 'Open original email ↗');
+    if (t.email) {
+      openMail.href = t.email.url;
+      openMail.target = '_blank';
+      openMail.rel = 'noopener';
+      actions.appendChild(openMail);
+    }
+    const edit = tEl('button', 'btn-plain', 'Edit');
+    edit.onclick = () => { closeTaskCard(); tasksSelectedId = t.id; renderTasksView(); };
+    actions.appendChild(edit);
+    card.appendChild(actions);
+
+    document.body.appendChild(card);
+    const r = row.getBoundingClientRect();
+    const below = r.bottom + 6 + card.offsetHeight < window.innerHeight;
+    card.style.left = Math.min(r.left + 28, window.innerWidth - card.offsetWidth - 12) + 'px';
+    card.style.top = (below ? r.bottom + 6 : Math.max(8, r.top - card.offsetHeight - 6)) + 'px';
+    card.style.transformOrigin = below ? 'top left' : 'bottom left';
+    if (!reducedMotion()) {
+      card.animate([{opacity: 0, transform: 'scale(0.97)'}, {opacity: 1, transform: 'none'}],
+                   {duration: 160, easing: 'cubic-bezier(0.23, 1, 0.32, 1)'});
+    }
+    taskCard = card;
+    document.addEventListener('pointerdown', taskCardOutside, true);
+    document.addEventListener('keydown', taskCardKey, true);
   }
 
   // Everything about one to-do, edited in place; each change saves at once.

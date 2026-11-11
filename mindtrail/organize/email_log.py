@@ -29,8 +29,15 @@ class EmailLog:
         """Subject, date, and label only - bodies are never stored."""
         with connect(self._path) as conn:
             rows = conn.execute(
-                "SELECT subject, received_at, label FROM gmail_seen "
+                "SELECT message_id, subject, received_at, label FROM gmail_seen "
                 "WHERE application_id = ? ORDER BY received_at DESC",
                 (application_id,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def get(self, message_id: str) -> dict | None:
+        """Subject, date and label of one scanned email, or None."""
+        with connect(self._path) as conn:
+            row = conn.execute("SELECT message_id, subject, received_at, label, application_id "
+                               "FROM gmail_seen WHERE message_id = ?", (message_id,)).fetchone()
+        return dict(row) if row else None
