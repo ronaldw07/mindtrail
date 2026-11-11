@@ -28,6 +28,9 @@
     '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
   // Chats listed under each project; the rest sit behind "View all".
   const PROJECT_PREVIEW_CHATS = 3;
+  // Loose chats: the newest few, plus pinned ones and the one you're in.
+  const RECENT_CHATS = 5;
+  let allChatsShown = false;
 
   // A titled section of the tree: a header that folds its body, with an
   // optional + button. Folding toggles a class in place rather than
@@ -120,7 +123,7 @@
     btn.textContent = '\u22ef';
     btn.title = 'Chat options';
     btn.setAttribute('aria-label', 'Chat options');
-    btn.onclick = e => { e.stopPropagation(); openChatMenu(e, c); };
+    btn.onclick = e => { e.stopPropagation(); openChatMenu(e, c); menu._opener = btn; };
     row.appendChild(btn);
     makeClickable(row, () => openConversation(c.id));
     onRightClick(row, e => openChatMenu(e, c));
@@ -148,7 +151,17 @@
       chatsOpen = open;
       prefs.set('chatsOpen', open);
     }, {onAdd: newChat, addTitle: 'New chat'});
-    sidebar.unfiled.forEach(c => chats.body.appendChild(chatRow(c)));
+    const loose = sidebar.unfiled;
+    const shown = allChatsShown ? loose : loose.filter((c, i) =>
+      c.pinned || i < RECENT_CHATS || (current && c.id === current.id));
+    shown.forEach(c => chats.body.appendChild(chatRow(c)));
+    if (loose.length > RECENT_CHATS) {
+      const more = document.createElement('div');
+      more.className = 'view-all';
+      more.textContent = allChatsShown ? 'Show fewer' : 'Show all ' + loose.length;
+      makeClickable(more, () => { allChatsShown = !allChatsShown; renderTree(); });
+      chats.body.appendChild(more);
+    }
     tree.appendChild(chats.sec);
     syncTreeActive();
   }
@@ -191,7 +204,7 @@
     btn.textContent = '\u22ef';
     btn.title = 'Project options';
     btn.setAttribute('aria-label', 'Project options');
-    btn.onclick = e => { e.stopPropagation(); openProjectMenu(e, p); };
+    btn.onclick = e => { e.stopPropagation(); openProjectMenu(e, p); menu._opener = btn; };
     head.appendChild(btn);
     makeClickable(head, () => openProject(p.id));
     onRightClick(head, e => openProjectMenu(e, p));
@@ -231,6 +244,15 @@
 
   function showMenu(e, items) {
     menu.innerHTML = '';
+    menu._opener = null;
+    // Up and down move between items, in every menu.
+    menu.onkeydown = ev => {
+      if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+      ev.preventDefault();
+      const list = [...menu.querySelectorAll('div[tabindex]')];
+      const at = list.indexOf(document.activeElement);
+      list[(at + (ev.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length].focus();
+    };
     items.forEach(it => {
       if (it.divider) { menu.appendChild(document.createElement('hr')); return; }
       const d = document.createElement('div');
@@ -249,7 +271,10 @@
   }
 
   document.addEventListener('click', e => {
-    if (!menu.contains(e.target)) menu.style.display = 'none';
+    // The click that opened a menu from a button isn't a click outside it.
+    if (!menu.contains(e.target) && !(menu._opener && menu._opener.contains(e.target))) {
+      menu.style.display = 'none';
+    }
   });
 
   function openChatMenu(e, c) {
