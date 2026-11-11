@@ -49,6 +49,7 @@
   // The sidebar's Journey opens the page of journey boxes; Career's Plan
   // tab (and a box) go straight into one journey.
   async function openJourneyView(opts) {
+    journeyFocus = (opts && opts.step) || null;
     currentProject = null;
     current = null;
     setActiveView('journey');
@@ -56,6 +57,14 @@
     $('breadcrumb').textContent = 'Journey';
     if (opts && opts.detail) await renderJourney();
     else await renderJourneyHome();
+  }
+
+  // After a delete's undo runs out: redraw the Journey page that's showing
+  // now, which may not be the one the delete started on.
+  async function journeyRerender() {
+    if (activeView !== 'journey') return;
+    if (document.querySelector('#journey-view .jhome')) await renderJourneyHome();
+    else await renderJourney();
   }
 
   async function renderJourney(changed) {
@@ -66,20 +75,28 @@
     // Forget toggles for paths that no longer exist.
     const ids = journeyPaths().map(t => t.id);
     if (journeyHidden().some(id => !ids.includes(id))) setJourneyHidden(journeyHidden().filter(id => ids.includes(id)));
+    const focused = journeyFocus && journeyFindStep(journeyFocus);
+    if (focused) { await renderJourneyStep(view, focused); if (activeView === 'journey') showJourneyDock(); return; }
+    journeyFocus = null;
 
+    const goals = await api('/api/journey/goals');
     const layout = tEl('div', 'journey-layout');
     const main = tEl('div', 'journey-main');
     main.appendChild(journeyCrumb());
     main.appendChild(journeyHead());
     main.appendChild(journeyTabs());
-    const steps = journeyVisibleSteps();
-    journeyData.years.forEach(y => main.appendChild(journeyYear(y, steps)));
-    const loose = steps.filter(s => !s.term);
-    if (loose.length) main.appendChild(journeyLoose(loose));
+    if (!goals.error) main.appendChild(journeyDailyGoals(goals));
+    if (journeyIsMap()) main.appendChild(journeyMap());
+    else {
+      const steps = journeyVisibleSteps();
+      journeyData.years.forEach(y => main.appendChild(journeyYear(y, steps)));
+      const loose = steps.filter(s => !s.term);
+      if (loose.length) main.appendChild(journeyLoose(loose));
+    }
     layout.appendChild(main);
     layout.appendChild(journeyRail());
     commitView(view, layout);
-    showJourneyDock();
+    if (activeView === 'journey') showJourneyDock();   // not when a late undo redraws it elsewhere
     const first = layout.querySelector('.jchip.just-changed');
     if (first) first.scrollIntoView({block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth'});
   }
@@ -175,12 +192,22 @@
 
   // ---------- back to all journeys ----------
 
+  // The back button: its arrow hangs in the margin so the words line up
+  // with the title under it.
+  function journeyBackButton(label, onclick) {
+    const back = tEl('button', 'jcrumb-back');
+    back.type = 'button';
+    back.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
+    back.appendChild(tEl('span', '', label));
+    back.setAttribute('aria-label', 'Back to ' + label);
+    back.onclick = onclick;
+    return back;
+  }
+
   function journeyCrumb() {
     const bar = tEl('div', 'jcrumb');
-    const back = tEl('button', 'jcrumb-back', '‹ Journeys');
-    back.type = 'button';
-    back.onclick = () => openJourneyView();
-    bar.appendChild(back);
+    bar.appendChild(journeyBackButton('Journeys', () => openJourneyView()));
     return bar;
   }
 
@@ -200,6 +227,22 @@
                                       'The assistant plans from this');
         if (purpose !== null && purpose !== undefined) await save({purpose});
       }},
+      {label: journeyIsMap() ? 'Show as school terms' : 'Show as a path map', run: async () => {
+        const res = await jsonSend('/api/journey/layout',
+          {project_id: journeyData.project_id, layout: journeyIsMap() ? 'terms' : 'map'});
+        if (res.error) { toast(res.error, {error: true}); return; }
+        await renderJourney();
+      }},
+      {divider: true},
+      {label: 'Delete journey…', danger: true, run: async () => {
+        const ok = await askConfirm('Delete ' + journeyData.name + '?',
+          'Its paths and steps go with it. Chats filed in its project are kept.', 'Delete');
+        if (!ok) return;
+        const res = await api('/api/projects/' + journeyData.project_id, {method: 'DELETE'});
+        if (res && res.error) { toast(res.error, {error: true}); return; }
+        toast('Deleted ' + journeyData.name);
+        await Promise.all([openJourneyView(), loadSidebar()]);
+      }},
     ];
   }
 
@@ -218,8 +261,10 @@
     row.appendChild(more);
     title.appendChild(row);
     if (journeyData.purpose) title.appendChild(tEl('div', 'jhead-purpose', journeyData.purpose));
-    title.appendChild(tEl('div', 'jhead-sub',
-      journeyData.current_label + ' · Year ' + journeyData.current_year + ' of 4'));
+    const all = journeyData.tracks.flatMap(t => t.steps).filter(s => s.status !== 'rejected');
+    title.appendChild(tEl('div', 'jhead-sub', journeyIsMap()
+      ? 'Path map · ' + all.filter(s => s.status === 'done').length + ' of ' + all.length + ' steps done'
+      : journeyData.current_label + ' · Year ' + journeyData.current_year + ' of 4'));
     head.appendChild(title);
     // The career journey is also Career's Plan tab, so it carries the same switch.
     if (journeyData.kind === 'career') head.appendChild(careerSwitch('plan'));
@@ -313,7 +358,7 @@
     head.appendChild(tEl('div', 'jyear-span', year.span));
     if (year.number === now) head.appendChild(tEl('span', 'jpill now', 'Now'));
     else if (year.number < now) head.appendChild(tEl('span', 'jpill', 'Done'));
-    if (year.number <= now) head.appendChild(journeyReviewButtons(year.number));
+    if (year.number <= now) head.appendChild(journeyReviewButtons(year));
     sec.appendChild(head);
     if (journeyOpenReviews.has(year.number) && journeyData.reviews[year.number]) {
       sec.appendChild(journeyReviewCard(journeyData.reviews[year.number]));
@@ -324,9 +369,16 @@
     return sec;
   }
 
-  function journeyReviewButtons(number) {
+  // A review reads your term notes, so it's only offered once a term has some.
+  function journeyReviewButtons(year) {
+    const number = year.number;
     const wrap = tEl('div', 'jyear-actions');
     const saved = journeyData.reviews[number];
+    const hasNotes = year.terms.some(t => (journeyData.reflections[t.term] || '').trim());
+    if (!saved && !hasNotes) {
+      wrap.appendChild(tEl('span', 'jyear-hint', 'Add term notes to review this year'));
+      return wrap;
+    }
     if (saved) {
       const read = tEl('button', 'btn-plain', journeyOpenReviews.has(number) ? 'Hide review' : 'Read review');
       read.onclick = () => {
@@ -372,7 +424,17 @@
         card.appendChild(row);
       });
     }
-    card.appendChild(tEl('div', 'jreview-foot', 'Reviewed ' + new Date(review.created_at).toLocaleDateString()));
+    const foot = tEl('div', 'jreview-foot', 'Reviewed ' + new Date(review.created_at).toLocaleDateString() + ' · ');
+    const del = tEl('button', 'jreview-del', 'Delete review');
+    del.type = 'button';
+    del.onclick = async () => {
+      if (!await askConfirm('Delete this review?', 'You can review the year again any time.', 'Delete')) return;
+      const res = await jsonSend('/api/journey/review/delete', {year: review.year});
+      if (res.error) { toast(res.error, {error: true}); return; }
+      await renderJourney();
+    };
+    foot.appendChild(del);
+    card.appendChild(foot);
     return card;
   }
 
@@ -460,7 +522,20 @@
     chip.appendChild(journeyStatusMark(chip, s));
     chip.appendChild(tEl('span', 'jchip-title', s.title));
     if (s.shared && journeyTab() === 'all') chip.appendChild(tEl('span', 'jchip-tag', 'all'));
-    chip.onclick = () => { if (chip._wasDragged) { chip._wasDragged = false; return; } journeyStepSheet(s); };
+    const [done, total] = s.progress || [0, 0];
+    if (total) {
+      chip.appendChild(tEl('span', 'jchip-count', done + '/' + total));
+      chip.classList.add('has-route');
+      chip.style.setProperty('--p', Math.round(done / total * 100) + '%');
+    }
+    // ⋯ shows on hover: the same menu as a right-click, so editing and
+    // deleting a step don't depend on knowing to right-click.
+    const more = tEl('span', 'jchip-more', '\u22ef');
+    more.setAttribute('aria-hidden', 'true');
+    more.title = 'Edit, move or delete';
+    more.onclick = e => { e.stopPropagation(); showMenuFrom(more, journeyStepMenu(s)); };
+    chip.appendChild(more);
+    chip.onclick = () => { if (chip._wasDragged) { chip._wasDragged = false; return; } openJourneyStep(s.id); };
     journeyEnableDrag(chip, s);
     onRightClick(chip, e => showMenu(e, journeyStepMenu(s)));
     return chip;
@@ -473,18 +548,28 @@
       await renderJourney([s.id]);
     };
     return [
+      {label: 'Open', run: () => openJourneyStep(s.id)},
+      {label: 'Rename…', run: () => journeyRenameStep(s)},
       {label: 'Edit…', run: () => journeyStepSheet(s)},
       ...JOURNEY_STATUSES.filter(([v]) => v !== s.status)
         .map(([v, word]) => ({label: 'Mark ' + word, run: () => setStatus(v)})),
       {divider: true},
       {label: 'Delete', danger: true, run: () => softDelete({key: 'step:' + s.id, label: 'Step',
-        remove: () => api('/api/roadmap-node/' + s.id, {method: 'DELETE'}), rerender: renderJourney})},
+        remove: () => api('/api/roadmap-node/' + s.id, {method: 'DELETE'}), rerender: journeyRerender})},
     ];
+  }
+
+  async function journeyRenameStep(s) {
+    const title = await askText('Rename step', s.title);
+    if (!title || title === s.title) return;
+    const res = await jsonSend('/api/roadmap-node/' + s.id, {title, detail: s.detail}, 'PATCH');
+    if (res.error) toast(res.error, {error: true});
+    await renderJourney([s.id]);
   }
 
   // The circle steps through Suggested → Planned → Done (and back to
   // Suggested). The chip updates at once; the save and redraw follow.
-  const JOURNEY_CYCLE = {proposed: 'accepted', accepted: 'done', done: 'proposed', rejected: 'proposed'};
+  const JOURNEY_CYCLE = {proposed: 'accepted', accepted: 'done', done: 'accepted', rejected: 'proposed'};
   const JOURNEY_STATUS_WORD = Object.fromEntries(JOURNEY_STATUSES);
 
   function journeyStatusMark(chip, s) {
@@ -644,7 +729,10 @@
       term.appendChild(o);
     }));
     term.value = s.term;
-    field('Term', term);
+    const due = tEl('input', 'job-field-input');
+    due.type = 'date';
+    due.value = s.due_date || '';
+    if (journeyIsMap()) field('Date', due); else field('Term', term);
 
     const track = tEl('select', 'job-field-input');
     journeyData.tracks.forEach(t => {
@@ -670,9 +758,10 @@
     const ok = await modal({title: 'Step', body, confirmLabel: 'Save', multiline: true});
     if (!ok) return;
     if (deleted) {
+      if (journeyFocus === s.id) journeyFocus = null;
       await renderJourney();
       softDelete({key: 'step:' + s.id, label: 'Step',
-        remove: () => api('/api/roadmap-node/' + s.id, {method: 'DELETE'}), rerender: renderJourney});
+        remove: () => api('/api/roadmap-node/' + s.id, {method: 'DELETE'}), rerender: journeyRerender});
       return;
     }
     const patch = {};
@@ -688,6 +777,10 @@
         patch.detail = patch.detail !== undefined ? patch.detail : detail.value;
       }
       const res = await jsonSend('/api/roadmap-node/' + s.id, patch, 'PATCH');
+      if (res.error) failed = res.error;
+    }
+    if (!failed && due.value !== (s.due_date || '')) {
+      const res = await jsonSend('/api/roadmap-node/' + s.id, {due_date: due.value}, 'PATCH');
       if (res.error) failed = res.error;
     }
     if (!failed && (term.value !== s.term || track.value !== s.track_id)) {

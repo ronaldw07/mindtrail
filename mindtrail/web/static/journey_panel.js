@@ -33,7 +33,8 @@
     const box = tEl('div', 'jnext');
     if (!journeyData.next_up.length) {
       box.appendChild(emptyState('todo', 'Nothing pressing',
-        'Put steps in this term or next and the most important ones show up here.'));
+        journeyIsMap() ? 'Add steps to a path and the next one on each shows up here.'
+          : 'Put steps in this term or next and the most important ones show up here.'));
       return box;
     }
     journeyData.next_up.forEach(s => {
@@ -41,7 +42,7 @@
       row.type = 'button';
       row.appendChild(tEl('div', 'jnext-title', s.title));
       row.appendChild(tEl('div', 'jnext-sub', s.track + ' · ' + s.reason));
-      row.onclick = () => journeyStepSheet(s);
+      row.onclick = () => openJourneyStep(s.id);
       box.appendChild(row);
     });
     return box;
@@ -101,8 +102,19 @@
       if (res.error) { accept.disabled = false; toast(res.error, {error: true}); return; }
       await renderJourney([res.node_id]);
     };
+    // Add it, then open the new step's editor to change its title, term or path.
+    const addAndEdit = async () => {
+      const res = await jsonSend('/api/journey/suggestions/' + s.id + '/accept', journeySuggestionTarget(s));
+      if (res.error) { toast(res.error, {error: true}); return; }
+      await renderJourney([res.node_id]);
+      const step = journeyFindStep(res.node_id);
+      if (step) await journeyStepSheet(step);
+    };
+    const edit = s.kind === 'mark_done' ? null : tEl('button', 'btn-plain', 'Edit…');
+    if (edit) { edit.type = 'button'; edit.onclick = addAndEdit; }
     onRightClick(card, e => showMenu(e, [
       {label: accept.textContent, run: () => accept.click()},
+      ...(edit ? [{label: 'Add and edit…', run: addAndEdit}] : []),
       {label: 'Dismiss', run: () => dismiss.click()},
     ]));
     const dismiss = tEl('button', 'btn-plain', 'Dismiss');
@@ -111,6 +123,7 @@
       await renderJourney();
     };
     row.appendChild(accept);
+    if (edit) row.appendChild(edit);
     row.appendChild(dismiss);
     card.appendChild(row);
     return card;
@@ -180,16 +193,28 @@
     api('/api/journey/today').then(d => {
       if (!d.setup) return;
       tile.hidden = false;
-      tile.querySelector('.t-tile-head').textContent = 'Journey · ' + d.label;
+      tile.querySelector('.t-tile-head').textContent = d.name + ' · ' + d.label;
       if (d.total) {
         const bar = tEl('div', 'jtile-bar');
         const fill = tEl('div', 'jtile-fill');
         fill.style.width = Math.round(d.done / d.total * 100) + '%';
         bar.appendChild(fill);
         tile.appendChild(bar);
-        tile.appendChild(tEl('div', 't-note', d.done + ' of ' + d.total + ' steps done this term'));
+        tile.appendChild(tEl('div', 't-note', d.done + ' of ' + d.total + ' steps done' + (d.map ? '' : ' this term')));
       } else {
-        tile.appendChild(tEl('div', 't-note', 'No steps in this term yet'));
+        tile.appendChild(tEl('div', 't-note', d.map ? 'No steps yet' : 'No steps in this term yet'));
+      }
+      const work = d.today || {};
+      if (work.due || work.goals_total) {
+        const bits = [];
+        if (work.due) bits.push(work.due + ' sub-step' + (work.due === 1 ? '' : 's') + ' due');
+        if (work.goals_total) bits.push(work.goals_done + ' of ' + work.goals_total + ' daily goals');
+        const line = tEl('div', 't-item jtile-today');
+        const body = tEl('div', 't-item-body');
+        body.appendChild(tEl('div', 't-item-title', 'Today: ' + bits.join(' · ')));
+        line.appendChild(body);
+        if (work.step_id) makeClickable(line, () => openStepAnywhere(d.project_id, work.step_id));
+        tile.appendChild(line);
       }
       d.next.forEach(s => {
         const item = tEl('div', 't-item');
@@ -197,7 +222,7 @@
         body.appendChild(tEl('div', 't-item-title', s.title));
         body.appendChild(tEl('div', 't-item-sub', s.track + ' · ' + s.reason));
         item.appendChild(body);
-        makeClickable(item, () => openJourneyView());
+        makeClickable(item, () => openStepAnywhere(d.project_id, s.id));
         tile.appendChild(item);
       });
       if (d.pending) tile.appendChild(tEl('div', 't-note', d.pending + ' suggestion' + (d.pending === 1 ? '' : 's') + ' waiting'));

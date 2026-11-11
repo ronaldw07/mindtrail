@@ -28,11 +28,24 @@ from mindtrail.organize.db import connect, now_iso
 from mindtrail.organize.roadmaps import (
     SHARED_KIND, RoadmapNodeStore, RoadmapStore, duplicate_roadmap,
 )
+from mindtrail.organize.step_tasks import StepTaskStore
 from mindtrail.organize.terms import clean_term
 
 STATE_KEY = "journey"          # the open journey's settings
 LIST_KEY = "journeys"          # every journey's settings, in creation order
 KINDS = ("career", "general")
+# How a journey is drawn: school years and terms, or each path as an
+# ordered line of steps (a path map) for journeys that don't run on terms.
+LAYOUTS = ("terms", "map")
+
+
+def layout_of(settings: dict) -> str:
+    """A journey's layout; one that never picked follows its kind."""
+    saved = settings.get("layout")
+    if saved in LAYOUTS:
+        return saved
+    return "terms" if settings.get("kind", "career") == "career" else "map"
+MAX_FOLDER = 40
 MAX_NAME = 60
 MAX_PURPOSE = 500
 YEARS = 4
@@ -90,6 +103,7 @@ class JourneyStore:
         self._state = state
         self.roadmaps = roadmaps
         self.nodes = nodes
+        self.tasks = StepTaskStore(path)
 
     # --- which project is the journey ---------------------------------------
 
@@ -140,6 +154,55 @@ class JourneyStore:
         if (self._state.get(STATE_KEY) or {}).get("project_id") == project_id:
             self._state.set(STATE_KEY, target)
         return target
+
+    # --- folders ---------------------------------------------------------------
+    # A folder is just a name on each journey in it; one with no journeys
+    # left simply stops existing.
+
+    def _save_all(self, journeys: list[dict]) -> None:
+        self._state.set(LIST_KEY, journeys)
+        active = (self._state.get(STATE_KEY) or {}).get("project_id")
+        current = next((j for j in journeys if j["project_id"] == active), None)
+        if current is not None:
+            self._state.set(STATE_KEY, current)
+
+    def names(self) -> dict[str, str]:
+        """project id -> name, for every journey."""
+        ids = [j["project_id"] for j in self.all()]
+        with connect(self._path) as conn:
+            rows = conn.execute(f"SELECT id, name FROM projects WHERE id IN ({','.join('?' * len(ids))})",
+                                ids).fetchall() if ids else []
+        return {r["id"]: r["name"] for r in rows}
+
+    def folders(self) -> list[str]:
+        return sorted({j.get("folder", "") for j in self.all()} - {""}, key=str.lower)
+
+    def set_folder(self, project_id: str, folder: str) -> dict:
+        """Put a journey in a folder ('' takes it out)."""
+        journeys = self.all()
+        if not any(j["project_id"] == project_id for j in journeys):
+            raise ValueError("no such journey")
+        folder = " ".join(folder.split())[:MAX_FOLDER]
+        updated = [{**j, "folder": folder} if j["project_id"] == project_id else j for j in journeys]
+        self._save_all(updated)
+        return next(j for j in updated if j["project_id"] == project_id)
+
+    def set_layout(self, project_id: str, layout: str) -> dict:
+        if layout not in LAYOUTS:
+            raise ValueError("unknown layout")
+        journeys = self.all()
+        if not any(j["project_id"] == project_id for j in journeys):
+            raise ValueError("no such journey")
+        updated = [{**j, "layout": layout} if j["project_id"] == project_id else j for j in journeys]
+        self._save_all(updated)
+        return next(j for j in updated if j["project_id"] == project_id)
+
+    def rename_folder(self, old: str, new: str) -> None:
+        """Rename a folder, or ungroup it when `new` is ''."""
+        if old not in self.folders():
+            raise ValueError("no such folder")
+        new = " ".join(new.split())[:MAX_FOLDER]
+        self._save_all([{**j, "folder": new} if j.get("folder", "") == old else j for j in self.all()])
 
     def setup(self, projects, start_year: int, copy_roadmap_ids: list[str] = (),
               name: str = "", purpose: str = "", kind: str = "career") -> dict:
@@ -211,6 +274,22 @@ class JourneyStore:
                                 (project_id,)).fetchall()
         return {r["term"]: r["text"] for r in rows}
 
+    def sync_step_done(self, node_id: str) -> str:
+        """After a sub-step is ticked or unticked: finishing the last one
+        finishes the step, and unticking one of a finished step's reopens
+        it. Returns "done", "reopened" or ''."""
+        node = self.nodes.get(node_id)
+        finished = self.tasks.all_done(node_id)
+        if node is None or finished is None:
+            return ""
+        if finished and node.status != "done":
+            self.nodes.set_status(node_id, "done")
+            return "done"
+        if not finished and node.status == "done":
+            self.nodes.set_status(node_id, "accepted")
+            return "reopened"
+        return ""
+
     def set_reflection(self, project_id: str, term: str, text: str) -> None:
         term = clean_term(term)
         if not term:
@@ -240,6 +319,12 @@ class JourneyStore:
                                 "ORDER BY created_at", (project_id,)).fetchall()
         return {r["year"]: {"id": r["id"], "year": r["year"], "body": json.loads(r["body"]),
                             "created_at": r["created_at"]} for r in rows}
+
+    def delete_reviews(self, project_id: str, year: int) -> None:
+        """Remove a year's reviews (every version, so an older one doesn't
+        take its place)."""
+        with connect(self._path) as conn:
+            conn.execute("DELETE FROM journey_reviews WHERE project_id = ? AND year = ?", (project_id, year))
 
     # --- suggestions ----------------------------------------------------------
 

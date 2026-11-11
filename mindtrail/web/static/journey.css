@@ -37,7 +37,8 @@
 .jyear-head { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.5rem; color: var(--text-heading); }
 .jyear-title { font-weight: 650; font-size: var(--fs-xl); }
 .jyear-span { color: var(--text-muted); font-size: var(--fs-base); }
-.jyear-actions { margin-left: auto; display: flex; gap: 0.35rem; }
+.jyear-actions { margin-left: auto; display: flex; align-items: center; gap: 0.35rem; }
+.jyear-hint { font-size: var(--fs-xs); color: var(--text-faint); }
 .jpill { font-size: var(--fs-xs); font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 999px;
   background: var(--surface-chip); color: var(--text-2); }
 .jpill.now { background: var(--accent-tint); color: var(--accent-text); }
@@ -146,10 +147,13 @@
 .jsource-hint { font-size: var(--fs-xs); color: var(--text-muted); }
 .jsources-note { font-size: var(--fs-xs); color: var(--text-faint); line-height: var(--lh-tight); }
 
-@media (max-width: 1250px) { .jterms { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 1000px) {
+/* Sized to the view, not the window, so the timeline reflows when the open
+   assistant takes space on the right instead of sitting on top of it. */
+#journey-view { container-type: inline-size; }
+@container (max-width: 918px) { .jterms { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 668px) {
   .journey-layout { flex-direction: column; }
-  .journey-rail { width: 100%; position: static; max-height: none; }
+  .journey-rail { width: 100%; position: static; max-height: none; order: -1; }
 }
 
 .journey-rail .seg-opt { padding-inline: 0.45rem; white-space: nowrap; }
@@ -181,7 +185,7 @@
 .career-tabs { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 
 /* --- Journeys: one box per journey --- */
-.jhome { max-width: 1080px; margin: 0 auto; }
+.jhome { max-width: 1080px; margin: 0 auto; padding-bottom: 5rem; }
 .jhome-head { margin-bottom: 1.4rem; }
 .jhome-head .proj-title { margin-bottom: 0.3rem; }
 .jhome-sub { color: var(--text-2); font-size: var(--fs-base); }
@@ -227,13 +231,22 @@
   .jcrumb-back:hover { background: var(--row-hover); color: var(--text-bright); }
 }
 
-.jcrumb { margin: -0.4rem 0 0.6rem -0.5rem; }
-.jcrumb-back { border: none; background: transparent; color: var(--text-muted); font: inherit;
-  font-size: var(--fs-sm); padding: 0.25rem 0.5rem; border-radius: var(--r); cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease; }
+/* The arrow sits in the left margin; the label lines up with the title below. */
+.jcrumb { margin: -0.5rem 0 0.9rem calc(-0.4rem - 18px - 0.2rem); }
+.jcrumb-back { display: inline-flex; align-items: center; gap: 0.2rem; border: none; background: transparent;
+  color: var(--text-2); font: inherit; font-size: var(--fs-base); font-weight: 500; padding: 0.4rem 0.8rem 0.4rem 0.4rem;
+  border-radius: var(--r); cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, transform 160ms var(--ease-out); }
+.jcrumb-back svg { flex-shrink: 0; }
+.jcrumb-back:active { transform: scale(0.97); }
 
 /* --- the assistant dock, pinned bottom right of a journey --- */
 #journey-view .journey-layout { padding-bottom: 4.5rem; }
+/* Wide enough to share: the timeline makes room for the open assistant.
+   Narrower than that it floats over the timeline and can be minimized. */
+@media (min-width: 1150px) {
+  body:has(.jdock.open:not([hidden])) #journey-view.open { padding-right: calc(380px + 2.5rem); }
+}
 .jdock { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 40; }
 .jdock[hidden] { display: none; }
 .jdock-launch { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.6rem 1rem;
@@ -272,7 +285,42 @@
   font-size: var(--fs-sm); padding: 0.35rem 0.7rem; border-radius: 999px; cursor: pointer;
   transition: background-color 0.12s ease, color 0.12s ease, transform 160ms var(--ease-out); }
 .jdock-example:active { transform: scale(0.97); }
-.jdock-thinking { color: var(--text-muted); }
+/* Thinking: three dots pulsing in turn. */
+.jdock-thinking { display: flex; gap: 4px; padding: 0.55rem 0.1rem; }
+.jdock-thinking span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted);
+  animation: jdock-dot 1.1s ease-in-out infinite; }
+.jdock-thinking span:nth-child(2) { animation-delay: 0.15s; }
+.jdock-thinking span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes jdock-dot { 0%, 60%, 100% { opacity: 0.3; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
+/* A reply that just arrived settles in once; redraws don't replay it. */
+.jdock-new { animation: jdock-in 220ms var(--ease-out); }
+@keyframes jdock-in { from { opacity: 0; transform: translateY(4px); } }
+.jdock-queued { opacity: 0.55; }
+.jdock .rc-msg.user { white-space: pre-line; }
+@media (prefers-reduced-motion: reduce) {
+  .jdock-thinking span { animation-name: jdock-dot-fade; }
+  .jdock-new { animation-name: jdock-in-fade; }
+}
+@keyframes jdock-dot-fade { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
+@keyframes jdock-in-fade { from { opacity: 0; } }
+.jdock-compose { border-top: 1px solid var(--border-subtle); }
+.jdock-files { display: flex; flex-wrap: wrap; gap: 0.35rem; padding: 0 0.7rem; }
+.jdock-files:not(:empty) { padding-top: 0.6rem; }
+.jdock-file { display: flex; align-items: center; gap: 0.4rem; max-width: 100%; padding: 0.25rem 0.3rem 0.25rem 0.6rem;
+  border-radius: 8px; background: var(--row-hover); font-size: var(--fs-xs); color: var(--text-2); }
+.jdock-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; color: var(--text); }
+.jdock-file-state { color: var(--text-muted); }
+.jdock-file.reading .jdock-file-state { animation: jdock-dot-fade 1.1s ease-in-out infinite; }
+.jdock-file.error .jdock-file-state { color: var(--danger); }
+.jdock-file-x { border: none; background: none; color: var(--text-muted); cursor: pointer; font-size: 14px;
+  width: 20px; height: 20px; border-radius: 4px; }
+.jdock-file-x:hover { color: var(--text); }
+.jdock-attach { flex-shrink: 0; display: grid; place-items: center; width: 34px; height: 34px; border: none;
+  border-radius: 10px; background: none; color: var(--text-muted); cursor: pointer;
+  transition: color 160ms ease, background-color 160ms ease, transform 160ms var(--ease-out); }
+.jdock-attach:hover { color: var(--text); background: var(--row-hover); }
+.jdock-attach:active { transform: scale(0.97); }
+.jdock-panel.dropping { outline: 2px dashed color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: -6px; }
 .jdock-edit { display: flex; flex-direction: column; gap: 0.4rem; }
 .jdock-edit input, .jdock-edit textarea { width: 100%; background: var(--surface-sunken); color: var(--text);
   border: 1px solid var(--border); border-radius: var(--r-sm); padding: 0.4rem 0.55rem; font: inherit;
@@ -287,7 +335,7 @@
 /* Both are <form>s, so undo the chat composer's global form look. */
 .jdock .jdock-form, .jdock .jdock-edit { max-width: none; margin: 0; box-shadow: none;
   backdrop-filter: none; -webkit-backdrop-filter: none; }
-.jdock .jdock-form { border: none; border-top: 1px solid var(--border-subtle); border-radius: 0;
+.jdock .jdock-form { border: none; border-radius: 0;
   background: transparent; padding: 0.6rem 0.7rem 0.7rem; }
 .jdock .jdock-edit { border: 1px solid var(--border); border-radius: var(--r); background: var(--surface);
   padding: 0.6rem; }
@@ -305,3 +353,310 @@
 .jdock-log .rc-msg.assistant > :last-child { margin-bottom: 0; }
 .jdock-log .rc-msg.assistant p, .jdock-log .rc-msg.assistant ul, .jdock-log .rc-msg.assistant ol { margin: 0.4rem 0; }
 .jdock-log .rc-msg.assistant ul, .jdock-log .rc-msg.assistant ol { padding-left: 1.2rem; }
+
+/* --- Journeys: folders --- */
+.jfolder { margin-top: 1.6rem; }
+.jfolder-bar { display: flex; align-items: center; gap: 0.2rem; margin-bottom: 0.7rem; }
+.jfolder-bar .jfolder-head { margin-bottom: 0; }
+.jfolder-more, .jbox-more { opacity: 0; transition: opacity 0.12s ease; }
+.jbox-more { position: absolute; top: 0.6rem; right: 0.6rem; }
+.jfolder-bar:focus-within .jfolder-more, .jbox:focus-within .jbox-more { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .jfolder-bar:hover .jfolder-more, .jbox:hover .jbox-more { opacity: 1; }
+}
+@media (hover: none) { .jfolder-more, .jbox-more { opacity: 1; } }
+.jfolder-head { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.3rem 0.55rem;
+  margin: 0 0 0.7rem -0.55rem; border-radius: var(--r); cursor: pointer; color: var(--text);
+  font-weight: 600; transition: background-color 0.12s ease; }
+.jfolder-icon { display: inline-flex; color: var(--text-muted); }
+.jfolder-count { font-size: var(--fs-xs); font-weight: 500; color: var(--text-muted); background: var(--surface-chip);
+  border-radius: 999px; padding: 0 0.45rem; line-height: 1.6; }
+.jfolder-caret { font-size: var(--fs-xs); color: var(--text-muted); transition: transform 160ms var(--ease-out); }
+.jfolder.collapsed .jfolder-caret { transform: rotate(-90deg); }
+.jfolder.collapsed .jhome-grid { display: none; }
+@media (hover: hover) and (pointer: fine) { .jfolder-head:hover { background: var(--row-hover); } }
+@media (prefers-reduced-motion: reduce) { .jfolder-caret { transition: none; } }
+
+/* A step's own page: a route of sub-steps down to the step itself. */
+.jchip-more { flex-shrink: 0; margin: -0.1rem -0.3rem -0.1rem 0; padding: 0 0.3rem; border-radius: var(--r-sm);
+  color: var(--text-muted); opacity: 0; transition: opacity 0.12s ease; }
+.jchip:focus-visible .jchip-more { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .jchip:hover .jchip-more { opacity: 1; }
+  .jchip-more:hover { background: var(--row-active); color: var(--text-bright); }
+}
+@media (hover: none) { .jchip-more { opacity: 1; } }
+.jchip-count { font-size: var(--fs-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.jchip.has-route { position: relative; overflow: hidden; }
+.jchip.has-route::after { content: ''; position: absolute; left: 0; bottom: 0; height: 2px; width: var(--p);
+  background: var(--c); opacity: 0.7; }
+
+.jstep { max-width: 720px; margin: 0 auto; padding-bottom: 5rem; }
+.jstep-meta { display: flex; align-items: center; gap: 0.5rem; font-size: var(--fs-sm); color: var(--text-muted);
+  margin-bottom: 0.35rem; }
+.jstep-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.jstep-status { font: inherit; font-size: var(--fs-xs); padding: 0.1rem 0.5rem; border: none; border-radius: 999px;
+  background: var(--row-hover); color: var(--text-2); cursor: pointer; transition: background-color 120ms ease; }
+.jstep-status:hover { background: var(--row-active); color: var(--text-bright); }
+.jstep-status.done { background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--text-bright); }
+.jstep-detail { margin: 0.55rem 0 0; color: var(--text-2); line-height: var(--lh-body); }
+.jstep-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
+.jstep .btn-primary { border: none; font: inherit; font-size: var(--fs-base); font-weight: 500; padding: 0.38rem 0.8rem; line-height: 1.3;
+  cursor: pointer; }
+.jstep-progress { display: flex; align-items: center; gap: 0.75rem; margin: 1.6rem 0 1.4rem; }
+.jstep-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--row-hover); overflow: hidden; }
+.jstep-bar > span { display: block; height: 100%; width: var(--p); background: var(--c); border-radius: 3px;
+  transition: width 300ms var(--ease-out); }
+.jstep-count { font-size: var(--fs-sm); color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.jroute { list-style: none; margin: 0; padding: 0; }
+.jroute-stop { position: relative; display: flex; gap: 0.85rem; padding-bottom: 0.9rem; }
+/* The road between stops; it takes the path's colour once a stop is done. */
+.jroute-stop::before { content: ''; position: absolute; left: 13px; top: 30px; bottom: 2px; width: 2px;
+  border-radius: 1px; background: var(--border); }
+.jroute-stop.done::before { background: var(--c); }
+.jroute-goal::before { display: none; }
+.jroute-dot { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; border: 2px solid var(--border-strong);
+  background: var(--surface); color: var(--on-accent); display: grid; place-items: center; padding: 0;
+  font: inherit; font-size: 13px; cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms var(--ease-out); }
+.jroute-dot:active { transform: scale(0.94); }
+.jroute-stop.done .jroute-dot { background: var(--c); border-color: var(--c); }
+.jroute-stop.next .jroute-dot { border-color: var(--c); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 20%, transparent); }
+.jroute-body { flex: 1; min-width: 0; padding: 0.25rem 0.65rem 0.5rem; border-radius: var(--r); cursor: pointer; }
+.jroute-top { display: flex; align-items: baseline; gap: 0.5rem; }
+.jroute-title { color: var(--text); font-weight: 500; line-height: var(--lh-tight); }
+.jroute-stop.done .jroute-title { color: var(--text-muted); text-decoration: line-through;
+  text-decoration-color: var(--text-faint); }
+.jroute-tag { font-size: var(--fs-xs); font-weight: 600; color: var(--c); }
+.jroute-detail { margin-top: 0.2rem; font-size: var(--fs-sm); color: var(--text-muted); line-height: var(--lh-tight); }
+.jroute-due { display: inline-block; margin-top: 0.35rem; padding: 0.05rem 0.5rem; border-radius: 999px;
+  font-size: var(--fs-xs); color: var(--text-2); background: var(--row-hover); }
+.jroute-due.inline { margin: 0 0 0 auto; padding: 0; background: none; color: var(--text-muted);
+  font-size: var(--fs-xs); white-space: nowrap; }
+.jroute-showall { list-style: none; padding: 0.2rem 0 0.6rem 3.2rem; }
+.jroute-stop.overdue .jroute-due { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.jroute-stop.dragging { opacity: 0.45; }
+.jroute-stop.drop-before .jroute-body { box-shadow: 0 -2px 0 var(--accent); }
+.jroute-stop.drop-after .jroute-body { box-shadow: 0 2px 0 var(--accent); }
+@media (hover: hover) and (pointer: fine) {
+  .jroute-body:hover { background: var(--row-hover); }
+  .jroute-stop:not(.done) > button.jroute-dot:hover { background: color-mix(in srgb, var(--c) 30%, transparent); }
+}
+
+.jroute-add .jroute-dot, .jroute-goal .jroute-dot { cursor: default; }
+.jroute-add .jroute-dot { border-style: dashed; color: var(--text-muted); }
+.jroute .jroute-add-form, .jroute .jroute-add-form:focus-within { flex: 1; display: flex; max-width: none;
+  margin: 0; padding: 0; gap: 0; border: none; border-radius: 0; background: transparent; box-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none; }
+.jroute-add-input { flex: 1; border: none; background: transparent; color: var(--text); font: inherit;
+  padding: 0.25rem 0.65rem; border-radius: var(--r); outline: none; }
+.jroute-add-input:focus { background: var(--row-hover); }
+.jroute-goal .jroute-dot { border-color: var(--c); color: var(--c); }
+.jroute-goal.done .jroute-dot { color: var(--on-accent); }
+.jroute-goal .jroute-body { cursor: default; }
+.jroute-goal .jroute-body:hover { background: transparent; }
+.jroute-finish { margin-top: 0.45rem; }
+
+.jroute-empty { margin: 0 0 1rem 2.5rem; padding: 1.1rem 1.2rem; border-radius: var(--r-lg);
+  border: 1px dashed var(--border-strong); }
+.jroute-empty-title { font-weight: 600; color: var(--text); }
+.jroute-empty-sub { margin: 0.3rem 0 0.8rem; font-size: var(--fs-sm); color: var(--text-muted); line-height: var(--lh-tight); }
+
+/* Step page sections: daily goals, then the route. */
+.jstep-section { margin-top: 1.6rem; }
+.jstep-label { margin: 0 0 0.7rem; font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-muted); }
+.jstep-actions .jhead-more { margin-left: auto; }
+
+.jgoals { display: flex; flex-direction: column; gap: 0.4rem; }
+.jgoal { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem; border-radius: var(--r-lg);
+  background: var(--surface); box-shadow: 0 0 0 0.5px var(--hairline); }
+.jgoal-check { width: 24px; height: 24px; flex-shrink: 0; border-radius: 7px; border: 2px solid var(--border-strong);
+  background: transparent; color: var(--on-accent); display: grid; place-items: center; padding: 0; font: inherit;
+  font-size: 12px; cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms var(--ease-out); }
+.jgoal-check:active { transform: scale(0.94); }
+.jgoal.done .jgoal-check { background: var(--c); border-color: var(--c); }
+.jgoal-body { flex: 1; min-width: 0; }
+.jgoal-name { color: var(--text); font-weight: 500; line-height: var(--lh-tight); }
+.jgoal-meta { margin-top: 0.15rem; font-size: var(--fs-xs); color: var(--text-muted); }
+.jgoal-strip { display: flex; gap: 3px; flex-shrink: 0; padding-bottom: 0.9rem; }
+.jgoal-day { position: relative; width: 16px; height: 16px; padding: 0; border: none; border-radius: 4px; cursor: pointer;
+  background: var(--row-active); transition: background-color 120ms ease; }
+.jgoal-day:disabled { cursor: default; opacity: 0.3; }
+.jgoal-day.week-start { margin-left: 7px; }
+/* Weekday letters under the days you can still check. */
+.jgoal-day[data-letter]::after { content: attr(data-letter); position: absolute; left: 0; right: 0; top: 19px;
+  font-size: 10px; line-height: 1; color: var(--text-faint); text-align: center; }
+.jgoal-day.today[data-letter]::after { color: var(--text-2); font-weight: 600; }
+.jgoal-day.on { background: var(--c); opacity: 1; }
+.jgoal-day.today { box-shadow: 0 0 0 1.5px var(--text-muted); }
+.jgoals-empty { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: var(--fs-sm);
+  color: var(--text-muted); padding: 0.2rem 0.1rem; }
+.jstep .jgoal-add, .jstep .jgoal-add:focus-within, .jday .jgoal-add, .jday .jgoal-add:focus-within { display: flex; align-items: center; gap: 0.4rem; max-width: none;
+  margin: 0; padding: 0 0 0 0.1rem; border: none; border-radius: 0; background: transparent; box-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none; }
+.jgoal-often, .jroute-add-due { border: none; background: var(--row-hover); color: var(--text-2); font: inherit;
+  font-size: var(--fs-sm); padding: 0.25rem 0.5rem; border-radius: var(--r); color-scheme: dark; }
+@media (hover: hover) and (pointer: fine) {
+  .jgoal-day:not(:disabled):not(.on):hover { background: color-mix(in srgb, var(--c) 45%, transparent); }
+  .jgoal:not(.done) .jgoal-check:hover { background: color-mix(in srgb, var(--c) 30%, transparent); }
+}
+@container (max-width: 560px) { .jgoal { flex-wrap: wrap; } .jgoal-strip { margin-left: 2.25rem; } }
+
+.jbox-next { margin-top: 0.4rem; font-size: var(--fs-xs); color: var(--text-2); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+
+/* A plan proposal lists its sub-steps; Accept adds the ticked ones. */
+.jdock-plan { display: flex; flex-direction: column; gap: 0.15rem; margin: 0 0 0.55rem; }
+.jdock-plan-row { display: flex; align-items: baseline; gap: 0.45rem; font-size: var(--fs-sm); color: var(--text-2);
+  cursor: pointer; line-height: var(--lh-tight); }
+.jdock-plan-row input { accent-color: var(--accent); transform: translateY(1px); }
+.jdock-plan-title { flex: 1; min-width: 0; }
+.jdock-plan-due { font-size: var(--fs-xs); color: var(--text-muted); white-space: nowrap; }
+
+.jgoal-more { flex-shrink: 0; align-self: center; }
+.jroute-more { flex-shrink: 0; align-self: flex-start; margin-top: 0.15rem; opacity: 0; transition: opacity 0.12s ease; }
+.jroute-stop:focus-within .jroute-more { opacity: 1; }
+@media (hover: hover) and (pointer: fine) { .jroute-stop:hover .jroute-more { opacity: 1; } }
+@media (hover: none) { .jroute-more { opacity: 1; } }
+.jstep-editable { cursor: text; border-radius: var(--r-sm); }
+@media (hover: hover) and (pointer: fine) {
+  .jstep-editable:hover { background: var(--row-hover); box-shadow: 0 0 0 0.3rem var(--row-hover); }
+}
+.jstep-detail.empty { color: var(--text-muted); }
+.jtile-today .t-item-title { color: var(--text-bright); }
+
+/* What the assistant knows about you, on the Journeys page */
+.jabout { margin-top: 2.2rem; max-width: 720px; }
+.jabout-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.7rem; }
+.jabout-title { font-size: var(--fs-md, 1rem); font-weight: 600; color: var(--text-bright); margin: 0 0 0.2rem; }
+.jabout-sub { color: var(--text-2); font-size: var(--fs-sm); }
+.jabout-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.jabout-fact { display: flex; align-items: center; gap: 0.4rem; transition: opacity 0.18s ease; }
+.jabout-fact.removing { opacity: 0; }
+.jabout-fact::before { content: ''; flex-shrink: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); opacity: 0.7; }
+.jabout-fact-text { flex: 1; min-width: 0; padding: 0.3rem 0.5rem; border-radius: var(--r-sm); cursor: text; line-height: var(--lh-tight); }
+.jabout-del { flex-shrink: 0; width: 1.6rem; height: 1.6rem; border: none; border-radius: var(--r-sm); background: none;
+  color: var(--text-muted); cursor: pointer; opacity: 0; transition: opacity 0.12s ease; }
+.jabout-fact:focus-within .jabout-del { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .jabout-fact-text:hover { background: var(--row-hover); }
+  .jabout-fact:hover .jabout-del { opacity: 1; }
+  .jabout-del:hover { background: var(--row-active); color: var(--text-bright); }
+}
+@media (hover: none) { .jabout-del { opacity: 1; } }
+.jabout-del:active { transform: scale(0.94); }
+.jabout-input { flex: 1; width: 100%; min-width: 0; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text); font: inherit; }
+.jabout-input:focus { outline: none; border-color: var(--accent); }
+form.jabout-add { display: flex; margin: 0.5rem 0 0 calc(5px + 0.4rem); padding: 0; border: none; background: none; box-shadow: none; }
+
+.jreview-del { border: none; background: none; padding: 0; color: var(--text-muted); font: inherit; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .jreview-del:hover { color: var(--danger, var(--text-bright)); } }
+
+/* The path map: each path an ordered line of stops, for journeys without terms */
+.jmap { display: flex; flex-direction: column; gap: 1.8rem; margin-top: 1.2rem; }
+.jmap-head { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.8rem; }
+.jmap-swatch { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
+.jmap-name { font-weight: 600; color: var(--text-bright); }
+.jmap-count { color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.jmap-line-more { margin-left: auto; }
+.jmap-stops { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; row-gap: 1.2rem; }
+.jmap-stop, .jmap-add, .jmap-end { position: relative; flex: 0 0 9.5rem; min-width: 0; }
+/* Each stop draws the stretch of line after its circle, so a wrapped row still reads as one line. */
+.jmap-stop::before, .jmap-add::before { content: ''; position: absolute; top: 12px; left: 0; right: 0; height: 3px;
+  background: color-mix(in srgb, var(--c) 30%, transparent); }
+.jmap-stop.done::before { background: var(--c); }
+.jmap-dot { position: relative; z-index: 1; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--c);
+  background: var(--surface); color: #fff; font-size: 0.8rem; line-height: 1; cursor: pointer; display: grid; place-items: center;
+  transition: transform 0.16s cubic-bezier(0.23, 1, 0.32, 1), background-color 0.16s ease; }
+.jmap-dot:active { transform: scale(0.92); }
+.jmap-stop.done .jmap-dot { background: var(--c); }
+.jmap-stop.proposed .jmap-dot { border-style: dashed; }
+.jmap-stop.rejected { opacity: 0.5; }
+.jmap-stop.rejected .jmap-title { text-decoration: line-through; }
+.jmap-body { margin: 0.45rem 0.6rem 0 -0.35rem; padding: 0.3rem 0.35rem; border-radius: var(--r-sm); cursor: pointer; }
+.jmap-title { line-height: var(--lh-tight); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.jmap-stop.done .jmap-title { color: var(--text-2); }
+.jmap-meta { margin-top: 0.2rem; font-size: var(--fs-xs); color: var(--text-muted); }
+.jmap-more { position: absolute; top: 0; right: 0.5rem; opacity: 0; transition: opacity 0.12s ease; }
+.jmap-stop:focus-within .jmap-more { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .jmap-body:hover { background: var(--row-hover); }
+  .jmap-stop:hover .jmap-more { opacity: 1; }
+}
+@media (hover: none) { .jmap-more { opacity: 1; } }
+.jmap-stop.dragging { opacity: 0.4; }
+.jmap-stop.drop-before .jmap-dot, .jmap-add.drop-before .jmap-add-btn { box-shadow: -8px 0 0 -5px var(--accent); }
+.jmap-stop.just-changed .jmap-dot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 30%, transparent); }
+.jmap-add { flex-basis: 3.5rem; }
+.jmap-add-btn { position: relative; z-index: 1; width: 26px; height: 26px; border-radius: 50%; border: 2px dashed var(--c);
+  background: var(--surface); color: var(--text-2); cursor: pointer; line-height: 1; transition: transform 0.16s cubic-bezier(0.23, 1, 0.32, 1); }
+.jmap-add-btn:active { transform: scale(0.92); }
+@media (hover: hover) and (pointer: fine) { .jmap-add-btn:hover { color: var(--text-bright); background: var(--row-hover); } }
+.jmap-end { flex-basis: 11rem; }
+.jmap-flag { position: relative; z-index: 1; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px;
+  background: color-mix(in srgb, var(--c) 18%, var(--surface)); color: var(--c); font-size: 0.85rem; }
+.jmap-end.reached .jmap-flag { background: var(--c); color: #fff; }
+.jmap-goal { margin: 0.45rem 0 0 -0.35rem; padding: 0.3rem 0.35rem; border-radius: var(--r-sm); color: var(--text-2);
+  font-size: var(--fs-sm); line-height: var(--lh-tight); cursor: text; }
+@media (hover: hover) and (pointer: fine) { .jmap-goal:hover { background: var(--row-hover); } }
+
+/* One click for every proposal in a reply */
+.jdock-accept-all { align-self: flex-start; margin-top: 0.6rem; padding: 0.4rem 0.85rem; border: none; border-radius: var(--r);
+  background: var(--accent); color: #fff; font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer;
+  transition: transform 160ms var(--ease-out), opacity 0.12s ease; }
+.jdock-accept-all:active { transform: scale(0.97); }
+.jdock-accept-all:disabled { opacity: 0.6; cursor: default; }
+
+/* Guided start: a question from the assistant, answered with a tap or a typed value */
+.jdock-ask { align-self: stretch; margin-top: 0.55rem; padding: 0.75rem 0.8rem; border-radius: var(--r);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
+.jdock-ask-q { font-weight: 600; color: var(--text-bright); line-height: var(--lh-tight); margin-bottom: 0.6rem; }
+.jdock-ask-choices { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.jdock-ask-choice { padding: 0.38rem 0.75rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font: inherit; font-size: var(--fs-sm); cursor: pointer;
+  transition: transform 160ms var(--ease-out), background-color 0.12s ease, border-color 0.12s ease; }
+.jdock-ask-choice:active { transform: scale(0.97); }
+.jdock-ask-choice:disabled { opacity: 0.5; cursor: default; }
+@media (hover: hover) and (pointer: fine) {
+  .jdock-ask-choice:hover:not(:disabled) { border-color: var(--accent); background: var(--row-hover); }
+}
+form.jdock-ask-form { display: flex; align-items: center; gap: 0.4rem; margin: 0.6rem 0 0; padding: 0; border: none;
+  background: none; box-shadow: none; }
+.jdock-ask-input { flex: 1; min-width: 0; padding: 0.38rem 0.55rem; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-sm); }
+.jdock-ask-input:focus { outline: none; border-color: var(--accent); }
+.jdock-ask-unit { color: var(--text-muted); font-size: var(--fs-sm); }
+.jdock-ask-send { padding: 0.38rem 0.75rem; border: none; border-radius: var(--r-sm); background: var(--accent); color: #fff;
+  font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; transition: transform 160ms var(--ease-out); }
+.jdock-ask-send:active { transform: scale(0.97); }
+.jroute-empty-actions { display: flex; align-items: center; gap: 0.8rem; }
+.jroute-empty-skip { border: none; background: none; padding: 0; color: var(--text-muted); font: inherit; font-size: var(--fs-sm);
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.jroute-walk { display: inline-block; margin: 0.45rem 0.4rem 0 0; padding: 0.3rem 0.7rem; border: none; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font: inherit; font-size: var(--fs-xs);
+  font-weight: 600; cursor: pointer; transition: transform 160ms var(--ease-out); }
+.jroute-walk:active { transform: scale(0.97); }
+
+/* Where you are on a path map line */
+.jmap-stop.here .jmap-dot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 28%, transparent); }
+.jmap-here { display: block; width: fit-content; margin-bottom: 0.2rem; padding: 0.05rem 0.45rem; border-radius: 999px;
+  background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); font-size: var(--fs-xs); font-weight: 600; }
+
+/* Daily goals on a journey's page, and where each goal applies */
+.jday { --c: var(--accent); margin: 1.1rem 0 0.4rem; }
+.jgoal-scope { margin-left: 0.4rem; padding: 0.02rem 0.4rem; border-radius: 999px; font-size: var(--fs-xs);
+  background: var(--surface-chip); color: var(--text-2); }
+.jgoal-scope.journey { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+
+/* A sub-step that asks for a result */
+.jroute-result { display: inline-block; margin: 0.35rem 0.4rem 0 0; padding: 0.1rem 0.5rem; border-radius: 999px;
+  font-size: var(--fs-xs); border: 1px dashed var(--border); color: var(--text-muted); }
+.jroute-result.has { border-style: solid; border-color: transparent; color: var(--text-bright);
+  background: color-mix(in srgb, var(--c, var(--accent)) 20%, transparent); font-weight: 600; }
+.jroute-stop.overdue .jroute-due.inline { background: none; }
+.jstep-meta .jhead-more { margin-left: auto; }
