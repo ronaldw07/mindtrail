@@ -12,6 +12,12 @@
       --surface-raised: #242424;    /* .card - the most elevated surface */
       --surface-hover: #2a2a2a;     /* hover fills (absorbs #2b2b2b #2c2c2c #2d2d2d #2e2e2e) */
       --surface-active: #333333;    /* pressed / stronger hover */
+      /* Sidebar row highlights: hover, the open page, and hovering the open page. */
+      --row-hover: color-mix(in srgb, var(--text) 6%, transparent);
+      --row-active: color-mix(in srgb, var(--text) 10%, transparent);
+      --row-active-hover: color-mix(in srgb, var(--text) 14%, transparent);
+      --jbox-color: var(--accent);   /* a journey box's color, set per box in journey_home.js */
+      --p: 0%;                      /* a step's sub-step progress, set per step in journey_step.js */
       --surface-chip: #262626;      /* chips, toasts, context menu */
 
       /* borders */
@@ -37,9 +43,12 @@
       --text-faint: #8c8c8c;        /* timestamps, empty states - 4.50:1 worst case */
 
       /* semantic */
-      --accent: #4f46e5;
-      --accent-hover: #5b52ea;
-      --link: #8ab4f8;
+      --accent: #0072e5;            /* fill: clears 4.5:1 with white; theme.css swaps it per accent */
+      --accent-hover: #2486ec;
+      --accent-text: #2993ff;       /* accent as text/icon on the surfaces */
+      --on-accent: #ffffff;
+      --accent-tint: color-mix(in srgb, var(--accent) 16%, transparent);
+      --link: var(--accent-text);
       --info: #4f8ef7;              /* unread dot, "now" priority rule */
       --success: #2f9e5c;
       --warn: #c8a44a;
@@ -72,12 +81,58 @@
          section labels. Charter/Iowan ship with macOS; ui-serif is New
          York in Safari. Nothing to download. */
       --font-serif: ui-serif, Charter, "Iowan Old Style", Georgia, serif;
-      --brief-yellow: #ffd21f;
+      --brief-yellow: #ffd21f;      /* over the artwork - same in both themes */
+      --editorial: #ffd21f;         /* editorial headings on a plain surface */
 
       /* easing - custom curves only; the CSS built-ins (ease, ease-out)
          are too weak to read as deliberate on a 100-300ms UI transition */
       --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
       --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+      /* springs - damped-spring curves sampled into linear(), so they
+         settle like a spring in plain CSS and stay interruptible. The
+         duration is the time the spring takes to settle to within 0.2%. */
+      --spring-snappy: cubic-bezier(0.23, 1, 0.32, 1);
+      --spring-smooth: cubic-bezier(0.23, 1, 0.32, 1);
+      --spring-bouncy: cubic-bezier(0.34, 1.4, 0.64, 1);
+      --dur-spring-snappy: 260ms;
+      --dur-spring-smooth: 380ms;
+      --dur-spring-bouncy: 400ms;
+      --dur-press: 120ms;
+      --dur-pop: 200ms;
+      --dur-view: 250ms;
+      --dur-sheet: 300ms;
+
+      /* depth, glass, scrims (light theme lightens all of these) */
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.35);
+      --shadow-md: 0 8px 24px rgba(0,0,0,0.4);
+      --shadow-lg: 0 18px 50px rgba(0,0,0,0.55);
+      --scrim: rgba(0,0,0,0.62);
+      --glass: rgba(33,33,33,0.72);       /* menus, toasts, popovers */
+      --glass-rail: rgba(23,23,23,0.72);  /* the sidebar */
+      --hairline: rgba(255,255,255,0.06);
+
+      /* per-component inputs, set inline or on the component */
+      --seg-index: 0;
+      --seg-count: 2;
+      --dot: transparent;
+      --tile: #636366;
+      --stage: #8e8e93;
+      --bar: #3987e5;
+      --weeks: 52;
+      --habit-color: #3987e5;
+      --c: #3987e5;                 /* journey: the track colour on a step chip */
+      --avatar-size: 30px;
+    }
+    @supports (transition-timing-function: linear(0, 1)) {
+      :root {
+        --spring-snappy: linear(0, 0.031, 0.104, 0.198, 0.298, 0.396, 0.487, 0.569, 0.641, 0.703, 0.756, 0.801, 0.838, 0.869, 0.894, 0.915, 0.932, 0.945, 0.956, 0.965, 0.972, 0.978, 0.983, 0.986, 0.989, 0.991, 0.993, 0.995, 0.996, 0.997, 0.997, 0.998, 1);
+        --spring-smooth: linear(0, 0.03, 0.1, 0.191, 0.288, 0.385, 0.475, 0.556, 0.628, 0.691, 0.745, 0.79, 0.828, 0.86, 0.887, 0.908, 0.926, 0.94, 0.952, 0.962, 0.969, 0.976, 0.98, 0.984, 0.988, 0.99, 0.992, 0.994, 0.995, 0.996, 0.997, 0.998, 1);
+        --spring-bouncy: linear(0, 0.026, 0.092, 0.182, 0.285, 0.391, 0.495, 0.592, 0.679, 0.756, 0.821, 0.875, 0.919, 0.953, 0.979, 0.998, 1.012, 1.021, 1.026, 1.028, 1.028, 1.027, 1.025, 1.022, 1.019, 1.016, 1.013, 1.011, 1.008, 1.006, 1.004, 1.003, 1);
+        --dur-spring-snappy: 250ms;
+        --dur-spring-smooth: 380ms;
+        --dur-spring-bouncy: 370ms;
+      }
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, system-ui, sans-serif;
@@ -154,7 +209,6 @@
     .side-btn { display: block; width: calc(100% - 1rem); margin: 0 0.5rem 0.5rem;
                 text-align: left; padding: 0.45rem 0.6rem; border-radius: var(--r); border: none;
                 background: transparent; color: var(--text-3); font-size: var(--fs-base); cursor: pointer; }
-    .side-btn:hover { background: var(--surface); color: var(--text-bright); }
 
     /* --- search --- */
     #search-box { position: relative; padding: 0 0.75rem 0.6rem; }
@@ -167,7 +221,7 @@
                       right: 0.75rem; display: none; background: var(--surface);
                       border: 1px solid var(--border); border-radius: var(--r); padding: 0.3rem;
                       max-height: 60vh; overflow-y: auto; z-index: 50;
-                      box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+                      box-shadow: var(--shadow-md); }
     #search-results.open { display: block; }
     /* Smaller than #search-results' own var(--r) - a same-radius child
        flush inside a rounded parent reads as a corner mismatch. */
@@ -197,12 +251,9 @@
     .project-head { display: flex; align-items: center; gap: 0.35rem;
                     padding: 0.4rem 0.6rem; border-radius: var(--r); cursor: pointer;
                     color: var(--text-3); font-size: var(--fs-base); font-weight: 500; }
-    .project-head:hover { background: var(--surface); }
     .caret { font-size: var(--fs-lg); color: var(--text-muted); width: 1rem; }
     .chat { display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.6rem;
             border-radius: var(--r); cursor: pointer; font-size: var(--fs-base); color: var(--text-3); }
-    .chat:hover { background: var(--surface); }
-    .chat.active { background: var(--surface-hover); color: var(--text-bright); }
     .chat.unread .chat-title { font-weight: 700; color: var(--text-bright); }
     .chat-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--info); flex-shrink: 0; }
@@ -224,7 +275,7 @@
             backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
             border: 1px solid var(--border-strong);
             border-radius: var(--r); padding: 0.3rem; display: none; z-index: 60;
-            min-width: 175px; box-shadow: 0 6px 22px rgba(0,0,0,0.45);
+            min-width: 175px; box-shadow: var(--shadow-md);
             transform-origin: top left; animation: menu-in 0.12s var(--ease-out); }
     #menu div { padding: 0.45rem 0.7rem; border-radius: var(--r-sm); cursor: pointer;
                 font-size: var(--fs-base); color: var(--text-3); }
@@ -244,13 +295,13 @@
     /* The dim scrim also gets the backdrop-filter blur - the modal
        itself stays opaque (it's a surface, not a material) and centred,
        since unlike a popover it isn't anchored to a trigger. */
-    #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.62);
+    #overlay { position: fixed; inset: 0; background: var(--scrim);
                backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
                display: none; align-items: center; justify-content: center; z-index: 100; }
     #overlay.open { display: flex; animation: overlay-in 0.14s var(--ease-out); }
     .modal { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-xl);
              padding: 1.25rem; width: 390px; max-width: calc(100vw - 2rem);
-             box-shadow: 0 18px 50px rgba(0,0,0,0.55);
+             box-shadow: var(--shadow-lg);
              animation: modal-in 0.18s var(--ease-out); }
     .modal h3 { margin: 0 0 0.75rem; font-size: var(--fs-lg); font-weight: 600; color: var(--text-heading); }
     .modal p { margin: 0 0 1rem; font-size: var(--fs-base); color: var(--text-2); line-height: var(--lh-body);
@@ -270,7 +321,7 @@
                     font-size: var(--fs-base); cursor: pointer; }
     .btn-ghost { background: transparent; color: var(--text-2); }
     .btn-ghost:hover { background: var(--surface-hover); color: var(--text-bright); }
-    .btn-primary { background: var(--accent); color: var(--text-bright); }
+    .btn-primary { background: var(--accent); color: var(--on-accent); }
     .btn-primary:hover { background: var(--accent-hover); }
     .btn-danger { background: var(--danger-solid); color: var(--text-bright); }
     .btn-danger:hover { background: var(--danger-solid-hover); }
@@ -283,14 +334,14 @@
        overlay stays an opaque box like .modal, since it is a rare,
        secondary surface rather than something glanced through. */
     #palette, #shortcuts { position: fixed; inset: 0; z-index: 150;
-                           background: rgba(0,0,0,0.55); display: none; }
+                           background: var(--scrim); display: none; }
     .palette-box { position: absolute; top: 14vh; left: 50%; transform: translateX(-50%);
                    width: 560px; max-width: calc(100vw - 2rem); max-height: 65vh;
                    display: flex; flex-direction: column; overflow: hidden;
                    background: color-mix(in srgb, var(--surface-chip) 82%, transparent);
                    backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
                    border: 1px solid var(--border-strong); border-radius: var(--r-xl);
-                   box-shadow: 0 18px 50px rgba(0,0,0,0.55); }
+                   box-shadow: var(--shadow-lg); }
     .palette-input { border: none; border-bottom: 1px solid var(--border-subtle);
                      background: transparent; color: var(--text); font-size: var(--fs-lg);
                      padding: 0.9rem 1rem; outline: none; }
@@ -306,7 +357,7 @@
     .shortcuts-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
                      width: 360px; max-width: calc(100vw - 2rem); padding: 1.25rem;
                      background: var(--surface); border: 1px solid var(--border-strong);
-                     border-radius: var(--r-xl); box-shadow: 0 18px 50px rgba(0,0,0,0.55); }
+                     border-radius: var(--r-xl); box-shadow: var(--shadow-lg); }
     .shortcuts-title { margin: 0 0 0.75rem; font-size: var(--fs-lg); font-weight: 600;
                        color: var(--text-heading); }
     .shortcuts-row { display: flex; justify-content: space-between; gap: 1rem;
@@ -397,7 +448,7 @@
        dark mode. */
     .card { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--r-lg);
             padding: 1rem 1.1rem; margin-bottom: 1rem;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.35), 0 0 0 0.5px rgba(255,255,255,0.04) inset; }
+            box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--hairline) inset; }
     .card h4 { margin: 0 0 0.7rem; font-size: var(--fs-xs); text-transform: uppercase;
                letter-spacing: 0.06em; color: var(--text-muted); display: flex;
                align-items: center; gap: 0.4rem; }
@@ -417,10 +468,62 @@
                         color: var(--text-3); font-size: var(--fs-base); padding: 0.6rem 0.7rem;
                         font-family: inherit; line-height: var(--lh-tight); outline: none; }
     .instructions-box:focus { border-color: var(--accent); }
-    .proj-chat { display: flex; align-items: center; gap: 0.5rem; padding: 0.7rem 0.2rem;
-                 border-bottom: 1px solid var(--surface-chip); cursor: pointer; font-size: var(--fs-md); }
-    .proj-chat:hover { color: var(--text-bright); }
-    .proj-chat .when { color: var(--text-faint); font-size: var(--fs-sm); }
+    /* Project page: composer, then chats as quiet rows that light up
+       under the pointer - the same highlight steps as the sidebar. */
+    .proj-composer { background: var(--surface-raised); border-radius: 14px; padding: 0.8rem 0.9rem 0.55rem;
+                     box-shadow: var(--shadow-sm), 0 0 0 0.5px var(--hairline); margin-bottom: 1.6rem;
+                     cursor: text; }
+    .proj-composer:focus-within { box-shadow: var(--shadow-sm), 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent); }
+    .proj-composer textarea { width: 100%; resize: none; border: none; outline: none; background: transparent;
+                              color: var(--text); font: inherit; font-size: var(--fs-md); line-height: 1.5; }
+    .proj-composer textarea::placeholder { color: var(--text-faint); }
+    .proj-composer-bar { display: flex; align-items: center; gap: 0.4rem; }
+    .proj-composer-bar .spacer { flex: 1; }
+    .proj-composer-bar .icon-btn { font-size: 1.1rem; width: 28px; height: 28px; }
+    .proj-send { width: 30px; height: 30px; border-radius: 9px; border: none; cursor: pointer;
+                 display: grid; place-items: center; background: var(--accent); color: #fff;
+                 transition: opacity 0.12s ease, transform 160ms var(--ease-out); }
+    .proj-send:disabled { opacity: 0.3; cursor: default; }
+    .proj-send:not(:disabled):active { transform: scale(0.97); }
+    .proj-group { font-size: var(--fs-sm); color: var(--text-muted); margin: 0.9rem 0 0.35rem 0.6rem; }
+    .proj-group:first-child { margin-top: 0; }
+    .proj-empty { padding: 0.4rem 0.6rem; }
+    .proj-chat { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.6rem;
+                 border-radius: var(--r); cursor: pointer; font-size: var(--fs-md); color: var(--text-2); }
+    .proj-chat-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .proj-chat .when { color: var(--text-faint); font-size: var(--fs-sm); flex-shrink: 0; }
+    .proj-chat .menu-btn { flex-shrink: 0; }
+    .proj-chat:focus-within .menu-btn { opacity: 1; }
+    @media (hover: hover) and (pointer: fine) {
+      .proj-chat:hover { background: var(--row-hover); color: var(--text-bright); }
+      .proj-chat:hover .menu-btn { opacity: 1; }
+      .proj-chat:hover .when { display: none; }
+    }
+    .proj-chat:active { background: var(--row-active); }
+
+    /* Instructions / Context / Memory: one quiet row each, editor below. */
+    .proj-props { margin-bottom: 1.2rem; }
+    .prop { border-bottom: 1px solid var(--border-subtle); }
+    .prop:last-child { border-bottom: none; }
+    .prop-head { display: flex; align-items: center; gap: 0.65rem; padding: 0.75rem 0.5rem;
+                 border-radius: var(--r); cursor: pointer; font-size: var(--fs-md);
+                 transition: background-color 0.12s ease; }
+    .prop-icon { display: inline-flex; color: var(--text-muted); }
+    .prop-label { flex: 1; color: var(--text); }
+    .prop-action { font-size: var(--fs-sm); color: var(--text-2); }
+    @media (hover: hover) and (pointer: fine) {
+      .prop-head:hover { background: var(--row-hover); }
+    }
+    .prop.open .prop-head { background: var(--row-active); }
+    .prop-panel { display: none; padding: 0.4rem 0.5rem 0.9rem; }
+    .prop.open .prop-panel { display: block; }
+    .prop-hint { font-size: var(--fs-sm); color: var(--text-muted); margin-bottom: 0.5rem;
+                 line-height: var(--lh-tight); }
+    .prop-panel .instructions-box { min-height: 120px; max-height: 50vh; }
+    .prop-buttons { display: flex; gap: 0.4rem; margin-top: 0.55rem; }
+    .prop-buttons button { padding: 0.4rem 0.9rem; border-radius: var(--r); border: none; cursor: pointer;
+                           font: inherit; font-size: var(--fs-sm); }
+    .prop-buttons button:disabled { opacity: 0.45; cursor: default; }
     .file-chip { display: inline-block; background: var(--surface-chip); border: 1px solid var(--border);
                  border-radius: var(--r); padding: 0.3rem 0.6rem; font-size: var(--fs-sm);
                  color: var(--text-3); margin: 0.2rem 0.3rem 0.2rem 0; }
@@ -479,7 +582,7 @@
        plus the recording-mic and done-node accents below - each used in
        exactly one place, so they stay literal rather than joining the
        ramp. */
-    .rc-msg.user { align-self: flex-end; color: #d8d8ff; background: #262a4a;
+    .rc-msg.user { align-self: flex-end; color: var(--text); background: color-mix(in srgb, var(--accent) 22%, var(--surface));
                    border-radius: var(--r-lg); padding: 0.45rem 0.65rem; }
     .rc-msg.assistant { align-self: flex-start; color: var(--text); }
     .rc-action { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
@@ -514,18 +617,18 @@
        them would make the card lag a frame behind the cursor. */
     .node { position: absolute; width: 220px; background: var(--surface); border: 1px solid var(--border-strong);
             border-radius: var(--r-lg); padding: 0.7rem 0.85rem 2rem; cursor: grab; font-size: var(--fs-base);
-            box-shadow: 0 4px 14px rgba(0,0,0,0.3); user-select: none;
+            box-shadow: var(--shadow-md); user-select: none;
             transition: border-color 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease; }
     .node:active { cursor: grabbing; }
     .node.proposed { border-style: dashed; opacity: 0.85; }
     .node.accepted { border-color: var(--accent); }
     .node.done { border-color: var(--success); }
-    .node.done .node-title { text-decoration: line-through; color: #8fae9c; } /* one-off: done-node title tint */
+    .node.done .node-title { text-decoration: line-through; color: var(--success); } /* one-off: done-node title tint */
     .node.rejected { opacity: 0.45; border-style: dotted; }
     .node.rejected .node-title { text-decoration: line-through; }
     .node-title { font-weight: 600; color: var(--text); margin-bottom: 0.3rem; }
     .node-detail { color: var(--text-2); font-size: var(--fs-sm); line-height: var(--lh-tight); margin-bottom: 0.4rem; }
-    .node-note { font-size: var(--fs-sm); color: #cdd8ff; background: #1e2340; border-radius: var(--r);
+    .node-note { font-size: var(--fs-sm); color: var(--text); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border-radius: var(--r);
                  padding: 0.3rem 0.5rem; margin-bottom: 0.4rem; }
     .node-due { font-size: var(--fs-xs); color: var(--text-muted); margin-bottom: 0.4rem; }
     .node-due.overdue { color: var(--danger); }
@@ -582,7 +685,7 @@
     .tier { display: inline-block; font-size: var(--fs-xs); text-transform: uppercase;
             letter-spacing: 0.07em; padding: 0.1rem 0.4rem; border-radius: var(--r-sm);
             margin-right: 0.4rem; vertical-align: 1px; }
-    .tier.now   { background: #1e3a6b; color: #a9c9ff; }
+    .tier.now   { background: color-mix(in srgb, var(--accent) 24%, var(--surface)); color: var(--accent-text); }
     .tier.next  { background: var(--surface-hover); color: var(--text-3); }
     .tier.later { background: var(--surface-chip); color: var(--text-muted); }
     .stale-note { font-size: var(--fs-sm); color: var(--warn); margin-bottom: 0.5rem; }
@@ -605,13 +708,13 @@
              backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
              border: 1px solid var(--border-strong); border-radius: var(--r-lg);
              padding: 0.6rem 0.9rem; font-size: var(--fs-base); color: var(--text);
-             box-shadow: 0 8px 26px rgba(0,0,0,0.5); display: flex;
+             box-shadow: var(--shadow-md); display: flex;
              align-items: center; gap: 0.75rem; min-width: 280px;
              animation: toast-in 0.2s ease-out; }
     .toast.leaving { animation: toast-out 0.16s ease-out forwards; }
     .toast.err { border-color: var(--danger-border); }
     .toast .msg { flex: 1; }
-    .toast .undo { background: transparent; border: 1px solid var(--border-strong); color: #cdd8ff;
+    .toast .undo { background: transparent; border: 1px solid var(--border-strong); color: var(--accent-text);
                    border-radius: var(--r); padding: 0.25rem 0.6rem; font-size: var(--fs-sm);
                    cursor: pointer; white-space: nowrap; }
     .toast .undo:hover { background: var(--surface-active); color: var(--text-bright); }
@@ -626,9 +729,9 @@
     .icon-btn { background: transparent; border: none; color: var(--text-2); cursor: pointer;
                 font-size: var(--fs-xl); padding: 0.35rem 0.5rem; border-radius: 50%; }
     .icon-btn:hover { background: var(--surface-hover); color: var(--text-bright); }
-    .icon-btn.recording { color: var(--danger); background: #3a2020; } /* one-off: recording mic bg */
+    .icon-btn.recording { color: var(--danger); background: color-mix(in srgb, var(--danger) 18%, var(--surface)); } /* one-off: recording mic bg */
     button.send { padding: 0.55rem 1.1rem; border-radius: 20px; border: none;
-                  background: var(--accent); color: white; font-size: var(--fs-md); cursor: pointer; }
+                  background: var(--accent); color: var(--on-accent); font-size: var(--fs-md); cursor: pointer; }
     button.send:disabled { opacity: 0.4; cursor: default; }
     /* Inline spinner for buttons that kick off a slow LLM call (roadmap
        generation) - swapped in alongside the label so waiting has some
@@ -666,3 +769,7 @@
       }
     }
   
+    /* Settings → Google */
+    .google-access { font-size: var(--fs-sm); color: var(--text-muted); }
+    .google-access.on { color: var(--text-2); }
+    .google-error { color: var(--danger-solid); }

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1a1a1a">
+<title>Mind Trail · Capture</title>
+<style>
+  :root { color-scheme: dark; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: #1a1a1a; color: #ececec;
+         font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         padding: max(1.25rem, env(safe-area-inset-top)) 1.1rem max(1.25rem, env(safe-area-inset-bottom)); }
+  h1 { font-size: 1.35rem; margin: 0.4rem 0 0.2rem; }
+  p { color: #a5a5a5; margin: 0 0 1rem; font-size: 0.92rem; }
+  label { display: block; font-size: 0.8rem; color: #8e8e93; margin: 0 0 0.35rem; }
+  select, textarea { width: 100%; font: inherit; color: #ececec; background: #242424;
+                     border: 1px solid #333; border-radius: 12px; padding: 0.75rem 0.85rem; outline: none; }
+  select:focus, textarea:focus { border-color: #3987e5; }
+  textarea { min-height: 9rem; resize: vertical; margin-bottom: 0.9rem; }
+  .field { margin-bottom: 0.9rem; }
+  button { width: 100%; font: inherit; font-weight: 600; color: #fff; background: #0a84ff; border: none;
+           border-radius: 12px; padding: 0.85rem; transition: transform 160ms var(--ease-out), opacity 0.15s; }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.4; }
+  .note { min-height: 1.4rem; margin-top: 0.8rem; font-size: 0.9rem; color: #a5a5a5; text-align: center; }
+  .note.ok { color: #30d158; }
+  .note.err { color: #ff6961; }
+</style>
+</head>
+<body>
+  <h1>Send to a journey</h1>
+  <p>A step, a note or a link. It waits in that journey’s Suggestions until you accept it.</p>
+  <form id="f">
+    <div class="field">
+      <label for="journey">Journey</label>
+      <select id="journey"></select>
+    </div>
+    <label for="text">What is it?</label>
+    <textarea id="text" placeholder="e.g. Apply to the Stripe internship&#10;https://…" required></textarea>
+    <button id="send" type="submit" disabled>Send</button>
+    <div class="note" id="note" role="status"></div>
+  </form>
+<script>
+  const $ = id => document.getElementById(id);
+  const note = (text, kind) => { $('note').textContent = text; $('note').className = 'note ' + (kind || ''); };
+  const LAST = 'captureJourney';
+
+  fetch('/api/journey').then(r => r.json()).then(data => {
+    const list = data.journeys || [];
+    if (!list.length) { note('Make a journey on your computer first.', 'err'); return; }
+    list.forEach(j => {
+      const o = document.createElement('option');
+      o.value = j.project_id;
+      o.textContent = j.name;
+      $('journey').appendChild(o);
+    });
+    const last = localStorage.getItem(LAST);
+    if (list.some(j => j.project_id === last)) $('journey').value = last;
+    $('send').disabled = false;
+  }).catch(() => note('Couldn’t reach Mind Trail.', 'err'));
+
+  $('f').addEventListener('submit', async e => {
+    e.preventDefault();
+    const text = $('text').value.trim();
+    if (!text) return;
+    $('send').disabled = true;
+    note('Sending…');
+    try {
+      const res = await fetch('/api/capture', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text, project_id: $('journey').value})}).then(r => r.json());
+      if (res.error) { note(res.error, 'err'); return; }
+      localStorage.setItem(LAST, $('journey').value);
+      $('text').value = '';
+      note(res.duplicate ? 'Already there.' : 'Sent ✓', 'ok');
+    } catch (err) {
+      note('Couldn’t reach Mind Trail.', 'err');
+    } finally {
+      $('send').disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

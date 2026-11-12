@@ -20,6 +20,9 @@ class Project:
     """How many entries the stored advice was generated from. Compared
     against the project's current entry count to detect staleness."""
     area_id: str = ""
+    memory: str = ""
+    memory_generated_at: str = ""
+    memory_basis_count: int = 0
 
 
 def _to_project(row) -> Project:
@@ -37,6 +40,13 @@ def _to_project(row) -> Project:
             row["advice_basis_count"] if "advice_basis_count" in keys else 0
         ),
         area_id=row["area_id"] if "area_id" in keys else "",
+        memory=row["memory"] if "memory" in keys else "",
+        memory_generated_at=(
+            row["memory_generated_at"] if "memory_generated_at" in keys else ""
+        ),
+        memory_basis_count=(
+            row["memory_basis_count"] if "memory_basis_count" in keys else 0
+        ),
     )
 
 
@@ -132,6 +142,28 @@ class ProjectStore:
                 "UPDATE projects SET advice = ?, advice_generated_at = ?, "
                 "advice_basis_count = ? WHERE id = ?",
                 (advice, now_iso(), basis_count, project_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"no such project: {project_id}")
+
+    def save_memory(self, project_id: str, memory: str, basis_count: int) -> None:
+        """Store generated memory and how many entries it was built from."""
+        with connect(self._path) as conn:
+            cursor = conn.execute(
+                "UPDATE projects SET memory = ?, memory_generated_at = ?, "
+                "memory_basis_count = ? WHERE id = ?",
+                (memory.strip(), now_iso(), basis_count, project_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"no such project: {project_id}")
+
+    def set_memory(self, project_id: str, memory: str) -> None:
+        """A hand edit. Leaves the basis count alone, so an edit doesn't
+        hide new activity that the next refresh should fold in."""
+        with connect(self._path) as conn:
+            cursor = conn.execute(
+                "UPDATE projects SET memory = ? WHERE id = ?",
+                (memory.strip(), project_id),
             )
             if cursor.rowcount == 0:
                 raise ValueError(f"no such project: {project_id}")

@@ -9,9 +9,11 @@ from __future__ import annotations
 import sqlite3
 import uuid
 from dataclasses import dataclass
+from datetime import date
 
 from mindtrail.organize.db import connect, now_iso
 from mindtrail.organize.jobs import clean_date
+from mindtrail.organize.repeats import next_due
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,8 @@ class Task:
     area_id: str
     source_message_id: str
     created_at: str
+    repeat: str = ""
+    spawned_from: str = ""
 
 
 def _to_task(row) -> Task:
@@ -33,6 +37,7 @@ def _to_task(row) -> Task:
         done=bool(row["done"]), done_at=row["done_at"],
         application_id=row["application_id"], area_id=row["area_id"],
         source_message_id=row["source_message_id"], created_at=row["created_at"],
+        repeat=row["repeat"], spawned_from=row["spawned_from"],
     )
 
 
@@ -47,6 +52,8 @@ class TaskStore:
         application_id: str | None = None,
         area_id: str = "",
         source_message_id: str = "",
+        repeat: str = "",
+        spawned_from: str = "",
     ) -> Task:
         title = title.strip()
         if not title:
@@ -55,14 +62,16 @@ class TaskStore:
             id=str(uuid.uuid4()), title=title, due_date=clean_date(due_date), done=False,
             done_at="", application_id=application_id or None, area_id=area_id,
             source_message_id=source_message_id, created_at=now_iso(),
+            repeat=repeat, spawned_from=spawned_from,
         )
         try:
             with connect(self._path) as conn:
                 conn.execute(
                     "INSERT INTO tasks (id, title, due_date, done, done_at, application_id, "
-                    "area_id, source_message_id, created_at) VALUES (?, ?, ?, 0, '', ?, ?, ?, ?)",
+                    "area_id, source_message_id, created_at, repeat, spawned_from) "
+                    "VALUES (?, ?, ?, 0, '', ?, ?, ?, ?, ?, ?)",
                     (task.id, task.title, task.due_date, task.application_id, task.area_id,
-                     task.source_message_id, task.created_at),
+                     task.source_message_id, task.created_at, task.repeat, task.spawned_from),
                 )
         except sqlite3.IntegrityError as exc:
             raise ValueError(f"no such application: {application_id}") from exc
@@ -127,6 +136,10 @@ class TaskStore:
             changes["due_date"] = clean_date(fields["due_date"])
         if "area_id" in fields:
             changes["area_id"] = str(fields["area_id"] or "")
+        if "application_id" in fields:
+            changes["application_id"] = fields["application_id"] or None
+        if "repeat" in fields:
+            changes["repeat"] = str(fields["repeat"] or "")
         if "done" in fields:
             done = bool(fields["done"])
             changes["done"] = int(done)
@@ -134,11 +147,38 @@ class TaskStore:
         if not changes:
             return current
         assignments = ", ".join(f"{k} = ?" for k in changes)
+        try:
+            with connect(self._path) as conn:
+                conn.execute(
+                    f"UPDATE tasks SET {assignments} WHERE id = ?", (*changes.values(), task_id)
+                )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(f"no such application: {fields.get('application_id')}") from exc
+        updated = self.get(task_id)
+        if "done" in fields and bool(fields["done"]) != current.done:
+            self._follow_the_repeat(updated)
+        return updated
+
+    def _follow_the_repeat(self, task: Task) -> None:
+        """Checking off a repeating task creates the next one; un-checking
+        removes it again (if it's still untouched), so toggling back and
+        forth never leaves two."""
+        if not task.repeat:
+            return
         with connect(self._path) as conn:
-            conn.execute(
-                f"UPDATE tasks SET {assignments} WHERE id = ?", (*changes.values(), task_id)
-            )
-        return self.get(task_id)
+            children = conn.execute(
+                "SELECT id, done FROM tasks WHERE spawned_from = ?", (task.id,)
+            ).fetchall()
+            if not task.done:
+                conn.execute("DELETE FROM tasks WHERE spawned_from = ? AND done = 0", (task.id,))
+                return
+            if children:
+                return
+        self.add(
+            task.title, next_due(task.repeat, task.due_date, date.today()),
+            application_id=task.application_id, area_id=task.area_id,
+            repeat=task.repeat, spawned_from=task.id,
+        )
 
     def delete(self, task_id: str) -> None:
         with connect(self._path) as conn:

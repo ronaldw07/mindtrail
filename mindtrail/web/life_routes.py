@@ -12,10 +12,14 @@ Each handler takes (deps, path_args, body, query) and returns a dict.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date
 
-from mindtrail.web import admin_api, jobs_api, life_api, review
+from mindtrail.web import (
+    assistant_files_api,
+    admin_api, email_api, jobs_api, journey_api, life_api, measure_api, recruit_api, review, settings_api,
+    step_tasks_api,
+)
 
 ROUTES: list[tuple[str, re.Pattern, object]] = []
 
@@ -50,12 +54,63 @@ def find(method: str, path: str):
 _ID = r"([A-Za-z0-9-]+)"
 
 
+# --- today's to-dos: crossed off and archived ----------------------------------
+
+
+def _local_day() -> str:
+    return date.today().isoformat()
+
+
+@route("GET", "/api/today/marks")
+def _today_marks(deps, args, body, query):
+    return deps.today_marks.for_today(_local_day())
+
+
+@route("GET", "/api/today/archive")
+def _today_archive(deps, args, body, query):
+    return {"items": deps.today_marks.archived()}
+
+
+@route("POST", "/api/today/marks")
+def _today_mark(deps, args, body, query):
+    """action cross | uncross | pin | unpin | archive (done: whether it
+    was crossed off) | forget (put back from the archive)."""
+    action = body.get("action")
+    try:
+        if action == "cross":
+            deps.today_marks.cross(body, _local_day())
+        elif action == "archive":
+            deps.today_marks.archive(body, _local_day(), done=bool(body.get("done")))
+        elif action == "pin":
+            deps.today_marks.pin(body, _local_day())
+        elif action in ("forget", "uncross", "unpin"):
+            getattr(deps.today_marks, action)(str(body.get("kind", "")), str(body.get("ref", "")))
+        else:
+            return {"error": "unknown action"}
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"ok": True}
+
+
+# --- sidebar badges -----------------------------------------------------------
+
+
+@route("GET", "/api/badges")
+def _badges(deps, args, body, query):
+    return life_api.handle_badges(deps.tasks, deps.people, deps.jobs, practice=deps.practice)
+
+
 # --- jobs -------------------------------------------------------------------
 
 
 @route("GET", "/api/jobs")
 def _list_jobs(deps, args, body, query):
-    return jobs_api.handle_list_jobs(deps.jobs, deps.tasks, deps.job_emails, deps.state)
+    data = jobs_api.handle_list_jobs(deps.jobs, deps.tasks,
+                                     lambda app_id: email_api.with_links(deps.job_emails(app_id), deps.state),
+                                     deps.state)
+    for a in data["applications"]:
+        a["rounds"] = [asdict(r) for r in deps.rounds.for_application(a["id"])]
+    return data
 
 
 @route("POST", "/api/jobs")
@@ -287,7 +342,13 @@ def _artwork_image(deps, args, body, query):
 
 @route("GET", "/api/tasks")
 def _list_tasks(deps, args, body, query):
-    return jobs_api.handle_list_tasks(deps.tasks, query.get("all", [""])[0] == "1")
+    return email_api.with_sources(jobs_api.handle_list_tasks(deps.tasks, query.get("all", [""])[0] == "1"),
+                                  deps.jobs, deps.email_log, deps.state)
+
+
+@route("GET", f"/api/email/{_ID}")
+def _email(deps, args, body, query):
+    return email_api.handle_email(deps.gmail, deps.email_log, deps.state, args[0])
 
 
 @route("POST", "/api/tasks")
@@ -308,3 +369,390 @@ def _update_task(deps, args, body, query):
 @route("DELETE", f"/api/tasks/{_ID}")
 def _delete_task(deps, args, body, query):
     return jobs_api.handle_delete_task(deps.tasks, args[0])
+
+
+# --- settings: connections and backups ----------------------------------------
+
+
+@route("GET", "/api/connections")
+def _connections(deps, args, body, query):
+    return settings_api.handle_connections(deps.canvas, deps.github, deps.health, deps.backups)
+
+
+@route("GET", "/api/backups")
+def _backups(deps, args, body, query):
+    return settings_api.handle_backups(deps.backups)
+
+
+@route("POST", "/api/backups/run")
+def _backup_run(deps, args, body, query):
+    return settings_api.handle_backup_run(deps.backups)
+
+
+@route("POST", "/api/backups/folder")
+def _backup_folder(deps, args, body, query):
+    return settings_api.handle_backup_folder(deps.backups, body)
+
+
+@route("POST", "/api/backups/enable")
+def _backup_enable(deps, args, body, query):
+    return settings_api.handle_backup_enable(deps.backups, body)
+
+
+@route("POST", "/api/backups/restore")
+def _backup_restore(deps, args, body, query):
+    return settings_api.handle_backup_restore(deps.backups, deps.journal, body)
+
+
+@route("GET", "/api/weather")
+def _weather(deps, args, body, query):
+    return settings_api.handle_weather(deps.weather)
+
+
+@route("POST", "/api/weather")
+def _set_weather(deps, args, body, query):
+    return settings_api.handle_set_weather(deps.weather, body)
+
+
+# --- recruiting: rounds, stories, practice, offers ----------------------------
+
+
+@route("POST", f"/api/jobs/{_ID}/rounds")
+def _add_round(deps, args, body, query):
+    return recruit_api.handle_add_round(deps.rounds, args[0], body)
+
+
+@route("PATCH", f"/api/rounds/{_ID}")
+def _update_round(deps, args, body, query):
+    return recruit_api.handle_update_round(deps.rounds, args[0], body)
+
+
+@route("DELETE", f"/api/rounds/{_ID}")
+def _delete_round(deps, args, body, query):
+    return recruit_api.handle_delete_round(deps.rounds, args[0])
+
+
+@route("GET", "/api/recruiting/today")
+def _recruiting_today(deps, args, body, query):
+    return recruit_api.handle_recruiting_today(deps.rounds, deps.practice)
+
+
+@route("GET", "/api/stories")
+def _list_stories(deps, args, body, query):
+    return recruit_api.handle_list_stories(deps.stories)
+
+
+@route("POST", "/api/stories")
+def _create_story(deps, args, body, query):
+    return recruit_api.handle_create_story(deps.stories, body)
+
+
+@route("PATCH", f"/api/stories/{_ID}")
+def _update_story(deps, args, body, query):
+    return recruit_api.handle_update_story(deps.stories, args[0], body)
+
+
+@route("DELETE", f"/api/stories/{_ID}")
+def _delete_story(deps, args, body, query):
+    return recruit_api.handle_delete_story(deps.stories, args[0])
+
+
+@route("GET", "/api/practice")
+def _list_practice(deps, args, body, query):
+    return recruit_api.handle_list_practice(deps.practice)
+
+
+@route("POST", "/api/practice")
+def _add_problem(deps, args, body, query):
+    return recruit_api.handle_add_problem(deps.practice, body)
+
+
+@route("POST", f"/api/practice/{_ID}/review")
+def _review_problem(deps, args, body, query):
+    return recruit_api.handle_review_problem(deps.practice, args[0], body)
+
+
+@route("DELETE", f"/api/practice/{_ID}")
+def _delete_problem(deps, args, body, query):
+    return recruit_api.handle_delete_problem(deps.practice, args[0])
+
+
+@route("GET", "/api/offers")
+def _list_offers(deps, args, body, query):
+    return recruit_api.handle_list_offers(deps.offers, deps.jobs)
+
+
+@route("POST", f"/api/offers/{_ID}")
+def _save_offer(deps, args, body, query):
+    return recruit_api.handle_save_offer(deps.offers, args[0], body)
+
+
+@route("DELETE", f"/api/offers/{_ID}")
+def _delete_offer(deps, args, body, query):
+    return recruit_api.handle_delete_offer(deps.offers, args[0])
+
+
+# --- the 4-year journey --------------------------------------------------------
+
+
+@route("GET", "/api/journey")
+def _journey(deps, args, body, query):
+    return journey_api.handle_get(deps.journey, deps.projects)
+
+
+@route("GET", "/api/journey/today")
+def _journey_today(deps, args, body, query):
+    return journey_api.handle_today(deps.journey, deps.projects, habits=deps.habits)
+
+
+@route("POST", "/api/journey/setup")
+def _journey_setup(deps, args, body, query):
+    return journey_api.handle_setup(deps.journey, deps.projects, body)
+
+
+@route("POST", "/api/journey/folder")
+def _journey_folder(deps, args, body, query):
+    return journey_api.handle_set_folder(deps.journey, body)
+
+
+@route("POST", "/api/journey/layout")
+def _journey_layout(deps, args, body, query):
+    return journey_api.handle_set_layout(deps.journey, body)
+
+
+@route("POST", "/api/journey/folders/rename")
+def _journey_rename_folder(deps, args, body, query):
+    return journey_api.handle_rename_folder(deps.journey, body)
+
+
+@route("POST", "/api/journey/select")
+def _journey_select(deps, args, body, query):
+    return journey_api.handle_select(deps.journey, deps.projects, body)
+
+
+@route("PATCH", "/api/journey")
+def _journey_update(deps, args, body, query):
+    return journey_api.handle_update(deps.journey, deps.projects, body)
+
+
+@route("POST", "/api/journey/tracks")
+def _journey_create_track(deps, args, body, query):
+    return journey_api.handle_create_track(deps.journey, body)
+
+
+@route("PATCH", f"/api/journey/tracks/{_ID}")
+def _journey_update_track(deps, args, body, query):
+    return journey_api.handle_update_track(deps.journey, args[0], body)
+
+
+@route("POST", f"/api/journey/tracks/{_ID}/duplicate")
+def _journey_duplicate_track(deps, args, body, query):
+    return journey_api.handle_duplicate_track(deps.journey, args[0], body)
+
+
+@route("DELETE", f"/api/journey/tracks/{_ID}")
+def _journey_delete_track(deps, args, body, query):
+    return journey_api.handle_delete_track(deps.journey, args[0])
+
+
+@route("POST", "/api/journey/steps")
+def _journey_add_step(deps, args, body, query):
+    return journey_api.handle_add_step(deps.journey, body)
+
+
+@route("POST", f"/api/journey/steps/{_ID}/calendar")
+def _journey_step_calendar(deps, args, body, query):
+    return journey_api.handle_step_to_calendar(deps.journey, args[0], body)
+
+
+@route("POST", "/api/capture")
+def _capture(deps, args, body, query):
+    return journey_api.handle_capture(deps.journey, body)
+
+
+@route("GET", "/api/google/status")
+def _google_status(deps, args, body, query):
+    return deps.google.status()
+
+
+@route("POST", "/api/google/connect")
+def _google_connect(deps, args, body, query):
+    return deps.google.start()
+
+
+@route("GET", f"/api/journey/steps/{_ID}/tasks")
+def _step_tasks(deps, args, body, query):
+    return step_tasks_api.handle_list(deps.journey, deps.habits, args[0])
+
+
+@route("POST", f"/api/journey/steps/{_ID}/tasks")
+def _step_add_task(deps, args, body, query):
+    return step_tasks_api.handle_add(deps.journey, args[0], body, deps.llm)
+
+
+@route("POST", f"/api/journey/steps/{_ID}/goals")
+def _step_add_goal(deps, args, body, query):
+    return step_tasks_api.handle_add_goal(deps.journey, deps.habits, args[0], body, deps.llm)
+
+
+@route("POST", f"/api/journey/steps/{_ID}/tasks/clear")
+def _step_clear_tasks(deps, args, body, query):
+    return step_tasks_api.handle_clear(deps.journey, args[0])
+
+
+@route("GET", "/api/journey/goals")
+def _journey_goals(deps, args, body, query):
+    return step_tasks_api.handle_journey_goals(deps.journey, deps.habits)
+
+
+@route("POST", "/api/journey/goals")
+def _journey_add_goal(deps, args, body, query):
+    return step_tasks_api.handle_add_journey_goal(deps.journey, deps.habits, body)
+
+
+@route("POST", f"/api/journey/goals/{_ID}/scope")
+def _journey_goal_scope(deps, args, body, query):
+    return step_tasks_api.handle_goal_scope(deps.journey, deps.habits, args[0], body)
+
+
+@route("GET", "/api/journey/due")
+def _journey_due(deps, args, body, query):
+    return step_tasks_api.handle_due(deps.journey)
+
+
+@route("POST", f"/api/journey/steps/{_ID}/tasks/order")
+def _step_order_tasks(deps, args, body, query):
+    return step_tasks_api.handle_reorder(deps.journey, args[0], body)
+
+
+@route("PATCH", f"/api/journey/tasks/{_ID}")
+def _step_update_task(deps, args, body, query):
+    return step_tasks_api.handle_update(deps.journey, args[0], body)
+
+
+@route("DELETE", f"/api/journey/tasks/{_ID}")
+def _step_delete_task(deps, args, body, query):
+    return step_tasks_api.handle_delete(deps.journey, args[0])
+
+
+@route("POST", f"/api/journey/steps/{_ID}/move")
+def _journey_move_step(deps, args, body, query):
+    return journey_api.handle_move_step(deps.journey, args[0], body)
+
+
+@route("POST", "/api/journey/reflection")
+def _journey_reflection(deps, args, body, query):
+    return journey_api.handle_set_reflection(deps.journey, body)
+
+
+@route("POST", "/api/journey/review/delete")
+def _journey_delete_review(deps, args, body, query):
+    return journey_api.handle_delete_review(deps.journey, body)
+
+
+@route("POST", "/api/journey/review")
+def _journey_review(deps, args, body, query):
+    return journey_api.handle_review(deps.journey, deps.projects, deps.llm, deps.profile, body)
+
+
+def _chats(deps, scope):
+    """The Journeys page keeps its own chats, about every journey at once."""
+    return deps.home_chats if scope == journey_api.HOME else deps.journey_chats
+
+
+@route("POST", "/api/journey/chat")
+def _journey_chat(deps, args, body, query):
+    return journey_api.handle_chat(deps.journey, _chats(deps, body.get("scope")), deps.llm, deps.profile,
+                                   body, deps.habits, deps.store)
+
+
+@route("POST", "/api/journey/attach")
+def _journey_attach(deps, args, body, query):
+    return assistant_files_api.handle_attach(deps.store, deps.llm, body)
+
+
+@route("GET", "/api/journey/chats")
+def _journey_chats(deps, args, body, query):
+    scope = query.get("scope", [""])[0]
+    return journey_api.handle_chats(deps.journey, _chats(deps, scope), scope)
+
+
+@route("GET", f"/api/journey/chats/{_ID}")
+def _journey_get_chat(deps, args, body, query):
+    scope = query.get("scope", [""])[0]
+    return journey_api.handle_get_chat(deps.journey, _chats(deps, scope), args[0], scope)
+
+
+@route("DELETE", f"/api/journey/chats/{_ID}")
+def _journey_delete_chat(deps, args, body, query):
+    scope = query.get("scope", [""])[0]
+    return journey_api.handle_delete_chat(deps.journey, _chats(deps, scope), args[0], scope)
+
+
+@route("POST", f"/api/journey/chats/{_ID}/action")
+def _journey_chat_action(deps, args, body, query):
+    return journey_api.handle_chat_action(deps.journey, _chats(deps, body.get("scope")), deps.profile,
+                                          args[0], body, deps.habits)
+
+
+@route("POST", "/api/journey/apply")
+def _journey_apply(deps, args, body, query):
+    return journey_api.handle_apply(deps.journey, body, deps.projects, deps.habits, deps.profile)
+
+
+@route("POST", f"/api/journey/suggestions/{_ID}/accept")
+def _journey_accept(deps, args, body, query):
+    return journey_api.handle_accept(deps.journey, args[0], body)
+
+
+@route("POST", f"/api/journey/suggestions/{_ID}/dismiss")
+def _journey_dismiss(deps, args, body, query):
+    return journey_api.handle_dismiss(deps.journey, args[0])
+
+
+@route("POST", "/api/journey/scan/mindtrail")
+def _journey_scan_mindtrail(deps, args, body, query):
+    return journey_api.handle_scan_mindtrail(deps.journey, deps.profile, deps.llm, deps)
+
+
+@route("POST", "/api/journey/scan/gmail")
+def _journey_scan_gmail(deps, args, body, query):
+    return journey_api.handle_scan_gmail(deps.journey, deps.profile, deps.llm, deps.scanner._gmail)
+
+
+@route("POST", "/api/journey/scan/calendar")
+def _journey_scan_calendar(deps, args, body, query):
+    return journey_api.handle_scan_calendar(deps.journey, deps.profile, deps.llm, deps.calendar_events)
+
+
+@route("POST", "/api/journey/import/gemini")
+def _journey_gemini(deps, args, body, query):
+    return journey_api.handle_import_gemini(deps.journey, deps.profile, deps.llm, deps.state, body)
+
+
+@route("POST", "/api/journey/import/paste")
+def _journey_paste(deps, args, body, query):
+    return journey_api.handle_paste(deps.journey, deps.profile, deps.llm, body)
+
+
+# --- the Measure card ---------------------------------------------------------
+
+
+@route("GET", "/api/measure")
+def _measure(deps, args, body, query):
+    return measure_api.handle_measure(deps.timelog, deps.tasks, deps.state)
+
+
+@route("POST", "/api/measure/log")
+def _measure_log(deps, args, body, query):
+    return measure_api.handle_log(deps.timelog, body)
+
+
+@route("DELETE", f"/api/measure/log/{_ID}")
+def _measure_delete(deps, args, body, query):
+    return measure_api.handle_delete_log(deps.timelog, args[0])
+
+
+@route("POST", "/api/measure/split")
+def _measure_split(deps, args, body, query):
+    return measure_api.handle_set_split(deps.state, body)

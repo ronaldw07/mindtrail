@@ -34,11 +34,10 @@
   async function renderPeopleView() {
     const data = await api('/api/people');
     const view = $('people-view');
-    view.innerHTML = '';
     const wrap = tEl('div', 'brief-wrap');
     wrap.appendChild(tEl('div', 'proj-title', 'People'));
 
-    const form = tEl('form', 'task-add task-add-wide habit-add');
+    const form = tEl('form', 'task-add task-add-wide habit-add people-add');
     const name = tEl('input', 'jobs-link-input');
     name.placeholder = 'Name';
     name.setAttribute('aria-label', 'Name');
@@ -61,19 +60,21 @@
 
     const due = data.people.filter(p => p.due);
     const rest = data.people.filter(p => !p.due);
-    if (due.length) {
-      wrap.appendChild(tEl('div', 'brief-section-label task-group-head', 'Due for a nudge · ' + due.length));
-      due.forEach(p => wrap.appendChild(personRow(p, data.applications)));
-    }
-    if (rest.length) {
-      wrap.appendChild(tEl('div', 'brief-section-label task-group-head', 'Everyone'));
-      rest.forEach(p => wrap.appendChild(personRow(p, data.applications)));
-    }
+    const list = (label, people, tint) => {
+      const section = tEl('section', 'group-section');
+      section.appendChild(tEl('div', 'group-title' + (tint ? ' due' : ''), label));
+      const box = tEl('div', 'group-list');
+      people.forEach(p => box.appendChild(personRow(p, data.applications)));
+      section.appendChild(box);
+      wrap.appendChild(section);
+    };
+    if (due.length) list('Due for a nudge · ' + due.length, due, true);
+    if (rest.length) list(due.length ? 'Everyone else' : 'Everyone', rest, false);
     if (!data.people.length) {
-      wrap.appendChild(tEl('div', 'empty-state',
+      wrap.appendChild(emptyState('people', 'No one here yet',
         'Add the people you want to keep up with — a mentor, a recruiter, family.'));
     }
-    view.appendChild(wrap);
+    commitView(view, wrap);
   }
 
   function nudgeSelect(value) {
@@ -89,7 +90,9 @@
   }
 
   function personRow(p, applications) {
-    const row = tEl('div', 'person-row' + (p.due ? ' due' : ''));
+    const row = tEl('div', 'person-row group-row' + (p.due ? ' due' : ''));
+    row.dataset.key = 'person:' + p.id;
+    row.appendChild(avatar(p.name, 36));
     const body = tEl('div', 'person-body');
     body.appendChild(tEl('div', 'person-name', p.name));
     const meta = [sinceLabel(p.days_since), nudgeLabel(p.nudge_every_days)];
@@ -98,13 +101,14 @@
     body.appendChild(tEl('div', 'person-meta', meta.join(' · ')));
     if (p.notes) body.appendChild(tEl('div', 'person-notes', p.notes));
     row.appendChild(body);
-    const talked = tEl('button', 'btn-ghost jobs-btn', 'Talked today');
+    const talked = tEl('button', p.due ? 'btn-tinted' : 'btn-plain', 'Talked today');
     talked.onclick = async () => { await talkedToday(p.id); renderPeopleView(); };
     row.appendChild(talked);
     const more = tEl('button', 'menu-btn task-more', '⋯');
     more.setAttribute('aria-label', 'Options for ' + p.name);
     more.onclick = e => openPersonMenu(e, p, applications);
     row.appendChild(more);
+    onRightClick(row, e => openPersonMenu(e, p, applications));
     return row;
   }
 
@@ -141,9 +145,9 @@
       }},
       {divider: true},
       {label: 'Delete', danger: true, run: async () => {
-        if (!await askConfirm('Delete', 'Remove ' + p.name + '?', 'Delete')) return;
-        await api('/api/people/' + p.id, {method: 'DELETE'});
-        await renderPeopleView();
+        softDelete({key: 'person:' + p.id, label: p.name,
+                    remove: () => api('/api/people/' + p.id, {method: 'DELETE'}),
+                    rerender: renderPeopleView});
       }},
     ]);
   }

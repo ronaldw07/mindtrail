@@ -1,0 +1,59 @@
+{
+  "split": "heldout",
+  "commit": "b0ade91",
+  "corpus_size": 90,
+  "strategies": {
+    "vector": {
+      "questions": 45,
+      "recall@1": 0.8,
+      "recall@1_ci95": [
+        0.662,
+        0.891
+      ],
+      "recall@3": 0.956,
+      "recall@5": 0.978,
+      "mrr": 0.871,
+      "latency_p50_ms": 50.0,
+      "latency_p95_ms": 58.2
+    },
+    "hybrid": {
+      "questions": 45,
+      "recall@1": 0.8,
+      "recall@1_ci95": [
+        0.662,
+        0.891
+      ],
+      "recall@3": 0.867,
+      "recall@5": 0.933,
+      "mrr": 0.852,
+      "latency_p50_ms": 45.5,
+      "latency_p95_ms": 47.0
+    },
+    "expanded_kw0.3": {
+      "questions": 45,
+      "recall@1": 0.867,
+      "recall@1_ci95": [
+        0.738,
+        0.937
+      ],
+      "recall@3": 0.956,
+      "recall@5": 1.0,
+      "mrr": 0.922,
+      "latency_p50_ms": 1187.8,
+      "latency_p95_ms": 1594.0
+    },
+    "expanded_kw0.3_rerank": {
+      "questions": 45,
+      "recall@1": 1.0,
+      "recall@1_ci95": [
+        0.921,
+        1.0
+      ],
+      "recall@3": 1.0,
+      "recall@5": 1.0,
+      "mrr": 1.0,
+      "latency_p50_ms": 2388.0,
+      "latency_p95_ms": 6416.2
+    }
+  }
+}

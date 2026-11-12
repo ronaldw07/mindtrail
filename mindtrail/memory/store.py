@@ -46,6 +46,11 @@ SEARCH_OVERFETCH = 4
 # list's top pick doesn't automatically dominate the fused ranking.
 RRF_K = 60
 
+# How much the keyword list counts in the fusion, against 1.0 for the
+# vector list. See README's "Retrieval recall" section for how it was
+# chosen.
+KEYWORD_WEIGHT = 1.0
+
 
 @dataclass(frozen=True)
 class Entry:
@@ -121,25 +126,42 @@ def _to_entry(meta: dict, entry_id: str, doc: str = "") -> Entry:
     )
 
 
+# Words that say nothing about what an entry is about. Left in an OR query
+# they'd match nearly every entry and drown out the real terms.
+_STOPWORDS = frozenset(
+    "a an and are as at be but by can do does for from how i if in into is it its "
+    "me my of on or so than that the their then there these this to us was we what "
+    "when where which who why will with would you your".split()
+)
+
+
 def _fts_match_query(text: str) -> str:
     """Build a safe FTS5 MATCH expression from free-form user text.
 
     Unescaped, FTS5's query syntax includes operators an ordinary search
     box shouldn't accidentally trigger: AND/OR/NOT, `-exclude`, `column:`
-    filters, `*` prefix matching. A user typing any of those as plain
-    words (or an unbalanced quote) would otherwise get a syntax error
-    instead of a search. Each whitespace-separated token is wrapped in its
-    own double-quoted phrase (embedded quotes doubled per FTS5's escaping
-    rule), then joined with FTS5's default implicit AND, so the result is
-    always a well-formed "every token must appear" query.
+    filters, `*` prefix matching. Each token is wrapped in its own
+    double-quoted phrase (embedded quotes doubled per FTS5's escaping
+    rule) so the result is always well-formed.
+
+    Tokens are joined with OR, not FTS5's implicit AND. A natural-language
+    question ("how do I reuse a logged-in browser session in Playwright")
+    never has every one of its words in a stored entry, so AND matched
+    nothing and the keyword half of hybrid search contributed no results at
+    all. With OR, BM25 ranks entries by how many of the rarer words they
+    share. Stopwords are dropped so they can't dominate; if a query is
+    nothing but stopwords they're kept, since something beats nothing.
     """
     tokens = text.split()
     if not tokens:
         return '""'
-    return " ".join('"' + t.replace('"', '""') + '"' for t in tokens)
+    meaningful = [t for t in tokens if t.lower().strip(".,?!:;()\"'") not in _STOPWORDS]
+    return " OR ".join('"' + t.replace('"', '""') + '"' for t in (meaningful or tokens))
 
 
-def _reciprocal_rank_fusion(ranked_lists: list[list[str]]) -> list[str]:
+def _reciprocal_rank_fusion(
+    ranked_lists: list[list[str]], weights: list[float] | None = None
+) -> list[str]:
     """Merge ranked id lists into one ranking by reciprocal rank fusion.
 
     score(id) = sum(1 / (RRF_K + rank)) over every list the id appears in
@@ -147,11 +169,13 @@ def _reciprocal_rank_fusion(ranked_lists: list[list[str]]) -> list[str]:
     used specifically because cosine similarity and BM25 live on scales
     that cannot be compared or averaged directly - RRF only looks at each
     list's *ordering*, never its raw scores, so no calibration is needed.
+    `weights` scales each list's contribution (default: all 1.0).
     """
+    weights = weights or [1.0] * len(ranked_lists)
     scores: dict[str, float] = {}
-    for ranked in ranked_lists:
+    for ranked, weight in zip(ranked_lists, weights):
         for rank, entry_id in enumerate(ranked, start=1):
-            scores[entry_id] = scores.get(entry_id, 0.0) + 1.0 / (RRF_K + rank)
+            scores[entry_id] = scores.get(entry_id, 0.0) + weight / (RRF_K + rank)
     return [entry_id for entry_id, _ in sorted(scores.items(), key=lambda kv: kv[1], reverse=True)]
 
 
@@ -343,7 +367,9 @@ class MemoryStore:
             return []
         return [row["id"] for row in rows]
 
-    def search(self, query: str, k: int = 3) -> list[Entry]:
+    def search(
+        self, query: str, k: int = 3, keyword_weight: float = KEYWORD_WEIGHT
+    ) -> list[Entry]:
         """Hybrid search: SQLite FTS5 (exact terms - error codes, function
         names, proper nouns) merged with Chroma's vector search (meaning
         and paraphrase matches) via reciprocal rank fusion. Falls back to
@@ -365,7 +391,7 @@ class MemoryStore:
         # ids from two different sources before it knows the final order,
         # so there is no ranked, deduped (doc, meta) pair to carry through
         # until after fusion runs. Fine at this store's scale.
-        for entry_id in _reciprocal_rank_fusion([vector_ids, fts_ids]):
+        for entry_id in _reciprocal_rank_fusion([vector_ids, fts_ids], [1.0, keyword_weight]):
             entry = self.get(entry_id)
             if entry is not None:
                 entries.append(entry)

@@ -137,3 +137,9 @@ class HealthStore:
                 "SELECT date, type, minutes FROM health_workouts WHERE date BETWEEN ? AND ? "
                 "ORDER BY date", (start, end)).fetchall()
         return [dict(r) for r in rows]
+
+    def summary(self) -> dict:
+        """{"nights": how many nights of sleep, "latest": newest night's date or ""}."""
+        with connect(self._path) as conn:
+            row = conn.execute("SELECT COUNT(*) AS n, MAX(date) AS latest FROM health_sleep").fetchone()
+        return {"nights": row["n"], "latest": row["latest"] or ""}

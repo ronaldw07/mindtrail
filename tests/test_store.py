@@ -612,3 +612,32 @@ def test_search_falls_back_to_vector_only_when_fts_is_unavailable(store):
     found = store.search("apples", k=5)
 
     assert len(found) == 1
+
+
+def test_keyword_match_query_is_or_of_meaningful_words():
+    from mindtrail.memory.store import _fts_match_query
+
+    assert _fts_match_query("how do I reuse a Playwright session") == (
+        '"reuse" OR "Playwright" OR "session"'
+    )
+
+
+def test_keyword_match_query_keeps_stopwords_when_nothing_else_is_left():
+    from mindtrail.memory.store import _fts_match_query
+
+    assert _fts_match_query("what is it") == '"what" OR "is" OR "it"'
+
+
+def test_keyword_match_query_escapes_quotes_and_operators():
+    from mindtrail.memory.store import _fts_match_query
+
+    assert _fts_match_query('say "hi" NOT -x') == '"say" OR """hi""" OR "NOT" OR "-x"'
+
+
+def test_a_question_finds_an_entry_sharing_only_some_of_its_words(store):
+    store.add("exact word entry", "Error code E4021 means the token expired.", [])
+    store.add("bread", "Use a sourdough starter and bake.", [])
+
+    found = store.search("why did I get E4021 when calling the api", k=1)
+
+    assert found[0].query == "exact word entry"

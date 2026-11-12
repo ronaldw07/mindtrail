@@ -86,6 +86,12 @@
       row.appendChild(color);
       row.appendChild(name);
       row.appendChild(del);
+      onRightClick(row, e => showMenu(e, [
+        {label: 'Rename', run: () => { name.focus(); name.select(); }},
+        {label: 'Change color', run: () => color.click()},
+        {divider: true},
+        {label: 'Delete area…', danger: true, run: () => del.click()},
+      ]));
       c.appendChild(row);
     });
     return c;
@@ -99,136 +105,6 @@
     d.setDate(d.getDate() + n);
     return localISO(d);
   };
-
-  function taskGroup(t, today) {
-    if (t.done) return 'done';
-    if (!t.due_date) return 'someday';
-    if (t.due_date < today) return 'overdue';
-    if (t.due_date === today) return 'today';
-    if (t.due_date <= addDays(today, 7)) return 'week';
-    return 'later';
-  }
-
-  const TASK_GROUPS = [
-    ['overdue', 'Overdue'], ['today', 'Today'], ['week', 'Next 7 days'],
-    ['later', 'Later'], ['someday', 'No date'], ['done', 'Done this week'],
-  ];
-
-  async function openTasksView() {
-    currentProject = null;
-    current = null;
-    setActiveView('tasks');
-    prefs.set('lastView', {type: 'tasks'});
-    $('breadcrumb').textContent = 'To-dos';
-    await renderTasksView();
-  }
-
-  async function renderTasksView(focusAdd) {
-    const data = await api('/api/tasks?all=1');
-    const view = $('tasks-view');
-    view.innerHTML = '';
-    const wrap = document.createElement('div');
-    wrap.className = 'brief-wrap';
-    const title = document.createElement('div');
-    title.className = 'proj-title';
-    title.textContent = 'To-dos';
-    wrap.appendChild(title);
-
-    const form = document.createElement('form');
-    form.className = 'task-add task-add-wide';
-    const input = document.createElement('input');
-    input.className = 'jobs-link-input';
-    input.placeholder = 'Add a to-do — try “Call mom tmrw” or “Taxes oct 12”';
-    input.setAttribute('aria-label', 'New to-do');
-    form.appendChild(input);
-    form.onsubmit = async e => {
-      e.preventDefault();
-      if (!input.value.trim()) return;
-      const res = await jsonSend('/api/tasks', {title: input.value});
-      if (res.error) { toast(res.error, {error: true}); return; }
-      await renderTasksView(true);
-    };
-    wrap.appendChild(form);
-
-    const today = localISO(new Date());
-    const weekAgo = addDays(today, -7);
-    const tasks = data.tasks.filter(t => !t.done || (t.done_at || '').slice(0, 10) >= weekAgo);
-    const showDone = prefs.get('tasksShowDone', false);
-    TASK_GROUPS.forEach(([key, label]) => {
-      const items = tasks.filter(t => taskGroup(t, today) === key);
-      if (!items.length) return;
-      const head = document.createElement('div');
-      head.className = 'brief-section-label task-group-head';
-      head.textContent = label + ' · ' + items.length;
-      if (key === 'done') {
-        makeClickable(head, () => { prefs.set('tasksShowDone', !showDone); renderTasksView(); });
-        head.textContent += showDone ? '  ▾' : '  ▸';
-      }
-      wrap.appendChild(head);
-      if (key === 'done' && !showDone) return;
-      items.forEach(t => wrap.appendChild(inboxRow(t, key === 'overdue')));
-    });
-    if (!tasks.length) {
-      const empty = document.createElement('div');
-      empty.className = 'empty-state';
-      empty.textContent = 'Nothing to do. Add one above.';
-      wrap.appendChild(empty);
-    }
-    view.appendChild(wrap);
-    if (focusAdd) wrap.querySelector('.jobs-link-input').focus();
-  }
-
-  function inboxRow(t, overdue) {
-    const row = taskRow(t, () => renderTasksView());
-    if (overdue) row.classList.add('overdue');
-    const dot = areaDot(t.area_id);
-    if (dot) row.insertBefore(dot, row.children[1]);
-    if (t.application_id) {
-      const chip = document.createElement('span');
-      chip.className = 'job-chip task-job-chip';
-      chip.textContent = 'Job';
-      chip.onclick = () => openJobsView(t.application_id);
-      row.querySelector('.task-body').appendChild(chip);
-    }
-    const more = document.createElement('button');
-    more.className = 'menu-btn task-more';
-    more.textContent = '⋯';
-    more.setAttribute('aria-label', 'To-do options');
-    more.onclick = e => { e.stopPropagation(); openTaskMenu(e, t); };
-    row.appendChild(more);
-    return row;
-  }
-
-  function openTaskMenu(e, t) {
-    const update = async fields => {
-      const res = await jsonSend('/api/tasks/' + t.id, fields, 'PATCH');
-      if (res.error) toast(res.error, {error: true});
-      await renderTasksView();
-    };
-    showMenu(e, [
-      {label: 'Rename', run: async () => {
-        const title = await askText('Rename to-do', t.title);
-        if (title) await update({title});
-      }},
-      {label: 'Set due date', run: async () => {
-        const due = await modal({title: 'Due date', input: true, inputType: 'date',
-                                 value: t.due_date, confirmLabel: 'Save'});
-        if (due) await update({due_date: due});
-      }},
-      ...(t.due_date ? [{label: 'Clear due date', run: () => update({due_date: ''})}] : []),
-      {label: 'Focus on this', run: () => startFocus({label: t.title, task_id: t.id})},
-      {label: 'Set life area…', run: async () => {
-        const areaId = await pickArea('Life area', t.area_id);
-        if (areaId !== null) await update({area_id: areaId});
-      }},
-      {divider: true},
-      {label: 'Delete', danger: true, run: async () => {
-        await api('/api/tasks/' + t.id, {method: 'DELETE'});
-        await renderTasksView();
-        toast('To-do deleted');
-      }},
-    ]);
-  }
 
   // ---------- habits view ----------
 
@@ -263,7 +139,6 @@
     const showArchived = prefs.get('habitsShowArchived', false);
     const data = await api('/api/habits' + (showArchived ? '?archived=1' : ''));
     const view = $('habits-view');
-    view.innerHTML = '';
     const wrap = document.createElement('div');
     wrap.className = 'brief-wrap habits-wrap';
     const title = document.createElement('div');
@@ -284,7 +159,7 @@
     toggle.textContent = showArchived ? 'Hide archived' : 'Show archived';
     toggle.onclick = () => { prefs.set('habitsShowArchived', !showArchived); renderHabitsView(); };
     wrap.appendChild(toggle);
-    view.appendChild(wrap);
+    commitView(view, wrap);
   }
 
   function habitAddForm() {
@@ -294,15 +169,8 @@
     name.className = 'jobs-link-input';
     name.placeholder = 'New habit';
     name.setAttribute('aria-label', 'Habit name');
-    const target = document.createElement('select');
-    target.className = 'job-field-input habit-select';
-    target.setAttribute('aria-label', 'How often');
-    HABIT_TARGETS.forEach(n => {
-      const o = document.createElement('option');
-      o.value = String(n);
-      o.textContent = targetLabel(n);
-      target.appendChild(o);
-    });
+    let perWeek = 7;
+    const target = stepper(perWeek, 1, 7, targetLabel, n => { perWeek = n; }, 'How often');
     const area = document.createElement('select');
     area.className = 'job-field-input habit-select';
     area.setAttribute('aria-label', 'Life area');
@@ -321,7 +189,7 @@
       e.preventDefault();
       if (!name.value.trim()) return;
       const res = await jsonSend('/api/habits', {
-        name: name.value, target_per_week: Number(target.value), area_id: area.value});
+        name: name.value, target_per_week: perWeek, area_id: area.value});
       if (res.error) { toast(res.error, {error: true}); return; }
       await renderHabitsView();
     };
@@ -331,6 +199,7 @@
   function habitCard(h, data) {
     const c = document.createElement('div');
     c.className = 'card habit-card' + (h.archived ? ' archived' : '');
+    c.dataset.key = 'habit:' + h.id;
     const head = document.createElement('div');
     head.className = 'habit-head';
     const check = document.createElement('button');
@@ -347,11 +216,26 @@
     if (dot) name.appendChild(dot);
     name.appendChild(document.createTextNode(h.name));
     body.appendChild(name);
+    if (h.step) {
+      const link = tEl('button', 'habit-step', '↳ ' + h.step.title);
+      link.type = 'button';
+      link.title = 'Open this journey step';
+      link.onclick = () => openStepAnywhere(h.step.project_id, h.step.id);
+      body.appendChild(link);
+    }
     const meta = document.createElement('div');
     meta.className = 'habit-meta';
     meta.textContent = targetLabel(h.target_per_week) + ' · ' + habitMeta(h);
     body.appendChild(meta);
     head.appendChild(body);
+    if (h.streak) {
+      const streak = document.createElement('div');
+      streak.className = 'habit-streak';
+      streak.innerHTML = '<span class="habit-streak-num"></span><span class="habit-streak-unit"></span>';
+      streak.querySelector('.habit-streak-num').textContent = h.streak;
+      streak.querySelector('.habit-streak-unit').textContent = h.unit === 'day' ? 'day streak' : 'week streak';
+      head.appendChild(streak);
+    }
     const more = document.createElement('button');
     more.className = 'menu-btn task-more';
     more.textContent = '⋯';
@@ -359,28 +243,75 @@
     more.onclick = e => openHabitMenu(e, h);
     head.appendChild(more);
     c.appendChild(head);
+    c.appendChild(habitWeekStrip(h, data));
     c.appendChild(habitHeatmap(h, data));
+    onRightClick(c, e => openHabitMenu(e, h));
     return c;
   }
 
+  // This week at a glance: seven day circles, Monday first. Tap one of the
+  // last seven days to fix a missed check-in (the server enforces the same
+  // window as the heatmap below).
+  function habitWeekStrip(h, data) {
+    const done = new Set(h.logs);
+    const today = data.today;
+    const monday = addDays(today, -((new Date(today + 'T12:00:00').getDay() + 6) % 7));
+    const strip = document.createElement('div');
+    strip.className = 'week-strip';
+    strip.style.setProperty('--habit-color', habitColor(h));
+    'MTWTFSS'.split('').forEach((letter, i) => {
+      const day = addDays(monday, i);
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'week-dot' + (done.has(day) ? ' on' : '') + (day === today ? ' today' : '');
+      cell.disabled = day > today || day < addDays(today, -7);
+      cell.setAttribute('aria-label', fmtShortDate(day) + (done.has(day) ? ' — done' : ''));
+      cell.setAttribute('aria-pressed', done.has(day) ? 'true' : 'false');
+      cell.innerHTML = '<span class="week-dot-letter"></span><span class="week-dot-fill"></span>';
+      cell.querySelector('.week-dot-letter').textContent = letter;
+      cell.onclick = async () => { await toggleHabit(h, day); renderHabitsView(); };
+      strip.appendChild(cell);
+    });
+    return strip;
+  }
+
   // 52 weeks × 7 days, Monday on top, one column per week - the GitHub
-  // contribution layout. One hue per habit (its area's), so it's a single
-  // series: no legend, the card title names it. Cells in the last week
-  // are clickable to backfill a missed check-in; the server enforces the
-  // same window.
+  // contribution layout, stretched to the card's width. One hue per habit
+  // (its area's), so it's a single series: no legend, the card title names
+  // it. Cells in the last week are clickable to backfill a missed check-in.
   function habitHeatmap(h, data) {
     const done = new Set(h.logs);
     const today = data.today;
-    const first = addDays(today, -((new Date(today + 'T12:00:00').getDay() + 6) % 7)
-                                 - 7 * (data.heatmap_weeks - 1));
+    const weeks = data.heatmap_weeks;
+    const first = addDays(today, -((new Date(today + 'T12:00:00').getDay() + 6) % 7) - 7 * (weeks - 1));
+    const wrap = document.createElement('div');
+    wrap.className = 'heatmap-wrap';
+    wrap.style.setProperty('--habit-color', habitColor(h));
+    wrap.style.setProperty('--weeks', String(weeks));
+
+    const months = document.createElement('div');
+    months.className = 'heat-months';
+    let lastMonth = -1;
+    for (let w = 0; w < weeks; w++) {
+      const m = new Date(addDays(first, w * 7) + 'T12:00:00').getMonth();
+      if (m === lastMonth) continue;
+      lastMonth = m;
+      const label = document.createElement('span');
+      label.style.gridColumn = String(w + 1) + ' / span 4';
+      label.style.gridRow = '1';
+      label.textContent = new Date(addDays(first, w * 7) + 'T12:00:00')
+        .toLocaleDateString(undefined, {month: 'short'});
+      if (w <= weeks - 4) months.appendChild(label);
+    }
+    wrap.appendChild(months);
+
     const grid = document.createElement('div');
     grid.className = 'heatmap';
-    grid.style.setProperty('--habit-color', habitColor(h));
     grid.setAttribute('role', 'img');
     grid.setAttribute('aria-label', h.name + ': done ' + h.logs.length + ' times in the last '
-      + data.heatmap_weeks + ' weeks');
+      + weeks + ' weeks');
     const editableFrom = addDays(today, -7);
-    for (let w = 0; w < data.heatmap_weeks; w++) {
+    for (let w = 0; w < weeks; w++) {
       for (let d = 0; d < 7; d++) {
         const day = addDays(first, w * 7 + d);
         const cell = document.createElement('div');
@@ -399,7 +330,8 @@
         grid.appendChild(cell);
       }
     }
-    return grid;
+    wrap.appendChild(grid);
+    return wrap;
   }
 
   function openHabitMenu(e, h) {
@@ -425,10 +357,9 @@
       {label: h.archived ? 'Unarchive' : 'Archive', run: () => update({archived: !h.archived})},
       {divider: true},
       {label: 'Delete', danger: true, run: async () => {
-        if (!await askConfirm('Delete habit', 'Delete "' + h.name
-            + '" and its whole history? Archive keeps the history.', 'Delete')) return;
-        await api('/api/habits/' + h.id, {method: 'DELETE'});
-        await renderHabitsView();
+        softDelete({key: 'habit:' + h.id, label: 'Habit',
+                    remove: () => api('/api/habits/' + h.id, {method: 'DELETE'}),
+                    rerender: renderHabitsView});
       }},
     ]);
   }
@@ -458,7 +389,6 @@
     const entry = data.entry;
     journalDay = entry.date;
     const view = $('journal-view');
-    view.innerHTML = '';
     const layout = document.createElement('div');
     layout.className = 'proj-layout';
     const main = document.createElement('div');
@@ -568,9 +498,27 @@
       makeClickable(row, () => openJournalView(e.date));
       past.appendChild(row);
     });
+    if ((data.on_this_day || []).length) {
+      const memory = card('On this day', null, null);
+      data.on_this_day.forEach(m => {
+        const row = document.createElement('div');
+        row.className = 'journal-past';
+        const top = document.createElement('div');
+        top.className = 'journal-past-date';
+        top.textContent = m.label + ' · ' + fmtShortDate(m.date) + (m.mood ? ' · ' + MOOD_LABELS[m.mood - 1] : '');
+        row.appendChild(top);
+        const text = document.createElement('div');
+        text.className = 'journal-past-preview';
+        text.textContent = m.preview;
+        row.appendChild(text);
+        makeClickable(row, () => openJournalView(m.date));
+        memory.appendChild(row);
+      });
+      rail.appendChild(memory);
+    }
     rail.appendChild(past);
     layout.appendChild(rail);
-    view.appendChild(layout);
+    commitView(view, layout);
     if (!entry.body) box.focus();
   }
 

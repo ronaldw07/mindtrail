@@ -13,7 +13,7 @@
     .job-field-input { width: 100%; background: var(--surface-sunken); color: var(--text);
                        border: 1px solid var(--border); border-radius: var(--r);
                        padding: 0.4rem 0.55rem; font: inherit; font-size: var(--fs-base);
-                       outline: none; color-scheme: dark;
+                       outline: none;
                        transition: border-color 0.14s ease; }
     .job-field-input:focus { border-color: var(--accent); }
     textarea.job-field-input { min-height: 84px; resize: vertical; line-height: var(--lh-tight); }
@@ -138,9 +138,10 @@
     .area-color::-webkit-color-swatch { border: none; border-radius: 50%; }
 
     /* --- to-dos view --- */
-    #tasks-view, #habits-view, #journal-view {
+    #tasks-view, #habits-view, #journal-view, #practice-view, #stories-view, #journey-view {
       flex: 1; overflow-y: auto; display: none; padding: 1.75rem 2rem; }
-    #tasks-view.open, #habits-view.open, #journal-view.open { display: block; }
+    #tasks-view.open, #habits-view.open, #journal-view.open, #practice-view.open,
+    #stories-view.open, #journey-view.open { display: block; }
     .task-add-wide { margin-bottom: 1.25rem; }
     .task-add-wide .jobs-link-input { width: 100%; }
     .task-group-head { margin: 1.1rem 0 0.35rem; }
@@ -151,6 +152,27 @@
     #tasks-view .task-body { flex: 1; display: flex; align-items: baseline; gap: 0.6rem; }
     #tasks-view .task-row.overdue .task-due { color: var(--danger); }
     .task-job-chip { cursor: pointer; }
+    .task-job-chip.closed { color: var(--text-faint); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text-faint) 60%, transparent); }
+    .task-body-open { cursor: pointer; }
+    .task-card { position: fixed; z-index: 60; width: min(380px, calc(100vw - 24px)); padding: 0.85rem 0.95rem;
+      border-radius: 12px; background: var(--surface-raised, var(--surface)); border: 1px solid var(--border);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; gap: 0.6rem; }
+    .task-card-title { font-weight: 600; color: var(--text-bright); }
+    .task-card-facts { display: flex; gap: 0.8rem; font-size: var(--fs-xs); color: var(--text-muted); margin-top: -0.35rem; }
+    .task-card-company { font-size: var(--fs-sm); color: var(--text); }
+    .task-card-stage { display: inline-block; margin-top: 0.3rem; padding: 0.1rem 0.45rem; border-radius: 999px;
+      font-size: var(--fs-xs); background: var(--row-hover); color: var(--text-2); }
+    .task-card-stage.closed { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+    .task-card-note { margin-top: 0.3rem; font-size: var(--fs-xs); color: var(--text-muted); }
+    .task-card-email { padding-top: 0.55rem; border-top: 1px solid var(--border-subtle); }
+    .task-card-label { font-size: var(--fs-xs); color: var(--text-muted); }
+    .task-card-subject { font-size: var(--fs-sm); color: var(--text); margin-top: 0.15rem; }
+    .task-card-preview { margin-top: 0.35rem; font-size: var(--fs-xs); line-height: 1.45; color: var(--text-2);
+      max-height: 7.2em; overflow: hidden; }
+    .task-card-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+    .task-card-actions a { text-decoration: none; }
+    .job-email-open { font-size: var(--fs-xs); color: var(--link); text-decoration: none; }
+    .job-email-open:hover { text-decoration: underline; }
     .task-more { opacity: 0; }
     .task-row:hover .task-more, .task-more:focus-visible { opacity: 1; }
 
@@ -168,6 +190,10 @@
     .habit-name { display: flex; align-items: center; font-size: var(--fs-lg); font-weight: 600;
                   color: var(--text); }
     .habit-meta { font-size: var(--fs-sm); color: var(--text-muted); margin-top: 0.1rem; }
+    .habit-step { display: block; border: none; background: none; padding: 0; margin-top: 0.1rem; font: inherit;
+      font-size: var(--fs-xs); color: var(--link); cursor: pointer; text-align: left; }
+    .habit-step:hover { text-decoration: underline; }
+    .t-habit-step { display: inline; margin: 0 0 0 0.5rem; }
     .habit-card:hover .task-more { opacity: 1; }
 
     /* 2px surface gaps between fills, per the dataviz mark spec. */
@@ -236,7 +262,7 @@
               font-style: italic; font-size: 2.2rem; letter-spacing: 0.01em;
               color: var(--text-heading); white-space: nowrap; }
     .t-side-date { transform: rotate(180deg); }
-    .t-art { position: relative; height: min(52vh, 540px); min-height: 300px; overflow: hidden;
+    .t-art { position: relative; height: min(30vh, 300px); min-height: 200px; overflow: hidden;
              border-radius: 3px; display: grid; place-items: center;
              background: radial-gradient(120% 90% at 30% 20%, #2c3a33 0%, #1d2421 55%, var(--bg) 100%); }
     .t-art.plain { height: 240px; min-height: 0; }
@@ -249,8 +275,8 @@
     .t-title { position: relative; z-index: 1; margin: 0; text-align: center;
                font-family: var(--font-serif); font-weight: 500; color: var(--brief-yellow);
                line-height: 0.92; text-shadow: 0 2px 22px rgba(0,0,0,0.45); }
-    .t-title-the { display: block; font-style: italic; font-size: clamp(2.2rem, 4.6vw, 3.8rem); }
-    .t-title-main { display: block; font-size: clamp(3rem, 7.4vw, 6.6rem); letter-spacing: -0.01em; }
+    .t-title-the { display: block; font-style: italic; font-size: clamp(1.6rem, 3vw, 2.6rem); }
+    .t-title-main { display: block; font-size: clamp(2.4rem, 5vw, 4.4rem); letter-spacing: -0.01em; }
 
     .t-under { display: grid; grid-template-columns: 1fr minmax(0, 300px); gap: 2rem;
                margin: 0.7rem 82px 0; align-items: start; }
@@ -342,6 +368,9 @@
     .t-sticker:focus-visible { outline: none; box-shadow: inset 0 0 0 3px #141414; }
 
     .t-list { display: flex; flex-direction: column; }
+    .t-group { margin: 1.1rem 0 0.2rem; font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--text-muted); }
+    .t-group:first-child { margin-top: 0; }
     .t-item { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.55rem 0;
               cursor: pointer; }
     .t-item .task-check { margin-top: 0.2rem; }
@@ -352,6 +381,38 @@
     .t-item-title { font-size: var(--fs-md); font-weight: 600; color: var(--text); }
     .t-item:hover .t-item-title { color: var(--text-bright); }
     .t-item.done .t-item-title { color: var(--text-faint); text-decoration: line-through; }
+    .t-item-title, .t-item-sub { transition: color 160ms ease; }
+    .t-item-body { flex: 1; min-width: 0; }
+    /* Trash: shown on hover or keyboard focus; always faintly there on touch. */
+    .t-trash { flex-shrink: 0; align-self: center; display: grid; place-items: center; width: 28px; height: 28px;
+      border: none; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; opacity: 0.5;
+      transition: opacity 160ms ease, color 160ms ease, background-color 160ms ease, transform 160ms ease-out; }
+    .t-trash:active { transform: scale(0.97); }
+    .t-trash:focus-visible { opacity: 1; }
+    @media (hover: hover) and (pointer: fine) {
+      .t-trash { opacity: 0; }
+      .t-item:hover .t-trash { opacity: 1; }
+      .t-trash:hover { color: var(--danger); background: var(--row-hover); }
+    }
+    .t-star { flex-shrink: 0; align-self: center; width: 28px; height: 28px; border: none; border-radius: 6px;
+      background: none; color: var(--text-muted); font-size: 15px; line-height: 1; cursor: pointer; opacity: 0.5;
+      transition: opacity 160ms ease, color 160ms ease, transform 160ms ease-out; }
+    .t-star:active { transform: scale(0.97); }
+    .t-star:focus-visible, .t-star.on { opacity: 1; }
+    .t-star.on { color: #f5c542; }
+    @media (hover: hover) and (pointer: fine) {
+      .t-star:not(.on) { opacity: 0; }
+      .t-item:hover .t-star { opacity: 1; }
+      .t-star:hover { color: #f5c542; }
+    }
+    .t-group-top { color: #f5c542; }
+    .t-pick-hint { margin-bottom: 0.4rem; font-size: var(--fs-xs); color: var(--text-muted); }
+    .t-list-links { display: flex; gap: 1.1rem; align-items: center; margin-top: 0.6rem; }
+    .t-link-quiet { color: var(--text-muted); }
+    .t-auto-remove { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.8rem;
+      font-size: var(--fs-xs); color: var(--text-muted); cursor: pointer; }
+    .t-archive { display: flex; flex-direction: column; max-height: 60vh; overflow-y: auto; }
+    .t-archive-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0; }
     .t-item-sub { font-size: var(--fs-sm); color: var(--text-muted); margin-top: 0.1rem;
                   line-height: var(--lh-tight); }
     .t-item.overdue .t-item-sub { color: var(--danger); }
@@ -423,7 +484,7 @@
     .week-head { display: flex; align-items: center; justify-content: center; gap: 1.5rem;
                  margin: 1rem 0 0.5rem; }
     .week-title { margin: 0; text-align: center; font-family: var(--font-serif); font-weight: 500;
-                  color: var(--brief-yellow); line-height: 1; }
+                  color: var(--editorial); line-height: 1; }
     .week-title .t-title-the { font-size: 1.8rem; }
     .week-range { display: block; font-size: clamp(2.4rem, 5vw, 4rem); }
     .week-rate { font-size: var(--fs-md); font-weight: 600; color: var(--text); margin-bottom: 0.5rem; }
@@ -468,3 +529,12 @@
     /* Sleep bars: the third validated palette slot, so it never reads as
        the same series as the focus bars beside it. */
     .t-bar-sleep { fill: #199e70; }
+
+    /* Week → Next from your journeys */
+    .week-journeys { display: grid; gap: 0.9rem; }
+    .week-journey-name { font-size: var(--fs-sm); color: var(--text-muted); margin-bottom: 0.25rem; }
+    .week-journey-step { display: block; width: 100%; text-align: left; border: none; background: transparent;
+      color: var(--text); font: inherit; font-size: var(--fs-base); padding: 0.45rem 0.6rem;
+      border-radius: var(--r); cursor: pointer; transition: background-color 0.12s ease; }
+    @media (hover: hover) and (pointer: fine) { .week-journey-step:hover { background: var(--row-hover); } }
+    .week-journey-step:active { background: var(--row-active); }

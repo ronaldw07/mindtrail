@@ -17,6 +17,7 @@ from mindtrail.llm import LLMError
 from mindtrail.organize.app_state import AppState
 from mindtrail.organize.db import now_iso
 from mindtrail.organize.jobs import CLOSED, PIPELINE, STAGES, Application, JobStore
+from mindtrail.organize.repeats import describe, parse_repeat, parse_task_with_repeat
 from mindtrail.organize.task_dates import parse_task_input
 from mindtrail.organize.tasks import Task, TaskStore
 
@@ -25,7 +26,7 @@ WEEK_DAYS = 7
 
 
 def task_json(task: Task) -> dict:
-    return asdict(task)
+    return {**asdict(task), "repeat_label": describe(task.repeat)}
 
 
 def application_json(app: Application, tasks: list[Task], emails: list[dict]) -> dict:
@@ -145,15 +146,20 @@ def handle_list_tasks(tasks: TaskStore, include_done: bool = False) -> dict:
 
 def handle_add_task(tasks: TaskStore, body: dict) -> dict:
     """An explicit due_date wins; otherwise a trailing phrase in the title
-    ("... fri", "... oct 12") becomes the due date."""
+    ("... fri", "... oct 12") becomes the due date. "every mon" and the
+    like make it repeat."""
     title = str(body.get("title", ""))
     due = str(body.get("due_date", "") or "")
-    if not due:
-        title, due = parse_task_input(title, date.today())
+    repeat = str(body.get("repeat", "") or "")
+    if not due and not repeat:
+        title, due, repeat = parse_task_with_repeat(title, date.today())
+    elif not repeat:
+        title, repeat = parse_repeat(title)
     try:
         task = tasks.add(
             title,
             due_date=due,
+            repeat=repeat,
             application_id=body.get("application_id") or None,
             area_id=str(body.get("area_id", "") or ""),
         )

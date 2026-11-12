@@ -19,6 +19,7 @@ from mindtrail.advice.highlights import (
 from mindtrail.advice.profile_chat import chat_about_profile
 from mindtrail.advice.profile_draft import draft_profile
 from mindtrail.advice.project_chat import chat_about_project
+from mindtrail.advice.project_memory import generate_memory
 from mindtrail.advice.roadmap_chat import chat_about_roadmap
 from mindtrail.advice.roadmap_gen import generate_roadmap
 from mindtrail.ingest.documents import DocumentError, extract_pdf_text
@@ -76,6 +77,9 @@ def handle_palette_index(
     chats: ConversationStore,
     roadmaps: RoadmapStore,
     nodes: RoadmapNodeStore,
+    tasks=None,
+    jobs=None,
+    people=None,
 ) -> dict:
     """Everything the command palette needs to fuzzy-match locally.
 
@@ -116,6 +120,12 @@ def handle_palette_index(
             for c in chats.all()
         ],
         "roadmap_nodes": roadmap_nodes,
+        "tasks": [{"id": t.id, "title": t.title, "due_date": t.due_date}
+                  for t in (tasks.open() if tasks else [])],
+        "jobs": [{"id": a.id, "company": a.company, "role": a.role, "stage": a.stage}
+                 for a in (jobs.all() if jobs else [])],
+        "people": [{"id": p.id, "name": p.name, "context": p.context}
+                   for p in (people.all() if people else [])],
     }
 
 
@@ -601,7 +611,36 @@ def handle_project_detail(
         # successful refresh still reported itself as stale.
         "highlights_stale": len(usable) != project.advice_basis_count and bool(usable),
         "entry_count": len(usable),
+        "memory": project.memory,
+        "memory_generated_at": project.memory_generated_at,
+        # The page refreshes memory in the background when this is set,
+        # so opening a project never waits on the model.
+        "memory_stale": bool(usable) and len(usable) != project.memory_basis_count,
     }
+
+
+def handle_refresh_project_memory(
+    store: MemoryStore,
+    chats: ConversationStore,
+    projects: ProjectStore,
+    llm: LLMClient,
+    project_id: str,
+) -> dict:
+    """Rebuild a project's memory from its chats and files, keeping what
+    the previous memory (including hand edits) still gets right."""
+    project = projects.get(project_id)
+    if project is None:
+        return {"error": "no such project"}
+    usable = [e for e in project_entries(store, chats, project_id) if e.kind != "advice"]
+    try:
+        memory = generate_memory(llm, usable, project.memory, project.instructions)
+    except LLMError as exc:
+        return {"error": "rate limited" if "rate limited" in str(exc)
+                else "the model was unavailable"}
+    except ValueError as exc:
+        return {"error": str(exc)}
+    projects.save_memory(project_id, memory, len(usable))
+    return {"memory": memory}
 
 
 def handle_create_project(projects: ProjectStore, name: str) -> dict:
@@ -619,6 +658,8 @@ def handle_update_project(projects: ProjectStore, project_id: str, body: dict) -
             projects.rename(project_id, str(body["name"]))
         if "instructions" in body:
             projects.set_instructions(project_id, str(body["instructions"]))
+        if "memory" in body:
+            projects.set_memory(project_id, str(body["memory"]))
     except ValueError as exc:
         return {"error": str(exc)}
     return {"ok": True}
@@ -910,11 +951,13 @@ def handle_ask(
             return {"error": "no such conversation"}
         project_id = conversation.project_id
 
-    # A chat inside a project inherits that project's instructions.
-    instructions = ""
+    # A chat inside a project inherits that project's instructions and
+    # memory.
+    instructions = memory = ""
     if projects is not None and project_id:
         project = projects.get(project_id)
         instructions = project.instructions if project else ""
+        memory = project.memory if project else ""
 
     profile_text = profile.get().content if profile is not None else ""
 
@@ -924,6 +967,7 @@ def handle_ask(
             conversation_id=conversation_id,
             instructions=instructions,
             profile=profile_text,
+            memory=memory,
         )
     except Exception as exc:  # noqa: BLE001 - surfaced in the chat UI
         if created_conversation:

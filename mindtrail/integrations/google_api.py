@@ -41,10 +41,10 @@ def credentials_for(scope: str, what: str, token_path: str | None = None):
     path = token_path or default_token_path()
     creds = load_credentials(path)
     if creds is None:
-        raise GoogleAuthError("Google isn't connected - run: mindtrail google connect")
+        raise GoogleAuthError("Google isn't connected - connect it in Settings")
     if not has_scope(creds, scope):
         raise GoogleAuthError(
-            f"reconnect Google to allow {what} - run: mindtrail google connect"
+            f"reconnect Google in Settings to allow {what}"
         )
     return creds, path
 
@@ -58,15 +58,24 @@ def _error_message(exc: urllib.error.HTTPError) -> str:
 
 
 def get_json(creds, token_path: str, url: str, params: dict | None = None) -> dict:
+    full = f"{url}?{urlencode(params, doseq=True)}" if params else url
+    return _send(creds, token_path, full)
+
+
+def post_json(creds, token_path: str, url: str, body: dict) -> dict:
+    return _send(creds, token_path, url, json.dumps(body).encode("utf-8"))
+
+
+def _send(creds, token_path: str, full: str, data: bytes | None = None) -> dict:
     try:
         creds = ensure_fresh(creds, token_path)
     except RefreshError as exc:
-        raise GoogleAuthError(
-            "Google sign-in expired - run: mindtrail google connect"
-        ) from exc
+        raise GoogleAuthError("Google sign-in expired - reconnect it in Settings") from exc
 
-    full = f"{url}?{urlencode(params, doseq=True)}" if params else url
-    request = urllib.request.Request(full, headers={"Authorization": f"Bearer {creds.token}"})
+    headers = {"Authorization": f"Bearer {creds.token}"}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(full, data=data, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             return json.loads(response.read().decode("utf-8"))

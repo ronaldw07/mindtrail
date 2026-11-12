@@ -28,8 +28,16 @@ LIFE_TABLES = (
     "journal",
     "focus_sessions",
     "people",
+    "interview_rounds",
+    "stories",
+    "practice",
+    "offers",
     "health_sleep",
     "health_workouts",
+    "journey_reflections",
+    "journey_reviews",
+    "journey_suggestions",
+    "time_logs",
 )
 
 # Derived columns rebuilt on import rather than carried over: a journal

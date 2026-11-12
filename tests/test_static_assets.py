@@ -4,7 +4,9 @@ Every other UI test is `assert "..." in CHAT_HTML`, which ships a client
 syntax error green. These actually parse the files.
 """
 
+import json
 import re
+from pathlib import Path
 import shutil
 import subprocess
 
@@ -12,6 +14,14 @@ import pytest
 
 from mindtrail.web.chat_server import STATIC_DIR, STATIC_FILES
 from mindtrail.web.chat_ui import CHAT_HTML
+
+def test_the_page_can_be_installed_as_an_app():
+    manifest = json.loads((STATIC_DIR / "manifest.webmanifest").read_text())
+
+    assert manifest["display"] == "standalone" and manifest["start_url"] == "/"
+    for icon in manifest["icons"]:
+        assert (STATIC_DIR / Path(icon["src"]).name).is_file(), icon["src"]
+
 
 JS_FILES = sorted(name for name, _ in STATIC_FILES.values() if name.endswith(".js"))
 CSS_FILES = sorted(name for name, _ in STATIC_FILES.values() if name.endswith(".css"))
@@ -51,6 +61,8 @@ def test_css_custom_properties_all_resolve(name):
 def test_every_served_file_is_linked_from_the_page_and_exists():
     for url, (name, _) in STATIC_FILES.items():
         assert (STATIC_DIR / name).is_file(), name
+        if name.startswith("icon-"):
+            continue  # reached through the manifest, tested above
         assert f'"{url}"' in CHAT_HTML, url
 
 

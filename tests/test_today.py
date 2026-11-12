@@ -110,7 +110,8 @@ def test_summary_without_life_stores_still_works(s):
 
 # --- cached brief -----------------------------------------------------------
 
-NOW = datetime.now().astimezone()
+# Mid-morning, so adding a few hours never crosses midnight (the cache keys on the date).
+NOW = datetime.now().astimezone().replace(hour=9, minute=0, second=0, microsecond=0)
 
 
 def test_unchanged_day_is_served_from_cache_without_a_model_call(s):

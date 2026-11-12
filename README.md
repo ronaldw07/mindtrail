@@ -198,12 +198,20 @@ split; a separate dev split exists for tuning.
 
 | metric | score |
 |---|---|
-| recall@1 | 7/10 (70%) |
-| recall@3 | 7/10 (70%) |
+| recall@1 | 8/10 (80%) |
+| recall@3 | 8/10 (80%) |
 
 recall@3 equalling recall@1 is the interesting part: when retrieval misses,
-it misses badly rather than narrowly. The three failures rank the correct
-entry 4th, 6th, and 10th. So the fix is not reranking a near-miss — the
+it misses badly rather than narrowly. The two failures rank the correct
+entry 6th and 10th. (This was 7/10, with a third miss at rank 4.)
+
+The 7/10 had a bug behind it: the keyword half of hybrid search required
+every word of a question to appear in an entry, so for natural questions it
+returned nothing and search was effectively vector-only. It now ORs the
+meaningful words and lets BM25 rank them. That moved the rank-4 case to 1st.
+The dev split was already 10/10 so it couldn't show the change, and the
+test split was looked at while diagnosing - treat 8/10 as an upper bound,
+not a clean held-out number. So the fix is not reranking a near-miss — the
 right entry is nowhere near the top, and something about those probes
 (`how does Chroma differ from Pinecone` finding its parent entry at rank 10)
 is genuinely not captured by the embedding.
@@ -277,6 +285,61 @@ works" from "the small sample happened to land that way." Test is the
 number to trust, and it says three prior questions plus their answers is
 not enough evidence to name what someone asks next. That is a legitimate
 negative result about trajectory-only prediction, not a bug to chase.
+
+### Retrieval recall on a 90-entry corpus (`eval/recall.py`)
+
+The ten-pair set above is too small to separate strategies (the practice set
+scores 10/10). This one stores 90 research entries on CS and ML topics, many
+of them close neighbours (overfitting and regularization, TCP and UDP,
+quicksort and merge sort), and asks 90 questions, one per entry, worded
+differently from the entry's title. Entries alternate between a **tune** set
+of 45 questions, used to choose strategies, and a **held-out** set of 45,
+scored once with `--confirm-final` (the runner refuses without it). All
+questions were written and committed before any retrieval change; the raw
+runs are in `eval/recall_runs/`.
+
+Held-out, 45 questions, recall@1 with a 95% Wilson interval:
+
+| | recall@1 | recall@5 | MRR | search time (p50 / p95) |
+|---|---|---|---|---|
+| before (vector + keyword, as on `main`) | 80% (66-89%) | 98% | 0.87 | 47 ms / 49 ms |
+| keyword fix, equal weight | 80% (66-89%) | 93% | 0.85 | 46 ms / 47 ms |
+| + question expansion, keyword weight 0.3 | 87% (74-94%) | 100% | 0.92 | 1.2 s / 1.6 s |
+| + model re-rank of the top 8 (**deep recall**) | 100% (92-100%) | 100% | 1.00 | 2.4 s / 6.4 s |
+
+What the tuning showed (tune set, so nothing here was chosen on the held-out one):
+
+- On `main` the keyword half returned nothing for a natural-language question
+  (it required every word to match), so "hybrid" was really vector search.
+- Fixing that did not help on this set: with the keyword list at full weight,
+  hybrid fell *behind* vector-only at recall@3 (78% vs 91%), and weights of
+  0.5 down to 0.1 did not recover it. Paraphrased questions share few words
+  with their answers, so the keyword list mostly adds noise here.
+- Rewording the question and searching every phrasing, with the keyword list
+  down-weighted to 0.3, was the first change that beat vector-only (recall@5
+  100%). Letting the model re-rank the best eight candidates took recall@1
+  from 76% to 100% on the tune set, and held on the held-out one.
+
+Deep recall costs two model calls per question. In the app it runs alongside
+the web search (so it rarely adds wall-clock time to an answer) and falls
+back to plain search if a call fails; turn it off with
+`MINDTRAIL_DEEP_RECALL=0`. The sidebar search stays on the fast path.
+
+Read the 100% with care:
+
+- I wrote the questions from the stored summaries, so each question is a
+  fair paraphrase of an answer the entry really contains. Real follow-ups
+  ("what about its drawbacks?") are vaguer, and a perfect score on a set this
+  clean says the ceiling is reachable, not that production recall is 100%.
+- The interval's lower bound is 92% for 45 questions; it says nothing about
+  questions unlike these.
+- Exact-term lookups (an error code, a function name), which the keyword half
+  exists for, are not in this set, so it can't credit keyword search for them.
+- The tune set also reached 100% with the final pipeline, so the held-out
+  result is a confirmation, not a surprise.
+
+Reproduce: `python -m eval.recall --split tune --strategies vector,hybrid,expanded_kw0.3,expanded_kw0.3_rerank`
+(model strategies need `GROQ_API_KEY` and take a few minutes at the free tier's rate limit).
 
 ### What these numbers do not say
 
@@ -521,7 +584,7 @@ silently.
 ## Other integrations (optional)
 
 - **Canvas assignments** - in Canvas, Calendar → Calendar Feed, copy the
-  link, and paste it under Profile → School calendar. The link is private
+  link, and paste it under Settings → School calendar (Canvas). The link is private
   (it works without a login), so it stays on your machine and is left out
   of exports.
 - **GitHub** - if you're signed in to the GitHub CLI (`gh auth login`),
@@ -531,7 +594,78 @@ silently.
   then `mindtrail health import export.zip` for sleep and workouts.
 - **Daily painting** - Today's masthead is a public-domain painting from
   the Art Institute of Chicago, fetched once a day and cached. Turn it off
-  under Customize on Today.
+  under Edit widgets on Today.
+- **Weather** - set a city under Settings → Weather. The city name is
+  looked up once on Open-Meteo (free, no account) and only the resulting
+  coordinates are used after that.
+- **Notifications** - Settings → Notifications turns on Mac notifications
+  for interviews and assessments due today, people due a nudge, and when
+  a focus session ends. They fire only while Mind Trail is open.
+
+## Look and feel
+
+Settings → Appearance switches between Auto (follows macOS), Light and
+Dark, and picks one of eight accent colors. Every accent's fill clears
+4.5:1 contrast with white text. Today's widgets (activity rings, habits,
+mood, week, jobs, interviews, practice, weather, focus, sleep) can be
+shown, hidden and reordered with Edit widgets.
+
+Keyboard: Cmd+K command palette (finds to-dos, jobs and people too),
+Cmd+1-8 jump between views, Cmd+N new to-do, Cmd+, settings, Cmd+[ and ]
+back and forward. Browsers reserve some of these (Cmd+N especially); they
+work once the page is installed as an app (below).
+
+**Install as an app**: in Chrome or Dia, use Install / Add to Dock from the
+address bar menu; in Safari, File → Add to Dock. The page ships an icon
+and a web manifest, so it opens in its own window with a Dock icon. It
+still needs `mindtrail chat` running.
+
+## Recruiting tools
+
+- **Jobs** - pipeline board (drag a card between columns), interview
+  rounds per application (date, kind, interviewer, prep notes, the
+  questions you were asked), and an offer section whose numbers feed a
+  side-by-side comparison with a first-year total (base + bonus + a year
+  of equity + signing).
+- **Practice** - log coding problems; each comes back after 1, 3, 7 and
+  21 days. A chart shows coverage by topic and how many you solved alone.
+- **Stories** - behavioral stories as situation / task / action / result,
+  tagged by theme, with a note of where each was used.
+- **To-dos** repeat: "Water plants every mon", "Stretch daily",
+  "Pay rent 1st of every month". Checking one off creates the next.
+
+
+## Journey: a four-year plan
+
+**Journey** (sidebar, under Today) lays out four school years as a timeline of
+terms (Fall, Winter, Spring, Summer) with a "Now" marker, and holds several
+**tracks** at once - say AI/ML, SWE, Product Eng - each a roadmap whose steps
+sit in terms. Steps shared by every track (classes, recruiting seasons) live
+in one shared track.
+
+- **Edit it any way**: click a step to edit it, drag it to another term,
+  `+` in a term to add one, click the active track tab to rename, copy or
+  delete it. Or use the **Assistant** tab: "make a research track with 3
+  steps", "copy SWE as a backup plan", "move LeetCode prep to winter".
+  Every change is proposed first; accepting one lights the changed steps up.
+- **Look back**: the pencil on a past term opens a box for what you actually
+  did. **Review Year 1** sends those notes to the AI model and saves an
+  honest review (what went well, gaps, a verdict per track) and queues
+  finished steps and next steps as suggestions.
+- **Stay current**: *Suggestions* collect proposed changes from Mind Trail's
+  own data (practice, jobs, interviews, chats, GitHub), Gmail (club, course,
+  hackathon and research emails), Google Calendar (event titles and dates for
+  the next two months, read-only, so an exam or deadline becomes a step in the
+  right term), a pasted chat, or a **Gemini export**.
+  Google has no API for Gemini history, so export it with Takeout
+  (takeout.google.com, deselect all, My Activity, Gemini Apps, JSON or HTML)
+  and upload the file under Update from. Only your prompts are read, and
+  only newer ones on a re-import. Nothing changes a track until you accept.
+- **Brought in, not moved**: setup can copy an existing roadmap into the
+  journey as its own track; the original project is left as it is.
+- Text from reviews, chat and these sources is sent to the AI model (Groq)
+  and nowhere else. The journey is part of the backup and `life.json`.
+
 
 ## CLI reference
 
@@ -624,9 +758,16 @@ command prints a created/skipped/failed count plus a warning per problem
 (an unresolvable roadmap dependency, a project name that no longer
 matches, and so on).
 
-There is deliberately no way to restore from the web UI — it's a
-CLI-only, out-of-band operation. A button that can silently replace your
-database is the wrong thing to put one click away.
+Restoring a full export is deliberately CLI-only: a button that can
+silently replace your database is the wrong thing to put one click away.
+
+**Daily backups** (Settings → Backups, off until you turn them on) save a
+database copy and a `life.json` once a day into a folder you pick - iCloud
+Drive keeps a copy off the Mac - and keep the newest 14. Restoring one
+from Settings is a *merge* of the life tables (to-dos, habits, journal,
+jobs, ...): what was deleted or changed since comes back, what you added
+since is left alone, and it asks first. The Canvas feed link is left out
+of both files.
 
 Conversation entries go back in through the same embedding path a fresh
 `ask` or `note` uses, so semantic search finds a restored entry exactly

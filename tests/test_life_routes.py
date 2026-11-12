@@ -93,3 +93,92 @@ def test_unknown_routes_answer_404_for_every_method(port):
     for method in ("GET", "POST", "PATCH", "DELETE"):
         resp, _ = request(port, method, "/api/no-such-thing", {"x": 1})
         assert resp.status == 404, method
+
+
+def test_badges_count_what_needs_attention(tmp_path):
+    from datetime import date
+
+    from mindtrail.organize.jobs import JobStore
+    from mindtrail.organize.people import PeopleStore
+    from mindtrail.organize.tasks import TaskStore
+    from mindtrail.web import life_api
+
+    from mindtrail.organize.db import initialize
+
+    db = str(tmp_path / "t.db")
+    initialize(db)
+    tasks, people, jobs = TaskStore(db), PeopleStore(db), JobStore(db)
+    today = date(2026, 10, 9)
+    tasks.add("overdue", due_date="2026-10-01")
+    tasks.add("today", due_date="2026-10-09")
+    tasks.add("later", due_date="2026-10-20")
+    tasks.add("no date")
+    jobs.create("Acme", needs_review=True)
+    jobs.create("Beta")
+
+    badges = life_api.handle_badges(tasks, people, jobs, today)
+
+    assert badges == {"tasks": 2, "people": 0, "jobs": 1, "practice": 0}
+
+
+def test_journal_on_this_day_finds_a_month_and_a_year_back(tmp_path):
+    from datetime import date
+
+    from mindtrail.organize.db import initialize
+    from mindtrail.organize.journal import JournalStore
+    from mindtrail.web import life_api
+
+    db = str(tmp_path / "t.db")
+    initialize(db)
+    journal = JournalStore(db)
+    journal.save("2026-09-09", "a month ago", mood=3)
+    journal.save("2025-10-09", "a year ago")
+    journal.save("2026-08-09", "two months ago, not shown")
+
+    found = life_api.on_this_day(journal, date(2026, 10, 9))
+
+    assert [(f["label"], f["date"]) for f in found] == [
+        ("1 month ago", "2026-09-09"), ("1 year ago", "2025-10-09")]
+
+
+def test_journal_on_this_day_skips_dates_that_do_not_exist(tmp_path):
+    from datetime import date
+
+    from mindtrail.organize.db import initialize
+    from mindtrail.organize.journal import JournalStore
+    from mindtrail.web import life_api
+
+    db = str(tmp_path / "t.db")
+    initialize(db)
+
+    assert life_api.on_this_day(JournalStore(db), date(2026, 3, 31)) == []
+
+
+def test_adding_a_task_with_every_makes_it_repeat(tmp_path):
+    from mindtrail.organize.db import initialize
+    from mindtrail.organize.tasks import TaskStore
+    from mindtrail.web import jobs_api
+
+    db = str(tmp_path / "t.db")
+    initialize(db)
+    tasks = TaskStore(db)
+
+    out = jobs_api.handle_add_task(tasks, {"title": "Water plants every mon"})
+
+    assert out["task"]["title"] == "Water plants"
+    assert out["task"]["repeat"] == "week:1:0"
+    assert out["task"]["repeat_label"] == "Every Monday"
+    assert out["task"]["due_date"]
+
+
+def test_an_explicit_due_date_is_kept_when_the_title_also_repeats(tmp_path):
+    from mindtrail.organize.db import initialize
+    from mindtrail.organize.tasks import TaskStore
+    from mindtrail.web import jobs_api
+
+    db = str(tmp_path / "t.db")
+    initialize(db)
+
+    out = jobs_api.handle_add_task(TaskStore(db), {"title": "Stretch daily", "due_date": "2026-12-01"})
+
+    assert out["task"]["due_date"] == "2026-12-01" and out["task"]["repeat"] == "day:1"

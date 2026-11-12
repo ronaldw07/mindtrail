@@ -79,6 +79,7 @@ def upcoming_deadlines(jobs: JobStore, today: date) -> list[dict]:
 def habits_today(habits: HabitStore, today: date) -> list[dict]:
     """Each active habit with whether it's done today and its streak."""
     logs = habits.logs_since(today - timedelta(days=730))
+    steps = habits.steps()
     items = []
     for h in habits.all():
         done = logs.get(h.id, set())
@@ -88,6 +89,7 @@ def habits_today(habits: HabitStore, today: date) -> list[dict]:
             "streak": streak(done, h.target_per_week, today),
             "unit": "day" if h.target_per_week >= DAILY else "week",
             "this_week": this_week_count(done, today),
+            "step": steps.get(h.id),
         })
     return items
 

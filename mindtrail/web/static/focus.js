@@ -48,7 +48,10 @@
     renderFocusPill(t);
     clearInterval(focusTick);
     focusTick = setInterval(() => {
-      if (focusRemainingMs(t) <= 0) logFocus(t, t.minutes);
+      if (focusRemainingMs(t) <= 0) {
+        notify('Focus session finished', t.label + ' · ' + t.minutes + ' min', 'focus');
+        logFocus(t, t.minutes);
+      }
       else renderFocusPill(t);
     }, 1000);
   }

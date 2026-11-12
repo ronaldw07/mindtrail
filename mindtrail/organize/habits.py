@@ -29,12 +29,24 @@ class Habit:
     archived: bool
     sort: int
     created_at: str
+    node_id: str = ""
+    """The journey step this is a daily goal for, or ''."""
+    track_id: str = ""
+    """Or the journey path it serves as a whole."""
+    journey_id: str = ""
+    """Or the whole journey (its project id)."""
 
 
 def _to_habit(row) -> Habit:
+    keys = row.keys()
     return Habit(id=row["id"], name=row["name"], area_id=row["area_id"],
                  target_per_week=row["target_per_week"], archived=bool(row["archived"]),
-                 sort=row["sort"], created_at=row["created_at"])
+                 sort=row["sort"], created_at=row["created_at"], node_id=row["node_id"],
+                 track_id=row["track_id"] if "track_id" in keys else "",
+                 journey_id=row["journey_id"] if "journey_id" in keys else "")
+
+
+SCOPES = ("node_id", "track_id", "journey_id")
 
 
 def _target(value) -> int:
@@ -79,7 +91,8 @@ class HabitStore:
     def __init__(self, path: str | None = None):
         self._path = path
 
-    def create(self, name: str, target_per_week: int = DAILY, area_id: str = "") -> Habit:
+    def create(self, name: str, target_per_week: int = DAILY, area_id: str = "",
+               node_id: str = "", track_id: str = "", journey_id: str = "") -> Habit:
         name = name.strip()
         if not name:
             raise ValueError("habit name must not be empty")
@@ -87,14 +100,25 @@ class HabitStore:
             sort = conn.execute("SELECT COALESCE(MAX(sort), -1) + 1 FROM habits").fetchone()[0]
             habit = Habit(id=str(uuid.uuid4()), name=name[:80], area_id=area_id,
                           target_per_week=_target(target_per_week), archived=False,
-                          sort=sort, created_at=now_iso())
+                          sort=sort, created_at=now_iso(), node_id=node_id, track_id=track_id,
+                          journey_id=journey_id)
             conn.execute(
                 "INSERT INTO habits (id, name, area_id, target_per_week, archived, sort, "
-                "created_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
+                "created_at, node_id, track_id, journey_id) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)",
                 (habit.id, habit.name, habit.area_id, habit.target_per_week, habit.sort,
-                 habit.created_at),
+                 habit.created_at, habit.node_id, habit.track_id, habit.journey_id),
             )
         return habit
+
+    def set_scope(self, habit_id: str, scope: str, target: str) -> Habit:
+        """Make a daily goal serve one step, path or journey instead."""
+        if scope not in SCOPES:
+            raise ValueError("unknown scope")
+        values = {s: (target if s == scope else "") for s in SCOPES}
+        with connect(self._path) as conn:
+            conn.execute("UPDATE habits SET node_id = ?, track_id = ?, journey_id = ? WHERE id = ?",
+                         (values["node_id"], values["track_id"], values["journey_id"], habit_id))
+        return self.get(habit_id)
 
     def get(self, habit_id: str) -> Habit | None:
         with connect(self._path) as conn:
@@ -152,6 +176,43 @@ class HabitStore:
             conn.execute("INSERT INTO habit_logs (habit_id, date) VALUES (?, ?)",
                          (habit_id, day.isoformat()))
         return True
+
+    def for_node(self, node_id: str) -> list[Habit]:
+        with connect(self._path) as conn:
+            rows = conn.execute("SELECT * FROM habits WHERE node_id = ? AND archived = 0 ORDER BY sort",
+                                (node_id,)).fetchall()
+        return [_to_habit(r) for r in rows]
+
+    def for_track(self, track_id: str) -> list[Habit]:
+        return self._where("track_id", track_id)
+
+    def for_journey(self, journey_id: str) -> list[Habit]:
+        return self._where("journey_id", journey_id)
+
+    def _where(self, column: str, value: str) -> list[Habit]:
+        if column not in SCOPES or not value:
+            return []
+        with connect(self._path) as conn:
+            rows = conn.execute(f"SELECT * FROM habits WHERE {column} = ? AND archived = 0 ORDER BY sort",
+                                (value,)).fetchall()
+        return [_to_habit(r) for r in rows]
+
+    def steps(self) -> dict[str, dict]:
+        """habit id -> what it serves in a journey, for habits whose step,
+        path or journey still exists: {kind: step|path|journey, id (the
+        step's, else ''), title, project_id}."""
+        with connect(self._path) as conn:
+            rows = conn.execute(
+                "SELECT h.id AS habit_id, 'step' AS kind, n.id, n.title, r.project_id FROM habits h "
+                "JOIN roadmap_nodes n ON n.id = h.node_id JOIN roadmaps r ON r.id = n.roadmap_id "
+                "UNION ALL "
+                "SELECT h.id, 'path', '', COALESCE(NULLIF(r.name, ''), r.goal), r.project_id FROM habits h "
+                "JOIN roadmaps r ON r.id = h.track_id "
+                "UNION ALL "
+                "SELECT h.id, 'journey', '', p.name, p.id FROM habits h "
+                "JOIN projects p ON p.id = h.journey_id").fetchall()
+        return {r["habit_id"]: {"kind": r["kind"], "id": r["id"], "title": r["title"],
+                                "project_id": r["project_id"]} for r in rows}
 
     def logs_since(self, since: date) -> dict[str, set[date]]:
         """habit id -> logged dates on or after `since`."""

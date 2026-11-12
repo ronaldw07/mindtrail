@@ -197,6 +197,64 @@ CREATE TABLE IF NOT EXISTS focus_sessions (
 -- People you want to keep in touch with. nudge_every_days 0 means no
 -- reminder; otherwise Today nudges once that many days pass since
 -- last_contacted (a local YYYY-MM-DD, '' if never).
+CREATE TABLE IF NOT EXISTS interview_rounds (
+    id             TEXT PRIMARY KEY,
+    application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    date           TEXT NOT NULL DEFAULT '',
+    -- phone | technical | behavioral | onsite | other
+    kind           TEXT NOT NULL DEFAULT 'other',
+    interviewer    TEXT NOT NULL DEFAULT '',
+    person_id      TEXT NOT NULL DEFAULT '',
+    prep_notes     TEXT NOT NULL DEFAULT '',
+    questions      TEXT NOT NULL DEFAULT '',
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rounds_application ON interview_rounds(application_id);
+
+-- Behavioral stories, situation / task / action / result.
+CREATE TABLE IF NOT EXISTS stories (
+    id         TEXT PRIMARY KEY,
+    title      TEXT NOT NULL,
+    situation  TEXT NOT NULL DEFAULT '',
+    task       TEXT NOT NULL DEFAULT '',
+    action     TEXT NOT NULL DEFAULT '',
+    result     TEXT NOT NULL DEFAULT '',
+    -- comma-separated themes: leadership, conflict, failure...
+    themes     TEXT NOT NULL DEFAULT '',
+    -- free text: which interviews it has been used in
+    used_in    TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+-- Coding problems you've done, brought back on a spacing schedule.
+CREATE TABLE IF NOT EXISTS practice (
+    id            TEXT PRIMARY KEY,
+    title         TEXT NOT NULL,
+    url           TEXT NOT NULL DEFAULT '',
+    -- easy | medium | hard
+    difficulty    TEXT NOT NULL DEFAULT 'medium',
+    topic         TEXT NOT NULL DEFAULT '',
+    -- solo | help | stuck
+    outcome       TEXT NOT NULL DEFAULT 'solo',
+    solved_on     TEXT NOT NULL,
+    reviews_done  INTEGER NOT NULL DEFAULT 0,
+    last_reviewed TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS offers (
+    application_id  TEXT PRIMARY KEY REFERENCES applications(id) ON DELETE CASCADE,
+    base            INTEGER NOT NULL DEFAULT 0,
+    bonus           INTEGER NOT NULL DEFAULT 0,
+    equity_per_year INTEGER NOT NULL DEFAULT 0,
+    signing         INTEGER NOT NULL DEFAULT 0,
+    location        TEXT NOT NULL DEFAULT '',
+    start_date      TEXT NOT NULL DEFAULT '',
+    notes           TEXT NOT NULL DEFAULT '',
+    updated_at      TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS people (
     id               TEXT PRIMARY KEY,
     name             TEXT NOT NULL,
@@ -220,6 +278,106 @@ CREATE TABLE IF NOT EXISTS health_workouts (
     date    TEXT NOT NULL,
     type    TEXT NOT NULL,
     minutes INTEGER NOT NULL
+);
+
+-- The 4-year journey (organize/journey.py). A reflection is what you
+-- wrote about one past term; a review is the model's read of a year,
+-- kept as JSON; a suggestion is a proposed change to a track, waiting
+-- for you to accept or dismiss it.
+CREATE TABLE IF NOT EXISTS journey_reflections (
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    term       TEXT NOT NULL,
+    text       TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (project_id, term)
+);
+
+CREATE TABLE IF NOT EXISTS journey_reviews (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    year       INTEGER NOT NULL,
+    body       TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+-- The journey assistant's saved chats, one journey (project) each.
+-- messages is a JSON list of {role, content, actions}.
+CREATE TABLE IF NOT EXISTS journey_chats (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title      TEXT NOT NULL DEFAULT '',
+    messages   TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+-- The assistant's chats on the Journeys page, about every journey at once.
+CREATE TABLE IF NOT EXISTS home_chats (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL DEFAULT 'home',
+    title      TEXT NOT NULL DEFAULT '',
+    messages   TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+-- The concrete things to do inside one journey step, in order: a step's
+-- own little roadmap. due is a YYYY-MM-DD day or ''.
+CREATE TABLE IF NOT EXISTS step_tasks (
+    id         TEXT PRIMARY KEY,
+    node_id    TEXT NOT NULL REFERENCES roadmap_nodes(id) ON DELETE CASCADE,
+    title      TEXT NOT NULL,
+    detail     TEXT NOT NULL DEFAULT '',
+    done       INTEGER NOT NULL DEFAULT 0,
+    due        TEXT NOT NULL DEFAULT '',
+    position   REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_step_tasks_node ON step_tasks(node_id);
+
+-- Today's to-dos as you've handled them, keyed by where each comes from
+-- (kind: task | assignment | step_task | step) and its id there.
+-- done_on: the day it was crossed off ('' if not); archived_at: when it
+-- was removed from Today ('' while still shown).
+CREATE TABLE IF NOT EXISTS today_marks (
+    kind        TEXT NOT NULL,
+    ref         TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    sub         TEXT NOT NULL DEFAULT '',
+    grp         TEXT NOT NULL DEFAULT '',
+    done_on     TEXT NOT NULL DEFAULT '',
+    archived_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (kind, ref)
+);
+
+CREATE TABLE IF NOT EXISTS journey_suggestions (
+    id         TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    -- add_step | add_done | mark_done
+    kind       TEXT NOT NULL,
+    roadmap_id TEXT NOT NULL DEFAULT '',
+    node_id    TEXT NOT NULL DEFAULT '',
+    title      TEXT NOT NULL DEFAULT '',
+    detail     TEXT NOT NULL DEFAULT '',
+    term       TEXT NOT NULL DEFAULT '',
+    reason     TEXT NOT NULL DEFAULT '',
+    -- review | mindtrail | gmail | calendar | gemini | paste
+    source     TEXT NOT NULL,
+    -- pending | accepted | dismissed
+    status     TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL
+);
+
+-- Minutes spent planning or re-finding research, logged by hand so the
+-- Measure card can compare a baseline period with a Mind Trail one.
+CREATE TABLE IF NOT EXISTS time_logs (
+    id         TEXT PRIMARY KEY,
+    kind       TEXT NOT NULL,
+    minutes    INTEGER NOT NULL,
+    day        TEXT NOT NULL,
+    note       TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
 );
 
 -- Small named values that don't deserve a table each: last scan time,
@@ -281,6 +439,37 @@ ADDED_COLUMNS = [
     # applied when the node is marked done - see RoadmapNodeStore.set_status.
     ("roadmap_nodes", "repeat_days", "INTEGER NOT NULL DEFAULT 0"),
     ("projects", "area_id", "TEXT NOT NULL DEFAULT ''"),
+    # A repeat rule like "week:1:0" (see organize/repeats.py), and the id of
+    # the task whose check-off created this one.
+    ("tasks", "repeat", "TEXT NOT NULL DEFAULT ''"),
+    ("tasks", "spawned_from", "TEXT NOT NULL DEFAULT ''"),
+    # A project can hold several roadmaps ("tracks"): a tab label, and
+    # whether this one is the journey's shared track.
+    ("roadmaps", "name", "TEXT NOT NULL DEFAULT ''"),
+    ("roadmaps", "kind", "TEXT NOT NULL DEFAULT ''"),
+    # School term like "2026-fall" - see organize/terms.py.
+    ("roadmap_nodes", "term", "TEXT NOT NULL DEFAULT ''"),
+    # A project's memory: a short model-written summary of what its chats
+    # and files cover, editable, with the entry count it was built from.
+    ("projects", "memory", "TEXT NOT NULL DEFAULT ''"),
+    ("projects", "memory_generated_at", "TEXT NOT NULL DEFAULT ''"),
+    ("projects", "memory_basis_count", "INTEGER NOT NULL DEFAULT 0"),
+    # Order of a step within its journey term (drag to reorder); ties fall
+    # back to creation order.
+    ("roadmap_nodes", "position", "REAL NOT NULL DEFAULT 0"),
+    # A habit can be a journey step's daily goal; '' for a standalone habit.
+    ("habits", "node_id", "TEXT NOT NULL DEFAULT ''"),
+    # A daily goal can serve one step (node_id), a whole path (track_id),
+    # or a whole journey (journey_id); at most one is set.
+    ("habits", "track_id", "TEXT NOT NULL DEFAULT ''"),
+    ("habits", "journey_id", "TEXT NOT NULL DEFAULT ''"),
+    # A sub-step can ask for a result ("Vertical jump", in inches) that has
+    # to be entered before it counts as done.
+    ("step_tasks", "needs", "TEXT NOT NULL DEFAULT ''"),
+    ("step_tasks", "unit", "TEXT NOT NULL DEFAULT ''"),
+    ("step_tasks", "result", "TEXT NOT NULL DEFAULT ''"),
+    # The day a Today to-do was starred as one of that day's 3 ('' if not).
+    ("today_marks", "pinned_on", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

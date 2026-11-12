@@ -7,6 +7,7 @@ cold each time.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from mindtrail import config
@@ -14,6 +15,7 @@ from mindtrail.ingest.fetch import FetchError, fetch_url
 from mindtrail.ingest.search import SearchError, SearchProvider
 from mindtrail.ingest.topic import TopicExtractor
 from mindtrail.llm import LLMClient, LLMError
+from mindtrail.memory import retrieval
 from mindtrail.memory.store import Entry, MemoryStore
 
 SYSTEM_PROMPT = (
@@ -144,16 +146,30 @@ class Researcher:
         rewritten = completion.text.strip().strip('"')
         return rewritten[:REWRITE_MAX_CHARS] or query
 
+    def _recall(self, query: str) -> list[Entry]:
+        if config.DEEP_RECALL:
+            try:
+                return retrieval.deep_search(
+                    self._store, self._llm, query, k=config.RELATED_MEMORIES_TO_INJECT)
+            except Exception:  # a recall problem must never cost the user their answer
+                pass
+        return self._store.search(query, k=config.RELATED_MEMORIES_TO_INJECT)
+
     def research(
         self,
         query: str,
         conversation_id: str = "",
         instructions: str = "",
         profile: str = "",
+        memory: str = "",
     ) -> Research:
-        recalled = self._store.search(query, k=config.RELATED_MEMORIES_TO_INJECT)
         history = self._store.by_conversation(conversation_id)
-        texts, urls = _gather_pages(self._provider, self._search_query(query, history))
+        # Deep recall takes a couple of model calls, so it runs alongside
+        # the web search instead of in front of it.
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            recall = pool.submit(self._recall, query)
+            texts, urls = _gather_pages(self._provider, self._search_query(query, history))
+            recalled = recall.result()
 
         # Profile leads, then project instructions, so the prompt frames
         # everything after it: who is asking, then how to answer them.
@@ -162,6 +178,8 @@ class Researcher:
             preamble += f"ABOUT THE USER:\n{profile}\n\n"
         if instructions.strip():
             preamble += f"INSTRUCTIONS FOR THIS PROJECT (follow these):\n{instructions}\n\n"
+        if memory.strip():
+            preamble += f"WHAT YOU KNOW FROM EARLIER CHATS IN THIS PROJECT:\n{memory}\n\n"
         prompt = (
             f"{preamble}"
             f"{_format_conversation(history)}"
@@ -186,12 +204,14 @@ class Researcher:
         conversation_id: str = "",
         instructions: str = "",
         profile: str = "",
+        memory: str = "",
     ) -> Research:
         result = self.research(
             query,
             conversation_id=conversation_id,
             instructions=instructions,
             profile=profile,
+            memory=memory,
         )
         topic, key_facts = self._assign_topic(result)
         self._store.add(

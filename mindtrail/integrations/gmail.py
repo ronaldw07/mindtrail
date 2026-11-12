@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
+from urllib.parse import quote
 from datetime import datetime
 
 from mindtrail.ingest.fetch import html_to_text
@@ -18,6 +19,14 @@ from mindtrail.integrations.google_auth import GMAIL_SCOPE
 
 GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 BODY_CHARS = 1500
+GMAIL_WEB = "https://mail.google.com/mail/"
+
+
+def web_url(message_id: str, account: str = "") -> str:
+    """The email in Gmail on the web. With the account, it opens in the
+    right one even when several Google accounts are signed in."""
+    where = f"?authuser={quote(account)}" if account else "u/0/"
+    return f"{GMAIL_WEB}{where}#all/{quote(message_id)}"
 PAGE_SIZE = 100
 
 
@@ -96,6 +105,11 @@ class GmailClient:
             if not page_token:
                 break
         return ids[:limit]
+
+    def account(self) -> str:
+        """The connected Gmail address."""
+        creds, path = self._creds()
+        return str(self._get(creds, path, f"{GMAIL_API}/profile", {}).get("emailAddress", ""))
 
     def get(self, message_id: str) -> Message:
         creds, path = self._creds()

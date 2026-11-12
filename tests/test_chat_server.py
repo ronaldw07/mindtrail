@@ -13,16 +13,16 @@ from mindtrail.organize.db import initialize
 from mindtrail.organize.projects import ProjectStore
 from mindtrail.organize.roadmaps import RoadmapNodeStore, RoadmapStore
 from mindtrail.web import api
-from mindtrail.web.chat_server import STATIC_DIR
+from mindtrail.web.chat_server import STATIC_DIR, STATIC_FILES
 from mindtrail.web.chat_ui import CHAT_HTML
 
 # CSS and JS now live in real files, not inline in CHAT_HTML. The ui tests
 # below check substrings of what the browser actually receives, so glue the
 # shell back together with the assets it links to.
-FULL_PAGE = (
-    CHAT_HTML
-    + (STATIC_DIR / "app.css").read_text(encoding="utf-8")
-    + (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+FULL_PAGE = CHAT_HTML + "".join(
+    (STATIC_DIR / name).read_text(encoding="utf-8")
+    for name in sorted({name for name, _ in STATIC_FILES.values()})
+    if name.endswith((".css", ".js"))
 )
 
 
@@ -32,9 +32,10 @@ class StubResearcher:
         self._error = error
         self.last_conversation_id = None
 
-    def research_and_store(self, query, conversation_id="", instructions="", profile=""):
+    def research_and_store(self, query, conversation_id="", instructions="", profile="", memory=""):
         self.last_conversation_id = conversation_id
         self.last_instructions = instructions
+        self.last_memory = memory
         if self._error:
             raise self._error
         return self._result
@@ -614,7 +615,7 @@ def test_a_chat_in_a_project_passes_its_instructions_to_research(store, chats, p
         def __init__(self):
             self.instructions = None
 
-        def research_and_store(self, query, conversation_id="", instructions="", profile=""):
+        def research_and_store(self, query, conversation_id="", instructions="", profile="", memory=""):
             self.instructions = instructions
             return a_result()
 
@@ -633,7 +634,7 @@ def test_a_chat_outside_a_project_gets_no_instructions(store, chats, projects):
         def __init__(self):
             self.instructions = None
 
-        def research_and_store(self, query, conversation_id="", instructions="", profile=""):
+        def research_and_store(self, query, conversation_id="", instructions="", profile="", memory=""):
             self.instructions = instructions
             return a_result()
 
@@ -904,3 +905,88 @@ def test_sidebar_can_be_collapsed_and_navigated():
     for element in ["toggle-sidebar", "nav-back", "nav-fwd"]:
         assert element in FULL_PAGE
     assert "#sidebar.collapsed" in FULL_PAGE
+
+
+# --- project memory ---------------------------------------------------
+
+
+class MemoryLLM:
+    def __init__(self, text="- Wants a PM internship\n- Knows SQL", error=None):
+        self._text = text
+        self._error = error
+        self.prompts = []
+
+    def complete(self, system, user, max_tokens=800):
+        self.prompts.append(user)
+        if self._error:
+            raise self._error
+        from mindtrail.llm import Completion
+
+        return Completion(text=self._text, tokens=1, model="stub")
+
+
+def test_project_memory_is_stale_until_refreshed_then_fresh(store, chats, projects):
+    project = projects.create("Career")
+    chat = chats.create("c", project_id=project.id)
+    store.add("how do i get into pm", "a", [], conversation_id=chat.id)
+
+    before = api.handle_project_detail(store, chats, projects, MemoryLLM(), project.id,
+                                       allow_generate=False)
+    refreshed = api.handle_refresh_project_memory(store, chats, projects, MemoryLLM(), project.id)
+    after = api.handle_project_detail(store, chats, projects, MemoryLLM(), project.id,
+                                      allow_generate=False)
+
+    assert before["memory_stale"] is True
+    assert refreshed["memory"] == "- Wants a PM internship\n- Knows SQL"
+    assert after["memory"] == refreshed["memory"]
+    assert after["memory_stale"] is False
+
+
+def test_an_empty_project_has_no_stale_memory_to_build(store, chats, projects):
+    project = projects.create("Empty")
+
+    detail = api.handle_project_detail(store, chats, projects, MemoryLLM(), project.id,
+                                       allow_generate=False)
+    refreshed = api.handle_refresh_project_memory(store, chats, projects, MemoryLLM(), project.id)
+
+    assert detail["memory_stale"] is False
+    assert "error" in refreshed
+
+
+def test_a_hand_edit_is_kept_and_handed_to_the_next_refresh(store, chats, projects):
+    project = projects.create("Career")
+    chat = chats.create("c", project_id=project.id)
+    store.add("q", "a", [], conversation_id=chat.id)
+    llm = MemoryLLM()
+
+    api.handle_update_project(projects, project.id, {"memory": "- Graduates 2028"})
+    api.handle_refresh_project_memory(store, chats, projects, llm, project.id)
+
+    assert "PREVIOUS MEMORY:\n- Graduates 2028" in llm.prompts[0]
+
+
+def test_a_failed_memory_refresh_keeps_the_old_memory(store, chats, projects):
+    from mindtrail.llm import LLMError
+
+    project = projects.create("Career")
+    chat = chats.create("c", project_id=project.id)
+    store.add("q", "a", [], conversation_id=chat.id)
+    projects.save_memory(project.id, "- old", 0)
+
+    res = api.handle_refresh_project_memory(
+        store, chats, projects, MemoryLLM(error=LLMError("rate limited")), project.id
+    )
+
+    assert res["error"] == "rate limited"
+    assert projects.get(project.id).memory == "- old"
+
+
+def test_a_chat_in_a_project_passes_its_memory_to_research(store, chats, projects):
+    project = projects.create("Career")
+    projects.save_memory(project.id, "- Wants a PM internship", 1)
+    chat = chats.create("c", project_id=project.id)
+    researcher = StubResearcher(result=a_result())
+
+    api.handle_ask(researcher, store, chats, "q", chat.id, None, projects)
+
+    assert researcher.last_memory == "- Wants a PM internship"

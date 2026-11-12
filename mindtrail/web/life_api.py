@@ -68,10 +68,11 @@ HEATMAP_WEEKS = 52
 STREAK_LOOKBACK_DAYS = 730
 
 
-def habit_json(h: Habit, done: set[date], today: date) -> dict:
+def habit_json(h: Habit, done: set[date], today: date, step: dict | None = None) -> dict:
     heat_from = week_start(today) - timedelta(weeks=HEATMAP_WEEKS - 1)
     return {
         **asdict(h),
+        "step": step,
         "streak": streak(done, h.target_per_week, today),
         "unit": "day" if h.target_per_week >= DAILY else "week",
         "this_week": this_week_count(done, today),
@@ -84,10 +85,11 @@ def handle_list_habits(habits: HabitStore, include_archived: bool = False,
                        today: date | None = None) -> dict:
     today = today or date.today()
     logs = habits.logs_since(today - timedelta(days=STREAK_LOOKBACK_DAYS))
+    steps = habits.steps()
     return {
         "today": today.isoformat(),
         "heatmap_weeks": HEATMAP_WEEKS,
-        "habits": [habit_json(h, logs.get(h.id, set()), today)
+        "habits": [habit_json(h, logs.get(h.id, set()), today, steps.get(h.id))
                    for h in habits.all(include_archived)],
     }
 
@@ -159,6 +161,22 @@ def _journal_json(entry: JournalEntry | None, day: str) -> dict:
             "energy": entry.energy, "updated_at": entry.updated_at}
 
 
+def on_this_day(journal: JournalStore, when: date) -> list[dict]:
+    """Entries written exactly a month and a year before `when`."""
+    found = []
+    for label, months in (("1 month ago", 1), ("1 year ago", 12)):
+        year, month = when.year + (when.month - 1 - months) // 12, (when.month - 1 - months) % 12 + 1
+        try:
+            then = when.replace(year=year, month=month)
+        except ValueError:  # 31st into a 30-day month, 29 Feb
+            continue
+        entry = journal.get(then.isoformat())
+        if entry and entry.body.strip():
+            found.append({"label": label, "date": then.isoformat(), "mood": entry.mood,
+                          "preview": " ".join(entry.body.split())[:PREVIEW_CHARS * 2]})
+    return found
+
+
 def handle_get_journal(journal: JournalStore, day: str, today: date | None = None) -> dict:
     today = today or date.today()
     try:
@@ -171,6 +189,7 @@ def handle_get_journal(journal: JournalStore, day: str, today: date | None = Non
         "entry": _journal_json(journal.get(when.isoformat()), when.isoformat()),
         "today": today.isoformat(),
         "prompts": prompts_for(when),
+        "on_this_day": on_this_day(journal, when),
         "recent": [
             {"date": e.date, "mood": e.mood, "energy": e.energy,
              "preview": " ".join(e.body.split())[:PREVIEW_CHARS]}
@@ -234,3 +253,18 @@ def focus_week(focus: FocusStore, today: date) -> dict:
 
 def handle_focus_week(focus: FocusStore, today: date | None = None) -> dict:
     return focus_week(focus, today or date.today())
+
+
+def handle_badges(tasks, people, jobs, today: date | None = None, practice=None) -> dict:
+    """Counts for the sidebar: to-dos due today or overdue, people due a
+    nudge, and job applications waiting for a keep/discard decision."""
+    from mindtrail.organize.people import is_due
+
+    today = today or date.today()
+    iso = today.isoformat()
+    return {
+        "tasks": sum(1 for t in tasks.open() if t.due_date and t.due_date <= iso),
+        "people": sum(1 for p in people.all() if is_due(p, today)),
+        "jobs": sum(1 for a in jobs.all() if a.needs_review),
+        "practice": len(practice.due(today)) if practice else 0,
+    }
